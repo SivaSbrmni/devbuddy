@@ -2,12 +2,13 @@ import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import {
   LayoutDashboard, ListTodo, ShieldCheck, ScrollText, Activity,
-  LogOut, Bot, ChevronRight
+  LogOut, Bot, ChevronRight, MessageSquare
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
 const navItems = [
+  { to: '/chat', label: 'Chat', icon: MessageSquare },
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/tasks', label: 'Tasks', icon: ListTodo },
   { to: '/audit', label: 'Audit Log', icon: ShieldCheck },

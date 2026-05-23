@@ -41,6 +41,9 @@ async def get_or_create_user(db: AsyncSession, supabase_id: str, email: str, ten
     result = await db.execute(select(User).where(User.supabase_id == supabase_id))
     user = result.scalar_one_or_none()
     if not user:
+        result2 = await db.execute(select(User).where(User.email == email))
+        user = result2.scalar_one_or_none()
+    if not user:
         user = User(supabase_id=supabase_id, email=email, tenant_id=tenant_id, last_login=datetime.utcnow())
         db.add(user)
         await db.flush()

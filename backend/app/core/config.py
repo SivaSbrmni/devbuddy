@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     SUPABASE_JWT_SECRET: str = "dev-local-secret-change-in-production-min32chars!"
 
     LOKI_URL: str = "http://loki:3100"
+    OLLAMA_URL: str = "http://host.docker.internal:11434"
 
     class Config:
         env_file = ".env"
