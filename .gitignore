@@ -1,0 +1,31 @@
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+
+# Python
+**/__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+backend/.env
+backend/check_imports.py
+commit_msg.txt
+
+# Docker / local data
+postgres_data/
+loki_data/
+grafana_data/
+
+# IDE
+.vscode/
+.idea/
+
+# Playwright artifacts
+.playwright-mcp/
+*.png
+
+# Misc
+smoke.py

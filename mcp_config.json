@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "devbuddy-platform": {
+      "command": "python",
+      "args": ["C:/Users/sivas/CascadeProjects/enterprise-agent-platform/mcp-server/server.py"],
+      "env": {
+        "LOKI_URL": "http://localhost:3100",
+        "BACKEND_URL": "http://localhost:8000",
+        "MCP_API_TOKEN": ""
+      }
+    }
+  }
+}

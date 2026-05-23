@@ -1,0 +1,1 @@
+feat: initial scaffold - frontend, backend, observability, MCP server
