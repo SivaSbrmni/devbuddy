@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useTasks } from '@/hooks/useTasks'
 import {
   Menu, Plus, LogOut, Zap, Hash, RefreshCw,
-  Play, Bookmark, MonitorPlay, ChevronRight, Settings,
+  Play, ChevronRight, Settings,
   MessageSquare, X, LayoutDashboard,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -25,17 +25,20 @@ const STATE_BADGE: Record<string, string> = {
   APPROVAL_REQUIRED: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
 }
 
-const AI_SUGGESTIONS = [
-  { title: 'Deploy to Test Environment', desc: 'Create a new deploy job in CI/CD pipeline', count: '2 times' },
-  { title: 'Check SonarQube Quality Gate', desc: 'What is the SonarQube quality status?', count: '2 times' },
-  { title: 'Bump Service Snapshot Version', desc: 'From the release branch, bump version', count: '3 times' },
+const ALL_SUGGESTIONS = [
+  { title: 'Deploy to Test Environment', desc: 'Create a new deploy job in CI/CD pipeline' },
+  { title: 'Check SonarQube Quality Gate', desc: 'What is the current quality gate status?' },
+  { title: 'Bump Service Snapshot Version', desc: 'From the release branch, bump the version' },
+  { title: 'Add rate limiting to auth service', desc: 'Protect login endpoint from brute force' },
+  { title: 'Fix memory leak in job processor', desc: 'Identify and patch background worker leak' },
+  { title: 'Add OpenTelemetry tracing', desc: 'Instrument all API endpoints with traces' },
 ]
 
 const BOTTOM_NAV = [
   { id: 'chat',      label: 'Chat',      icon: MessageSquare, path: '/chat' },
   { id: 'tasks',     label: 'Tasks',     icon: Hash,          path: '/tasks' },
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-  { id: 'actions',   label: 'Actions',   icon: Zap,           path: '#actions' },
+  { id: 'actions',   label: 'Actions',   icon: Zap,           path: '#actions', isDrawer: true },
 ]
 
 export function Layout() {
@@ -49,6 +52,9 @@ export function Layout() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [activeModel, setActiveModel] = useState('')
   const [isMobile, setIsMobile] = useState(false)
+  const [suggestionSeed, setSuggestionSeed] = useState(0)
+
+  const suggestions = ALL_SUGGESTIONS.slice(suggestionSeed % 3, (suggestionSeed % 3) + 3)
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)')
@@ -167,19 +173,32 @@ export function Layout() {
       {/* Actions tab */}
       {sidebarTab === 'actions' && (
         <div className="flex-1 overflow-y-auto py-2 scrollbar-thin">
-          <button className="w-full flex items-center gap-2 px-4 py-3 text-xs text-teal-400 hover:text-teal-300 transition-colors">
+          <button
+            onClick={() => { setSidebarTab('tasks'); navigate('/chat') }}
+            className="w-full flex items-center gap-2 px-4 py-3 text-xs text-teal-400 hover:text-teal-300 transition-colors"
+          >
             <Plus className="w-3.5 h-3.5" />
-            Add quick action
+            New task in chat
           </button>
           <div className="mt-1">
             <div className="flex items-center gap-2 px-4 py-1.5">
               <Zap className="w-3 h-3 text-teal-400" />
               <span className="text-[10px] font-bold text-teal-400 uppercase tracking-widest">AI Suggested</span>
-              <button className="ml-auto text-slate-500 hover:text-slate-300 p-1"><RefreshCw className="w-2.5 h-2.5" /></button>
+              <button
+                onClick={() => setSuggestionSeed(s => s + 1)}
+                className="ml-auto text-slate-500 hover:text-slate-300 p-1 transition-colors"
+                title="Refresh suggestions"
+              >
+                <RefreshCw className="w-2.5 h-2.5" />
+              </button>
             </div>
             <div className="space-y-0.5 px-2">
-              {AI_SUGGESTIONS.map((s, i) => (
-                <div key={i} className="flex items-start gap-2 px-2 py-3 rounded-lg hover:bg-white/5 cursor-pointer group">
+              {suggestions.map((s, i) => (
+                <button
+                  key={i}
+                  onClick={() => { navigate('/chat') }}
+                  className="w-full flex items-start gap-2 px-2 py-3 rounded-lg hover:bg-white/5 transition-colors text-left"
+                >
                   <div className="w-7 h-7 rounded bg-teal-500/20 flex items-center justify-center shrink-0 mt-0.5">
                     <Zap className="w-3.5 h-3.5 text-teal-400" />
                   </div>
@@ -187,11 +206,8 @@ export function Layout() {
                     <p className="text-xs font-semibold text-slate-200 truncate">{s.title}</p>
                     <p className="text-[10px] text-slate-500 truncate">{s.desc}</p>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 shrink-0">
-                    <button className="p-1.5 rounded hover:bg-white/10 text-slate-400"><Play className="w-3 h-3" /></button>
-                    <button className="p-1.5 rounded hover:bg-white/10 text-slate-400"><Bookmark className="w-3 h-3" /></button>
-                  </div>
-                </div>
+                  <Play className="w-3 h-3 text-slate-600 shrink-0 mt-1" />
+                </button>
               ))}
             </div>
           </div>
@@ -320,7 +336,14 @@ export function Layout() {
             return (
               <button
                 key={item.id}
-                onClick={() => item.path === '#actions' ? setDrawerOpen(true) : navigate(item.path)}
+                onClick={() => {
+                  if ('isDrawer' in item && item.isDrawer) {
+                    setSidebarTab('actions')
+                    setDrawerOpen(true)
+                  } else {
+                    navigate(item.path)
+                  }
+                }}
                 className={cn(
                   'flex-1 flex flex-col items-center justify-center gap-1 py-3 min-h-[56px] transition-colors',
                   isActive ? 'text-teal-400' : 'text-slate-500'
