@@ -1,4 +1,4 @@
-import { Link, useLocation, Outlet } from 'react-router-dom'
+import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import {
   LayoutDashboard, ListTodo, ShieldCheck, ScrollText, Activity,
@@ -17,6 +17,12 @@ const navItems = [
 export function Layout() {
   const { user, signOut } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
+
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/login')
+  }
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -69,7 +75,7 @@ export function Layout() {
                 <span className="text-[10px] text-emerald-400">Active</span>
               </div>
             </div>
-            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={signOut}>
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={handleSignOut}>
               <LogOut className="w-3.5 h-3.5" />
             </Button>
           </div>
