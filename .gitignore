@@ -29,3 +29,15 @@ grafana_data/
 
 # Misc
 smoke.py
+*.log
+.DS_Store
+Thumbs.db
+
+# Test outputs
+backend/.coverage
+backend/htmlcov/
+frontend/coverage/
+
+# Windsurf
+.windsurf/
+
