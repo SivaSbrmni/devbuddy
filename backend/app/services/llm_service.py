@@ -292,6 +292,87 @@ async def _call_openai_compat_with_prompt(prompt: str, timeout: float = 45.0, re
     raise RuntimeError(f"{settings.LLM_PROVIDER} unavailable: {last_err}")
 
 
+async def llm_call(
+    prompt: str,
+    system: str | None = None,
+    history: list[dict] | None = None,
+    max_tokens: int = 800,
+    temperature: float = 0.3,
+) -> str:
+    """
+    Provider-agnostic LLM call.
+    Routes to Ollama or any OpenAI-compatible endpoint based on settings.LLM_PROVIDER.
+    `history` is a list of {"role": "user"|"assistant", "content": str} dicts.
+    """
+    if settings.LLM_PROVIDER == "ollama":
+        parts: list[str] = []
+        if system:
+            parts.append(system)
+        for msg in (history or []):
+            role_label = "User" if msg["role"] == "user" else "Assistant"
+            parts.append(f"{role_label}: {msg['content']}")
+        parts.append(f"User: {prompt}")
+        full_prompt = "\n\n".join(parts)
+        raw, _ = await _call_ollama(full_prompt)
+        return raw
+
+    if not settings.LLM_API_KEY:
+        raise RuntimeError(f"LLM_API_KEY not set for provider '{settings.LLM_PROVIDER}'.")
+    base = settings.resolved_api_base
+    if not base:
+        raise RuntimeError(f"Could not resolve API base for provider '{settings.LLM_PROVIDER}'.")
+
+    messages: list[dict] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    for msg in (history or []):
+        messages.append({"role": msg["role"], "content": msg["content"]})
+    messages.append({"role": "user", "content": prompt})
+
+    headers = {
+        "Authorization": f"Bearer {settings.LLM_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": settings.LLM_MODEL,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(f"{base}/chat/completions", headers=headers, json=payload)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+
+async def chat_with_history(
+    user_message: str,
+    system_prompt: str,
+    history: list[dict],
+    memories: list[str],
+    max_tokens: int = 1200,
+) -> str:
+    """
+    Full chat call that injects retrieved memories into the system prompt.
+    Used by the conversational path in chat.py.
+    Works with any configured LLM provider.
+    """
+    memory_block = ""
+    if memories:
+        formatted = "\n".join(f"- {m}" for m in memories)
+        memory_block = f"\n\n[Relevant memories about this user]\n{formatted}"
+
+    full_system = system_prompt + memory_block
+
+    return await llm_call(
+        prompt=user_message,
+        system=full_system,
+        history=history,
+        max_tokens=max_tokens,
+    )
+
+
 async def analyze_intent(message: str) -> tuple[dict, LlmCallRecord]:
     """
     Run intent analysis via the configured LLM provider.

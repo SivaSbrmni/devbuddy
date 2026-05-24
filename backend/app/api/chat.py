@@ -12,8 +12,11 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.config import settings
 from app.services.task_service import create_task, transition_task_state
-from app.services.llm_service import analyze_intent, run_stage
+from app.services.llm_service import analyze_intent, run_stage, chat_with_history
 from app.services.agent_executor import execute_task
+from app.services.memory_store import recall as memory_recall, consolidate as memory_consolidate
+from app.api.mcp_connections import get_active_mcp_context
+from app.api.github_connections import get_repo_context
 from app.schemas.task import TaskCreate, TaskStateTransition
 from app.models.task import TaskState
 from app.core.logger import get_logger
@@ -66,8 +69,16 @@ def sse_heartbeat() -> str:
 
 # ── Main streaming generator ──────────────────────────────────────────────────
 
+CHAT_SYSTEM_PROMPT = (
+    "You are DevBuddy, an enterprise autonomous coding agent.\n"
+    "You help developers plan, build, review, and deploy software.\n"
+    "Be concise, technical, and actionable."
+)
+
+
 class ChatRequest(BaseModel):
     message: str
+    history: list[dict] | None = None
 
 
 async def _stream_chat(
@@ -75,6 +86,7 @@ async def _stream_chat(
     user: dict,
     db: AsyncSession,
     request: Request,
+    history: list[dict] | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     High-fidelity SSE generator with:
@@ -158,15 +170,45 @@ async def _stream_chat(
 
         await asyncio.sleep(0.2)
 
-        # ── 2a. CONVERSATIONAL / QUERY — answer directly, no pipeline ────────
+        # ── 2a. CONVERSATIONAL / QUERY — answer directly with memory ─────────
         if not needs_pipeline:
             logger.info("conversational_intent", intent=intent_type)
-            reply = intent.get("description") or intent.get("title") or "I'm here to help! Describe a coding task."
+            user_id = str(user.get("id", ""))
+
+            # Recall relevant memories
+            memories: list[str] = []
+            try:
+                memories = await memory_recall(db, user_id, message, k=6)
+                if memories:
+                    yield sse("memory_context", {
+                        "count": len(memories),
+                        "preview": memories[0][:120] if memories else "",
+                        "timestamp": _now(),
+                    })
+            except Exception as exc:
+                logger.warning("memory_recall_failed", error=str(exc))
+
+            # Generate reply with full context
+            try:
+                reply = await chat_with_history(
+                    user_message=message,
+                    system_prompt=CHAT_SYSTEM_PROMPT,
+                    history=history or [],
+                    memories=memories,
+                )
+            except Exception as exc:
+                logger.warning("chat_with_history_failed", error=str(exc))
+                reply = intent.get("description") or intent.get("title") or "I'm here to help! Describe a coding task."
+
             yield sse("llm_reply", {
                 "text":      reply,
                 "intent":    intent_type,
                 "timestamp": _now(),
             })
+
+            # Consolidate facts in the background
+            asyncio.create_task(_safe_consolidate(db, user_id, message, reply))
+
             yield sse("done", {
                 "task_id":     None,
                 "final_state": "ANSWERED",
@@ -254,8 +296,29 @@ async def _stream_chat(
 
             # For EXECUTING: run real agent executor (writes files, streams logs)
             if to_state == TaskState.EXECUTING:
+                # Gather MCP log context + repo context to enrich LLM prompts
+                mcp_context = ""
+                repo_context = ""
+                try:
+                    mcp_context = await get_active_mcp_context(user["tenant_id"], db, task_description)
+                    repo_context = await get_repo_context(user["tenant_id"], db, task_description)
+                except Exception:
+                    pass  # Non-fatal — agent still runs without context
+
+                if mcp_context or repo_context:
+                    yield sse("status", {
+                        "stage": "context_gathering",
+                        "message": f"Gathered context from {'MCP + ' if mcp_context else ''}{'repos' if repo_context else 'connected sources'}...",
+                        "terminal": True,
+                        "timestamp": _now(),
+                    })
+
                 log_lines: list[str] = []
-                async for log_entry in execute_task(str(task.id), task_title, task_description):
+                async for log_entry in execute_task(
+                    str(task.id), task_title, task_description,
+                    mcp_context=mcp_context, repo_context=repo_context,
+                    user_id=str(user.get("id", "")), db=db,
+                ):
                     log_lines.append(log_entry["line"])
                     yield sse("container_log", {
                         "task_id": str(task.id),
@@ -362,6 +425,15 @@ async def _stream_chat(
         })
 
 
+async def _safe_consolidate(db: AsyncSession, user_id: str, user_msg: str, ai_msg: str) -> None:
+    """Fire-and-forget background task: extract and store memory facts."""
+    try:
+        await memory_consolidate(db, user_id, user_msg, ai_msg)
+        await db.commit()
+    except Exception as exc:
+        logger.warning("consolidate_bg_failed", error=str(exc))
+
+
 @router.post("")
 async def chat(
     body: ChatRequest,
@@ -370,7 +442,7 @@ async def chat(
     db: AsyncSession = Depends(get_db),
 ):
     return StreamingResponse(
-        _stream_chat(body.message, user, db, request),
+        _stream_chat(body.message, user, db, request, history=body.history),
         media_type="text/event-stream",
         headers={
             "Cache-Control":      "no-cache",

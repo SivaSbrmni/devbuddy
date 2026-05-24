@@ -8,6 +8,8 @@ import { TasksPage } from '@/pages/TasksPage'
 import { TaskDetailPage } from '@/pages/TaskDetailPage'
 import { AuditPage } from '@/pages/AuditPage'
 import { LogsPage } from '@/pages/LogsPage'
+import { McpConnectionsPage } from '@/pages/McpConnectionsPage'
+import { GithubConnectionsPage } from '@/pages/GithubConnectionsPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -41,6 +43,8 @@ export default function App() {
           <Route path="tasks/:id" element={<TaskDetailPage />} />
           <Route path="audit" element={<AuditPage />} />
           <Route path="logs" element={<LogsPage />} />
+          <Route path="mcp" element={<McpConnectionsPage />} />
+          <Route path="github" element={<GithubConnectionsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/chat" replace />} />
       </Routes>

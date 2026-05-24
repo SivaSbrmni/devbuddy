@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     # OpenAI-compatible base URLs
     LLM_API_BASE: Optional[str] = None  # override; defaults per provider below
 
+    # Embedding model — used by memory_store.py
+    # Ollama: "nomic-embed-text" (default)
+    # OpenAI: "text-embedding-3-small"
+    # Together: "togethercomputer/m2-bert-80M-8k-retrieval"
+    # Leave empty to use provider defaults
+    EMBED_MODEL: Optional[str] = None
+
     @property
     def resolved_api_base(self) -> str:
         if self.LLM_API_BASE:

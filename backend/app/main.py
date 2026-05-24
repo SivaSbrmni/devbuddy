@@ -8,7 +8,7 @@ import structlog.contextvars
 from app.core.config import settings
 from app.core.logger import setup_logging, get_logger
 from app.core.database import engine, Base
-from app.api import auth, tasks, audit, logs, chat, workspace, llm_config
+from app.api import auth, tasks, audit, logs, chat, workspace, llm_config, mcp_connections, github_connections, memory
 
 setup_logging()
 logger = get_logger("main")
@@ -63,6 +63,9 @@ app.include_router(logs.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
 app.include_router(workspace.router, prefix="/api/v1")
 app.include_router(llm_config.router, prefix="/api/v1")
+app.include_router(mcp_connections.router, prefix="/api/v1")
+app.include_router(github_connections.router, prefix="/api/v1")
+app.include_router(memory.router, prefix="/api/v1")
 
 
 @app.get("/health")

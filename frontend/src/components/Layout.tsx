@@ -5,7 +5,7 @@ import { useTasks } from '@/hooks/useTasks'
 import {
   Menu, Plus, LogOut, Zap, Hash, RefreshCw,
   Play, ChevronRight, Settings,
-  MessageSquare, X, LayoutDashboard,
+  MessageSquare, X, LayoutDashboard, Plug, Github,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LlmSettingsModal } from '@/components/LlmSettingsModal'
@@ -230,6 +230,12 @@ export function Layout() {
             <span className="text-[10px] text-teal-400">Live</span>
           </div>
         </div>
+        <button onClick={() => navigate('/mcp')} className="p-2 rounded-lg text-slate-500 hover:text-teal-400 hover:bg-white/8 transition-colors" title="MCP Connections">
+          <Plug className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={() => navigate('/github')} className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/8 transition-colors" title="GitHub Repos">
+          <Github className="w-3.5 h-3.5" />
+        </button>
         <button onClick={() => setSettingsOpen(true)} className="p-2 rounded-lg text-slate-500 hover:text-teal-400 hover:bg-white/8 transition-colors" title="LLM Settings">
           <Settings className="w-3.5 h-3.5" />
         </button>
@@ -264,6 +270,12 @@ export function Layout() {
             </button>
             <button onClick={() => navigate('/dashboard')} className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/8">
               <LayoutDashboard className="w-4 h-4" />
+            </button>
+            <button onClick={() => navigate('/mcp')} className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-teal-400 hover:bg-white/8" title="MCP Connections">
+              <Plug className="w-4 h-4" />
+            </button>
+            <button onClick={() => navigate('/github')} className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/8" title="GitHub Repos">
+              <Github className="w-4 h-4" />
             </button>
             <div className="flex-1" />
             <button onClick={handleSignOut} className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/8 mb-3">

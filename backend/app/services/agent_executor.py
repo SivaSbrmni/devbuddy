@@ -24,7 +24,8 @@ from typing import AsyncGenerator
 
 from app.core.config import settings
 from app.core.logger import get_logger
-from app.services.llm_service import _call_ollama, _call_openai_compat_with_prompt
+from app.services.llm_service import _call_ollama, _call_openai_compat_with_prompt, llm_call
+from app.services.skills import SKILL_REGISTRY, run_skill, skills_schema
 
 logger = get_logger("agent_executor")
 
@@ -32,6 +33,13 @@ WORKSPACE_ROOT = os.environ.get("WORKSPACE_ROOT", "/tmp/devbuddy-workspaces")
 MAX_RETRIES = 2
 
 # ── Prompts ────────────────────────────────────────────────────────────────
+
+MEMORY_SYSTEM_PROMPT = (
+    "You are an autonomous coding agent with access to skills and long-term memory.\n"
+    "Available skills: {skills}\n\n"
+    "Relevant memories about this user/project:\n{memories}\n\n"
+    "Use the memories to personalise your work and the skills when you need to execute, search, or read files."
+)
 
 DECOMPOSE_PROMPT = """You are a senior software architect.
 Decompose the following task into at most 4 focused, independent sub-tasks that can each be implemented in isolation.
@@ -95,12 +103,15 @@ def _now_ts() -> float:
     return time.time()
 
 
-async def _llm(prompt: str) -> str:
-    if settings.LLM_PROVIDER == "ollama":
-        raw, _ = await _call_ollama(prompt)
-    else:
-        raw, _ = await _call_openai_compat_with_prompt(prompt)
-    return raw
+async def _llm(prompt: str, memories: list[str] | None = None) -> str:
+    """
+    Provider-agnostic LLM call with optional memory injection.
+    When memories are provided they are prepended as a system context block.
+    """
+    skill_names = ", ".join(SKILL_REGISTRY.keys()) or "none"
+    mem_block = "\n".join(f"- {m}" for m in (memories or [])) or "(none)"
+    system = MEMORY_SYSTEM_PROMPT.format(skills=skill_names, memories=mem_block)
+    return await llm_call(prompt=prompt, system=system)
 
 
 def _extract_json_array(raw: str) -> list | None:
@@ -168,6 +179,10 @@ async def execute_task(
     task_id: str,
     task_title: str,
     task_description: str,
+    mcp_context: str = "",
+    repo_context: str = "",
+    user_id: str | None = None,
+    db=None,
 ) -> AsyncGenerator[dict, None]:
     """
     ReAct loop generator. Yields log-line dicts:
@@ -180,19 +195,47 @@ async def execute_task(
     def log(line: str, stream: str = "stdout") -> dict:
         return {"line": line, "stream": stream, "ts": _now_ts()}
 
+    extra_context_parts: list[str] = []
+    if mcp_context:
+        extra_context_parts.append(mcp_context)
+        yield log(f"[context] MCP log context attached ({len(mcp_context)} chars)")
+    if repo_context:
+        extra_context_parts.append(repo_context)
+        yield log(f"[context] Repo context attached ({len(repo_context)} chars)")
+
+    extra_context = "\n\n".join(extra_context_parts)
     task_context = f"{task_title}\n\n{task_description}"
+    if extra_context:
+        task_context = f"{task_context}\n\n{extra_context}"
 
     yield log(f"[react] Starting ReAct loop for: {task_title}")
     yield log(f"[react] Workspace: {workspace}")
     yield log(f"[react] Provider: {settings.LLM_PROVIDER}/{settings.LLM_MODEL}")
     yield log(f"[react] Max retries per sub-task: {MAX_RETRIES}")
+    yield log(f"[react] Skills available: {', '.join(SKILL_REGISTRY.keys()) or 'none'}")
+    await asyncio.sleep(0.05)
+
+    # ── RECALL: fetch relevant long-term memories ────────────────────────────
+    task_memories: list[str] = []
+    if db and user_id:
+        try:
+            from app.services.memory_store import recall as memory_recall
+            task_memories = await memory_recall(db, user_id, f"{task_title} {task_description}", k=6)
+            if task_memories:
+                yield log(f"[memory] Injecting {len(task_memories)} relevant memories into agent context")
+                for m in task_memories:
+                    yield log(f"[memory]   · {m[:100]}")
+            else:
+                yield log("[memory] No relevant memories found")
+        except Exception as exc:
+            yield log(f"[memory] Recall skipped: {exc}", "stderr")
     await asyncio.sleep(0.05)
 
     # ── REASON: decompose into sub-tasks ────────────────────────────────────
     yield log("[reason] Decomposing task into sub-tasks...")
     subtasks: list[SubTask] = []
     try:
-        raw = await _llm(DECOMPOSE_PROMPT.format(task=task_context))
+        raw = await _llm(DECOMPOSE_PROMPT.format(task=task_context), memories=task_memories)
         data = _extract_json_array(raw)
         if data:
             for item in data[:4]:  # cap at 4 sub-tasks
@@ -248,7 +291,7 @@ async def execute_task(
                         prev_files=prev_summary,
                     )
 
-                raw = await _llm(prompt)
+                raw = await _llm(prompt, memories=task_memories)
                 parsed = _extract_json_array(raw)
 
                 if parsed:
@@ -342,6 +385,20 @@ async def execute_task(
     for st in subtasks:
         for f in st.generated_files:
             all_files.append(f["path"])
+
+    # ── CONSOLIDATE: persist task summary into long-term memory ─────────────
+    if db and user_id:
+        try:
+            from app.services.memory_store import remember as memory_remember
+            summary = (
+                f"Completed task '{task_title}': {done_count}/{len(subtasks)} sub-tasks succeeded. "
+                f"Generated files: {', '.join(all_files[:10])}."
+            )
+            await memory_remember(db, user_id, summary, source="task_completion")
+            await db.commit()
+            yield log(f"[memory] Task summary stored in long-term memory")
+        except Exception as exc:
+            yield log(f"[memory] Consolidation skipped: {exc}", "stderr")
 
     file_list = "\n".join(f"- `{p}`" for p in all_files) if all_files else "- (none)"
     subtask_details = "\n".join(

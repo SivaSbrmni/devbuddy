@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useId } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { DEV_TOKEN_KEY } from '@/lib/api'
 import {
   Send, Loader2, CheckCircle2, ChevronDown, ChevronRight,
   Zap, Activity, Plug, FileText, Terminal, FolderOpen,
   Bookmark, RefreshCw, AlertCircle, Settings, XCircle,
-  Download, Copy, Check, Package, Code2,
+  Download, Copy, Check, Package, Code2, Github, ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LlmSettingsModal } from '@/components/LlmSettingsModal'
@@ -723,8 +724,11 @@ export function ChatPage() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [llmLabel, setLlmLabel] = useState('llama3.2')
+  const [mcpConns, setMcpConns] = useState<{id:string;name:string;conn_type:string;is_active:boolean;last_test_ok:boolean|null}[]>([])
+  const [githubRepos, setGithubRepos] = useState<{id:string;name:string;repo_url:string;clone_status:string|null}[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const navigate = useNavigate()
 
   // Keyboard shortcuts: Ctrl/Cmd+/ = focus input, Ctrl/Cmd+N = clear new chat
   useEffect(() => {
@@ -748,6 +752,15 @@ export function ChatPage() {
     fetch(`${API_BASE}/api/v1/llm/config`, { headers })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setLlmLabel(`${d.provider}/${d.model}`) })
+      .catch(() => {})
+    // Load MCP + GitHub connections for the MCP panel
+    fetch(`${API_BASE}/api/v1/mcp/connections`, { headers })
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setMcpConns(d))
+      .catch(() => {})
+    fetch(`${API_BASE}/api/v1/github/connections`, { headers })
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setGithubRepos(d))
       .catch(() => {})
   }, [])
 
@@ -1123,19 +1136,76 @@ export function ChatPage() {
         {activeTab === 'files'    && <FilesPanel taskId={activeTaskId} refreshKey={filesRefreshKey} />}
 
         {(activeTab === 'mcp') && (
-          <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-4 p-6">
-            <Plug className="w-8 h-8 opacity-30" />
-            <div className="text-center">
-              <p className="text-sm font-medium text-slate-400">No MCP tools connected</p>
-              <p className="text-xs text-slate-600 mt-1">Configure MCP servers in <code className="text-teal-500 font-mono">mcp_config.json</code></p>
+          <div className="flex flex-col h-full overflow-y-auto scrollbar-thin p-4 gap-3">
+            {/* MCP Connections */}
+            <div className="rounded-lg border border-white/8 bg-white/3 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/6">
+                <div className="flex items-center gap-2">
+                  <Plug className="w-3.5 h-3.5 text-teal-400" />
+                  <span className="text-xs font-semibold text-slate-200">MCP Log Sources</span>
+                  <span className="text-[10px] bg-teal-500/20 text-teal-300 px-1.5 py-0.5 rounded-full">{mcpConns.filter(c=>c.is_active).length} active</span>
+                </div>
+                <button onClick={() => navigate('/mcp')} className="flex items-center gap-1 text-[10px] text-teal-400 hover:text-teal-300">
+                  <ExternalLink className="w-2.5 h-2.5" /> Manage
+                </button>
+              </div>
+              {mcpConns.length === 0 ? (
+                <div className="px-3 py-4 text-center">
+                  <p className="text-xs text-slate-500">No log sources connected</p>
+                  <button onClick={() => navigate('/mcp')} className="mt-2 text-[11px] text-teal-400 hover:text-teal-300 border border-teal-500/30 rounded px-2.5 py-1 hover:bg-teal-500/10 transition-colors">
+                    + Add log source
+                  </button>
+                </div>
+              ) : (
+                <div className="divide-y divide-white/5">
+                  {mcpConns.map(c => (
+                    <div key={c.id} className="flex items-center gap-2 px-3 py-2">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${c.is_active ? 'bg-teal-400' : 'bg-slate-600'}`} />
+                      <span className="text-[11px] text-slate-300 flex-1 truncate">{c.name}</span>
+                      <span className="text-[9px] text-slate-600 font-mono">{c.conn_type}</span>
+                      {c.last_test_ok === true && <span className="text-[9px] text-teal-400">✓</span>}
+                      {c.last_test_ok === false && <span className="text-[9px] text-red-400">✗</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <button
-              onClick={() => { window.open('https://modelcontextprotocol.io/docs', '_blank') }}
-              className="flex items-center gap-2 text-xs text-teal-400 hover:text-teal-300 border border-teal-500/30 rounded-lg px-3 py-2 hover:bg-teal-500/10 transition-colors"
-            >
-              <Plug className="w-3 h-3" />
-              MCP Documentation
-            </button>
+            {/* GitHub Repos */}
+            <div className="rounded-lg border border-white/8 bg-white/3 overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/6">
+                <div className="flex items-center gap-2">
+                  <Github className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-xs font-semibold text-slate-200">Repositories</span>
+                  <span className="text-[10px] bg-slate-500/20 text-slate-400 px-1.5 py-0.5 rounded-full">{githubRepos.filter(r=>r.clone_status==='ready').length} ready</span>
+                </div>
+                <button onClick={() => navigate('/github')} className="flex items-center gap-1 text-[10px] text-teal-400 hover:text-teal-300">
+                  <ExternalLink className="w-2.5 h-2.5" /> Manage
+                </button>
+              </div>
+              {githubRepos.length === 0 ? (
+                <div className="px-3 py-4 text-center">
+                  <p className="text-xs text-slate-500">No repos connected</p>
+                  <button onClick={() => navigate('/github')} className="mt-2 text-[11px] text-teal-400 hover:text-teal-300 border border-teal-500/30 rounded px-2.5 py-1 hover:bg-teal-500/10 transition-colors">
+                    + Connect repo
+                  </button>
+                </div>
+              ) : (
+                <div className="divide-y divide-white/5">
+                  {githubRepos.map(r => (
+                    <div key={r.id} className="flex items-center gap-2 px-3 py-2">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${
+                        r.clone_status === 'ready' ? 'bg-teal-400' :
+                        r.clone_status === 'cloning' ? 'bg-blue-400 animate-pulse' :
+                        r.clone_status === 'failed' ? 'bg-red-400' : 'bg-slate-600'
+                      }`} />
+                      <span className="text-[11px] text-slate-300 flex-1 truncate">{r.name}</span>
+                      <span className="text-[9px] text-slate-600 font-mono">{r.clone_status ?? '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-600 text-center">Active connections are injected as context into every agent run</p>
           </div>
         )}
       </div>
