@@ -1,4 +1,5 @@
-version: '3.9'
+# Production docker-compose — data stored in /opt/devbuddy/data/ (persistent disk)
+# All named volumes replaced with bind mounts so data survives VM reboots.
 
 services:
   postgres:
@@ -9,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${DATA_ROOT:-/opt/devbuddy/data}/postgres:/var/lib/postgresql/data
     networks:
       - internal
     healthcheck:
@@ -20,12 +21,20 @@ services:
 
   backend:
     image: devbuddy-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     restart: unless-stopped
     env_file:
       - .env.prod
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       LOKI_URL: http://loki:3100
+      WORKSPACE_ROOT: ${DATA_ROOT:-/opt/devbuddy/data}/workspaces
+      REPOS_ROOT: ${DATA_ROOT:-/opt/devbuddy/data}/repos
+    volumes:
+      - ${DATA_ROOT:-/opt/devbuddy/data}/workspaces:${DATA_ROOT:-/opt/devbuddy/data}/workspaces
+      - ${DATA_ROOT:-/opt/devbuddy/data}/repos:${DATA_ROOT:-/opt/devbuddy/data}/repos
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,6 +44,13 @@ services:
 
   frontend:
     image: devbuddy-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
     restart: unless-stopped
     networks:
       - web
@@ -44,7 +60,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./observability/loki-config.yml:/etc/loki/local-config.yaml
-      - loki_data:/loki
+      - ${DATA_ROOT:-/opt/devbuddy/data}/loki:/loki
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - internal
@@ -66,12 +82,10 @@ services:
     image: grafana/grafana:10.2.3
     restart: unless-stopped
     environment:
-      GF_SERVER_DOMAIN: logs.devbuddy.org
-      GF_SERVER_ROOT_URL: https://logs.devbuddy.org
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
       GF_AUTH_ANONYMOUS_ENABLED: "false"
     volumes:
-      - grafana_data:/var/lib/grafana
+      - ${DATA_ROOT:-/opt/devbuddy/data}/grafana:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning
     networks:
       - internal
@@ -95,11 +109,6 @@ services:
       - backend
       - frontend
       - grafana
-
-volumes:
-  postgres_data:
-  loki_data:
-  grafana_data:
 
 networks:
   internal:

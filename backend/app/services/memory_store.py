@@ -12,13 +12,22 @@ Design:
 - Memory is scoped per user so each user's agent has its own context.
 
 Memory lifecycle:
-  1. recall(user_id, query)       — retrieve relevant memories before LLM call
-  2. remember(user_id, text, ...)  — persist a new memory after LLM call
-  3. consolidate(user_id, ...)     — extract facts from a conversation turn (async)
-  4. forget(user_id, memory_id)   — explicit delete
+  1. recall(user_id, query)         — retrieve relevant memories before LLM call
+  2. remember(user_id, text, ...)   — persist a new memory after LLM call
+  3. consolidate(user_id, ...)      — extract facts from a conversation turn (async)
+  4. forget(user_id, memory_id)    — explicit delete
+
+Global project memory:
+  remember_global(text, ...)        — store a project-wide fact (e.g. tech stack, conventions)
+  recall_with_global(user_id, ...) — returns user memories PLUS global memories merged
+  list_global_memories(...)         — list all global project facts
+
+Global memories use the reserved user_id sentinel "__project__" and are
+automatically prepended to every agent's context so all users share them.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import time
@@ -34,6 +43,9 @@ from app.core.logger import get_logger
 from app.models.memory import AgentMemory
 
 logger = get_logger("memory_store")
+
+# Reserved sentinel for project-wide global memories
+GLOBAL_USER_ID = "__project__"
 
 # ── Embedding backends ────────────────────────────────────────────────────────
 
@@ -269,3 +281,55 @@ async def list_memories(
         }
         for r in rows
     ]
+
+
+# ── Global project memory ─────────────────────────────────────────────────────
+
+async def remember_global(
+    db: AsyncSession,
+    text: str,
+    source: str = "project",
+    metadata: dict | None = None,
+) -> AgentMemory:
+    """
+    Store a project-wide memory visible to ALL users and ALL agents.
+    Examples: tech stack, coding conventions, architecture decisions, API keys location.
+    """
+    return await remember(db, GLOBAL_USER_ID, text, source=source, metadata=metadata)
+
+
+async def recall_with_global(
+    db: AsyncSession,
+    user_id: str,
+    query: str,
+    k_user: int = 5,
+    k_global: int = 4,
+    min_score: float = 0.20,
+) -> dict[str, list[str]]:
+    """
+    Retrieve both per-user memories and global project memories for a query.
+    Returns {"user": [...], "global": [...]} so callers can label them separately
+    in the system prompt.
+    """
+    user_mems, global_mems = await asyncio.gather(
+        recall(db, user_id, query, k=k_user, min_score=min_score),
+        recall(db, GLOBAL_USER_ID, query, k=k_global, min_score=min_score),
+    )
+    return {"user": user_mems, "global": global_mems}
+
+
+async def list_global_memories(
+    db: AsyncSession,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict]:
+    """Return all global project memories (for the admin/settings UI)."""
+    return await list_memories(db, GLOBAL_USER_ID, limit=limit, offset=offset)
+
+
+async def forget_global(
+    db: AsyncSession,
+    memory_id: str | None = None,
+) -> int:
+    """Delete a specific global memory or all global memories."""
+    return await forget(db, GLOBAL_USER_ID, memory_id=memory_id)

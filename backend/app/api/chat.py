@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.services.task_service import create_task, transition_task_state
 from app.services.llm_service import analyze_intent, run_stage, chat_with_history
 from app.services.agent_executor import execute_task
-from app.services.memory_store import recall as memory_recall, consolidate as memory_consolidate
+from app.services.memory_store import recall_with_global as memory_recall_global, consolidate as memory_consolidate
 from app.api.mcp_connections import get_active_mcp_context
 from app.api.github_connections import get_repo_context
 from app.schemas.task import TaskCreate, TaskStateTransition
@@ -175,26 +175,37 @@ async def _stream_chat(
             logger.info("conversational_intent", intent=intent_type)
             user_id = str(user.get("id", ""))
 
-            # Recall relevant memories
-            memories: list[str] = []
+            # Recall user + global project memories
+            user_mems: list[str] = []
+            global_mems: list[str] = []
             try:
-                memories = await memory_recall(db, user_id, message, k=6)
-                if memories:
+                mem_map = await memory_recall_global(db, user_id, message)
+                user_mems = mem_map.get("user", [])
+                global_mems = mem_map.get("global", [])
+                total = len(user_mems) + len(global_mems)
+                if total:
                     yield sse("memory_context", {
-                        "count": len(memories),
-                        "preview": memories[0][:120] if memories else "",
+                        "count": total,
+                        "user_count": len(user_mems),
+                        "global_count": len(global_mems),
+                        "preview": (user_mems + global_mems)[0][:120],
                         "timestamp": _now(),
                     })
             except Exception as exc:
                 logger.warning("memory_recall_failed", error=str(exc))
 
+            # Build system prompt: global project facts always prepended, user facts follow
+            system = CHAT_SYSTEM_PROMPT
+            if global_mems:
+                system += "\n\n[Project-wide facts]\n" + "\n".join(f"- {m}" for m in global_mems)
+
             # Generate reply with full context
             try:
                 reply = await chat_with_history(
                     user_message=message,
-                    system_prompt=CHAT_SYSTEM_PROMPT,
+                    system_prompt=system,
                     history=history or [],
-                    memories=memories,
+                    memories=user_mems,
                 )
             except Exception as exc:
                 logger.warning("chat_with_history_failed", error=str(exc))
