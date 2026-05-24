@@ -113,10 +113,11 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_ANON_KEY=YOUR_ANON_KEY
 SUPABASE_JWT_SECRET=YOUR_JWT_SECRET
 
-# LLM (get from console.groq.com — free tier)
-LLM_PROVIDER=groq
-LLM_MODEL=llama3-8b-8192
-LLM_API_KEY=gsk_YOUR_GROQ_KEY
+# LLM — Meta Llama API (cloud, free tier)
+# Get key from: llama.developer.meta.com
+LLM_PROVIDER=llama
+LLM_MODEL=Llama-4-Scout-17B-16E-Instruct
+LLM_API_KEY=YOUR_LLAMA_API_KEY
 
 # Frontend
 VITE_API_BASE_URL=http://YOUR_VM_IP:8000
@@ -226,7 +227,7 @@ Copy the **private key** (everything from `-----BEGIN OPENSSH PRIVATE KEY-----` 
 | `SUPABASE_URL` | Supabase (auth) | supabase.com → project → Settings → API |
 | `SUPABASE_ANON_KEY` | Supabase | Same page → `anon public` key |
 | `SUPABASE_JWT_SECRET` | Supabase | Settings → API → JWT Secret |
-| `LLM_API_KEY` | Groq (free LLM) | console.groq.com → API Keys |
+| `LLM_API_KEY` | Meta Llama API | llama.developer.meta.com → API Keys |
 | `SECRET_KEY` | Generated | `openssl rand -hex 32` |
 | `POSTGRES_PASSWORD` | You choose | Use a strong random password |
 

@@ -4,12 +4,13 @@ LLM service — supports:
   - openai    (api.openai.com/v1)
   - groq      (api.groq.com/openai/v1)
   - together  (api.together.xyz/v1)
+  - llama     (api.llama.com/compat/v1 — Meta cloud Llama API)
   - custom    (any OpenAI-compatible endpoint via LLM_API_BASE)
 
 Set in .env:
-  LLM_PROVIDER=groq
-  LLM_API_KEY=gsk_...
-  LLM_MODEL=llama3-8b-8192
+  LLM_PROVIDER=llama
+  LLM_API_KEY=your_llama_api_key
+  LLM_MODEL=Llama-4-Scout-17B-16E-Instruct
 """
 import json
 import httpx

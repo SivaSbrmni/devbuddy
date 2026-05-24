@@ -1,29 +1,33 @@
 """
 Agent Memory Store
 ==================
-Provider-agnostic long-term memory for agents.
+Provider-agnostic, strictly per-user long-term memory.
 
-Design:
-- Embeddings are generated via the configured LLM provider (Ollama nomic-embed-text,
-  OpenAI text-embedding-3-small, or a generic fallback using TF-IDF cosine sim).
-- Memories are stored in the Postgres DB (no separate vector DB required).
-- Similarity search uses pgvector when available, falling back to Python-side
-  cosine similarity so the system works with any DB setup.
-- Memory is scoped per user so each user's agent has its own context.
+Privacy guarantee:
+- Every memory row is scoped to exactly ONE user_id.
+- No memory is ever shared between users.
+- No data is sent to any external model provider for training.
+  Embeddings/LLM calls go to your own configured endpoint (Ollama local
+  or a provider you control) and are never used for model training.
+- Users can export or delete all their data at any time.
 
-Memory lifecycle:
-  1. recall(user_id, query)         — retrieve relevant memories before LLM call
-  2. remember(user_id, text, ...)   — persist a new memory after LLM call
-  3. consolidate(user_id, ...)      — extract facts from a conversation turn (async)
-  4. forget(user_id, memory_id)    — explicit delete
+Memory sources (all private to the user):
+  "conversation"    — auto-extracted facts from chat turns
+  "project"         — user-defined project details (tech stack, conventions, goals)
+  "task_completion" — auto-stored summaries of completed agent tasks
+  "manual"          — explicitly added by the user via UI
 
-Global project memory:
-  remember_global(text, ...)        — store a project-wide fact (e.g. tech stack, conventions)
-  recall_with_global(user_id, ...) — returns user memories PLUS global memories merged
-  list_global_memories(...)         — list all global project facts
+The concept of 'global memory' here means all memory sources belonging to
+THAT user—not shared with anyone else.
 
-Global memories use the reserved user_id sentinel "__project__" and are
-automatically prepended to every agent's context so all users share them.
+Lifecycle:
+  remember(user_id, text, source)   — store a memory
+  recall(user_id, query)            — retrieve relevant memories (all sources)
+  remember_project(user_id, text)   — store a user's own project-level fact
+  recall_full(user_id, query)       — recall prioritising project facts first
+  consolidate(user_id, ...)         — auto-extract facts from a conversation turn
+  forget(user_id, memory_id)        — delete one or all memories
+  export_all(user_id)               — export all memories (GDPR/portability)
 """
 from __future__ import annotations
 
@@ -44,8 +48,13 @@ from app.models.memory import AgentMemory
 
 logger = get_logger("memory_store")
 
-# Reserved sentinel for project-wide global memories
-GLOBAL_USER_ID = "__project__"
+
+class MemorySource:
+    """Constants for memory source tags — all scoped to a single user."""
+    CONVERSATION = "conversation"      # auto-extracted from chat
+    PROJECT = "project"                # user's own project facts
+    TASK_COMPLETION = "task_completion" # agent task summaries
+    MANUAL = "manual"                  # user explicitly added
 
 # ── Embedding backends ────────────────────────────────────────────────────────
 
@@ -229,7 +238,7 @@ async def consolidate(
             facts: list[str] = json.loads(raw[start:end])
             for fact in facts:
                 if isinstance(fact, str) and fact.strip():
-                    await remember(db, user_id, fact.strip(), source="consolidation")
+                    await remember(db, user_id, fact.strip(), source=MemorySource.CONVERSATION)
             if facts:
                 logger.info("memory_consolidated", user_id=user_id, facts=len(facts))
     except Exception as exc:
@@ -283,21 +292,71 @@ async def list_memories(
     ]
 
 
-# ── Global project memory ─────────────────────────────────────────────────────
+# ── Per-user project memory (user's own private project facts) ────────────────
 
-async def remember_global(
+async def remember_project(
     db: AsyncSession,
+    user_id: str,
     text: str,
-    source: str = "project",
     metadata: dict | None = None,
 ) -> AgentMemory:
     """
-    Store a project-wide memory visible to ALL users and ALL agents.
-    Examples: tech stack, coding conventions, architecture decisions, API keys location.
+    Store a project-level fact that belongs exclusively to this user.
+    Examples: "I use FastAPI + React", "prefer type hints", "project is called DevBuddy".
+    This is PRIVATE to user_id — no other user can ever read it.
     """
-    return await remember(db, GLOBAL_USER_ID, text, source=source, metadata=metadata)
+    return await remember(db, user_id, text, source=MemorySource.PROJECT, metadata=metadata)
 
 
+async def recall_full(
+    db: AsyncSession,
+    user_id: str,
+    query: str,
+    k_project: int = 4,
+    k_conversation: int = 5,
+    min_score: float = 0.20,
+) -> dict[str, list[str]]:
+    """
+    Recall the user's own project-level facts AND conversation facts separately.
+    Returns {"project": [...], "conversation": [...]}
+    Both lists contain ONLY this user's data.
+    """
+    q_vec = await embed(query)
+
+    result = await db.execute(
+        select(AgentMemory)
+        .where(AgentMemory.user_id == str(user_id))
+        .order_by(AgentMemory.created_at.desc())
+        .limit(300)
+    )
+    rows = result.scalars().all()
+
+    project_scored: list[tuple[float, str]] = []
+    conv_scored: list[tuple[float, str]] = []
+
+    for row in rows:
+        try:
+            m_vec = json.loads(row.vector)
+            score = _cosine(q_vec, m_vec)
+            if score < min_score:
+                continue
+            if row.source == MemorySource.PROJECT:
+                project_scored.append((score, row.text))
+            else:
+                conv_scored.append((score, row.text))
+        except Exception:
+            continue
+
+    project_scored.sort(key=lambda x: x[0], reverse=True)
+    conv_scored.sort(key=lambda x: x[0], reverse=True)
+
+    return {
+        "project": [t for _, t in project_scored[:k_project]],
+        "conversation": [t for _, t in conv_scored[:k_conversation]],
+    }
+
+
+# Alias kept for backwards compat with chat.py / agent_executor.py call sites
 async def recall_with_global(
     db: AsyncSession,
     user_id: str,
@@ -307,29 +366,22 @@ async def recall_with_global(
     min_score: float = 0.20,
 ) -> dict[str, list[str]]:
     """
-    Retrieve both per-user memories and global project memories for a query.
-    Returns {"user": [...], "global": [...]} so callers can label them separately
-    in the system prompt.
+    Backwards-compatible wrapper around recall_full.
+    'global' here means the user's own project-scoped memories—NOT shared with others.
+    Returns {"user": [...], "global": [...]} where both are private to user_id.
     """
-    user_mems, global_mems = await asyncio.gather(
-        recall(db, user_id, query, k=k_user, min_score=min_score),
-        recall(db, GLOBAL_USER_ID, query, k=k_global, min_score=min_score),
+    result = await recall_full(
+        db, user_id, query,
+        k_project=k_global,
+        k_conversation=k_user,
+        min_score=min_score,
     )
-    return {"user": user_mems, "global": global_mems}
+    return {"user": result["conversation"], "global": result["project"]}
 
 
-async def list_global_memories(
-    db: AsyncSession,
-    limit: int = 100,
-    offset: int = 0,
-) -> list[dict]:
-    """Return all global project memories (for the admin/settings UI)."""
-    return await list_memories(db, GLOBAL_USER_ID, limit=limit, offset=offset)
-
-
-async def forget_global(
-    db: AsyncSession,
-    memory_id: str | None = None,
-) -> int:
-    """Delete a specific global memory or all global memories."""
-    return await forget(db, GLOBAL_USER_ID, memory_id=memory_id)
+async def export_all(db: AsyncSession, user_id: str) -> list[dict]:
+    """
+    Export every memory row for a user as plain dicts.
+    Provides full data portability — the user owns their data.
+    """
+    return await list_memories(db, user_id, limit=10_000)

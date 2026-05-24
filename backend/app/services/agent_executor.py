@@ -589,7 +589,8 @@ async def execute_task(
                 f"Completed task '{task_title}': {done_count}/{len(subtasks)} sub-tasks succeeded. "
                 f"Generated files: {', '.join(all_files[:10])}."
             )
-            await memory_remember(db, user_id, summary, source="task_completion")
+            from app.services.memory_store import MemorySource
+            await memory_remember(db, user_id, summary, source=MemorySource.TASK_COMPLETION)
             await db.commit()
             yield log(f"[memory] Task summary stored in long-term memory")
         except Exception as exc:

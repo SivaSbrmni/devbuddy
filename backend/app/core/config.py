@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # LLM_PROVIDER: "ollama" (local) | "openai" | "groq" | "together" | "custom"
     # For "ollama" → uses OLLAMA_URL, no key needed
     # For others   → uses LLM_API_BASE + LLM_API_KEY (OpenAI-compatible)
-    LLM_PROVIDER: Literal["ollama", "openai", "groq", "together", "custom"] = "ollama"
+    LLM_PROVIDER: Literal["ollama", "openai", "groq", "together", "llama", "custom"] = "ollama"
     LLM_MODEL: str = "llama3.2:latest"
     LLM_API_KEY: Optional[str] = None
 
@@ -46,6 +46,7 @@ class Settings(BaseSettings):
             "openai":   "https://api.openai.com/v1",
             "groq":     "https://api.groq.com/openai/v1",
             "together": "https://api.together.xyz/v1",
+            "llama":    "https://api.llama.com/compat/v1",
             "custom":   "",
         }.get(self.LLM_PROVIDER, "")
 
