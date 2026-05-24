@@ -336,3 +336,29 @@ async def execute_task(
     yield log(f"[react] ReAct loop complete — {total_files} file(s) merged")
     yield log(f"[react] Sub-tasks: {done_count} done, {fail_count} failed")
     yield log(f"[react] Workspace: {workspace}")
+
+    # ── Write README.md summary so the result API surfaces it ───────────────
+    all_files = []
+    for st in subtasks:
+        for f in st.generated_files:
+            all_files.append(f["path"])
+
+    file_list = "\n".join(f"- `{p}`" for p in all_files) if all_files else "- (none)"
+    subtask_details = "\n".join(
+        f"- **[{st.id}]** {st.title} — *{st.status}* ({st.attempts} attempt(s))"
+        for st in subtasks
+    )
+
+    readme = (
+        f"# Task Completed: {task_title}\n\n"
+        f"{task_description}\n\n"
+        f"## Outcome\n\n"
+        f"The agent completed {done_count} of {len(subtasks)} sub-task(s) successfully.\n\n"
+        f"## Sub-tasks\n\n{subtask_details}\n\n"
+        f"## Generated Files\n\n{file_list}\n\n"
+        f"## Usage\n\n"
+        f"Review the generated files below. Each file is fully self-contained and ready to run.\n"
+        f"Download individual files or use 'Download all' to get everything at once.\n"
+    )
+    _write_file(workspace, "README.md", readme)
+    yield log("[react] Summary written to README.md")

@@ -49,6 +49,13 @@ async def list_workspace_files(
     return {"task_id": task_id, "root": ws_path, "files": files, "exists": True}
 
 
+SKIP_PATTERNS = {
+    "__pycache__", ".git", ".mypy_cache", ".pytest_cache",
+    "node_modules", ".DS_Store",
+}
+SKIP_EXTENSIONS = {".pyc", ".pyo", ".so", ".egg-info"}
+
+
 @router.get("/result/{task_id}")
 async def get_task_result(
     task_id: str,
@@ -57,20 +64,54 @@ async def get_task_result(
     """Return all generated files with their content for a completed task."""
     ws_path = os.path.join(WORKSPACE_ROOT, task_id)
     if not os.path.exists(ws_path):
-        return {"task_id": task_id, "exists": False, "files": []}
+        return {"task_id": task_id, "exists": False, "summary": "", "files": []}
 
     result_files = []
-    for root, _dirs, filenames in os.walk(ws_path):
+    summary = ""
+
+    for root, dirs, filenames in os.walk(ws_path):
+        # Skip unwanted dirs in-place so os.walk doesn't descend into them
+        dirs[:] = [d for d in dirs if d not in SKIP_PATTERNS]
+
         for fname in sorted(filenames):
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in SKIP_EXTENSIONS or fname in SKIP_PATTERNS:
+                continue
+
             full = os.path.join(root, fname)
             rel  = os.path.relpath(full, ws_path).replace("\\", "/")
             size = os.path.getsize(full)
+
             try:
                 with open(full, "r", encoding="utf-8", errors="replace") as fh:
                     content = fh.read()
             except Exception:
                 content = "<binary file>"
+
+            # Capture summary.txt if present
+            if fname in ("summary.txt", "SUMMARY.txt", "README.md") and not summary:
+                summary = content
+                continue  # Don't include summary file itself in artifact list
+
             result_files.append({"path": rel, "name": fname, "size": size, "content": content})
 
+    # Build a summary if none was found
+    if not summary and result_files:
+        names = ", ".join(f["name"] for f in result_files[:5])
+        summary = (
+            f"Task completed successfully.\n\n"
+            f"Generated {len(result_files)} file(s): {names}.\n\n"
+            f"Review the artifacts below and download individual files or all at once."
+        )
+
+    # Sort: root files first, then subtask dirs
+    result_files.sort(key=lambda f: (0 if "/" not in f["path"] else 1, f["path"]))
+
     logger.info("task_result_fetched", task_id=task_id, file_count=len(result_files))
-    return {"task_id": task_id, "exists": True, "file_count": len(result_files), "files": result_files}
+    return {
+        "task_id": task_id,
+        "exists": True,
+        "file_count": len(result_files),
+        "summary": summary,
+        "files": result_files,
+    }

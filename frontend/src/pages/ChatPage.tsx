@@ -5,6 +5,7 @@ import {
   Send, Loader2, CheckCircle2, ChevronDown, ChevronRight,
   Zap, Activity, Plug, FileText, Terminal, FolderOpen,
   Bookmark, RefreshCw, AlertCircle, Settings, XCircle,
+  Download, Copy, Check, Package, Code2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LlmSettingsModal } from '@/components/LlmSettingsModal'
@@ -59,6 +60,18 @@ interface ContainerLog {
   ts: number
 }
 
+interface ResultFile {
+  path: string
+  content: string
+  size: number
+}
+
+interface TaskResult {
+  task_id: string
+  summary: string
+  files: ResultFile[]
+}
+
 interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
@@ -72,6 +85,7 @@ interface ChatMessage {
   error?: string
   streaming?: boolean
   statusRows?: StatusRow[]
+  taskResult?: TaskResult
 }
 
 const SUGGESTIONS = [
@@ -243,6 +257,158 @@ function LlmLogsPanel({ calls }: { calls: LlmCall[] }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ── language detection ───────────────────────────────────────────────────────
+function detectLang(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() ?? ''
+  const MAP: Record<string, string> = {
+    py: 'Python', ts: 'TypeScript', tsx: 'TSX', js: 'JavaScript', jsx: 'JSX',
+    json: 'JSON', yaml: 'YAML', yml: 'YAML', md: 'Markdown', sh: 'Shell',
+    bash: 'Shell', css: 'CSS', html: 'HTML', go: 'Go', rs: 'Rust',
+    java: 'Java', kt: 'Kotlin', rb: 'Ruby', php: 'PHP', sql: 'SQL', toml: 'TOML',
+  }
+  return MAP[ext] ?? (ext.toUpperCase() || 'Text')
+}
+
+function langColor(lang: string): string {
+  const MAP: Record<string, string> = {
+    Python: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+    TypeScript: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+    TSX: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+    JavaScript: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+    JSX: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+    JSON: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+    Shell: 'bg-green-500/20 text-green-300 border-green-500/30',
+    Markdown: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+    Go: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+    Rust: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
+  }
+  return MAP[lang] ?? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+}
+
+// ── TaskResultPanel ───────────────────────────────────────────────────────────
+function TaskResultPanel({ result }: { result: TaskResult }) {
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set())
+  const [copied, setCopied] = useState<string | null>(null)
+
+  const toggleFile = (path: string) => {
+    setExpandedFiles(prev => {
+      const next = new Set(prev)
+      next.has(path) ? next.delete(path) : next.add(path)
+      return next
+    })
+  }
+
+  const copyFile = async (content: string, path: string) => {
+    await navigator.clipboard.writeText(content)
+    setCopied(path)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  const downloadFile = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename.split('/').pop() ?? filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadAll = () => {
+    result.files.forEach(f => downloadFile(f.content, f.path))
+  }
+
+  // Only show root-level files (not subtask-N/ dirs)
+  const rootFiles = result.files.filter(f => !f.path.includes('/subtask-'))
+  const displayFiles = rootFiles.length > 0 ? rootFiles : result.files.slice(0, 6)
+
+  return (
+    <div className="mt-3 rounded-xl border border-teal-500/25 bg-[#071624] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-teal-500/8 border-b border-teal-500/20">
+        <div className="w-7 h-7 rounded-lg bg-teal-500/20 flex items-center justify-center shrink-0">
+          <Package className="w-3.5 h-3.5 text-teal-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold text-teal-300">Task Artifacts</p>
+          <p className="text-[10px] text-teal-500">{displayFiles.length} file{displayFiles.length !== 1 ? 's' : ''} generated</p>
+        </div>
+        <button
+          onClick={downloadAll}
+          className="flex items-center gap-1.5 text-[11px] text-teal-400 hover:text-teal-200 border border-teal-500/30 rounded-lg px-2.5 py-1.5 hover:bg-teal-500/15 transition-colors shrink-0"
+          title="Download all files"
+        >
+          <Download className="w-3 h-3" />
+          <span className="hidden sm:inline">Download all</span>
+        </button>
+      </div>
+
+      {/* Summary */}
+      {result.summary && (
+        <div className="px-4 py-3 border-b border-white/6">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Completion Summary</p>
+          <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">{result.summary.replace(/\*\*/g, '').trim()}</p>
+        </div>
+      )}
+
+      {/* File list */}
+      <div className="divide-y divide-white/6">
+        {displayFiles.map(f => {
+          const lang = detectLang(f.path)
+          const isOpen = expandedFiles.has(f.path)
+          const lines = f.content.split('\n').length
+          const isCopied = copied === f.path
+          return (
+            <div key={f.path}>
+              {/* File row */}
+              <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-white/3 transition-colors">
+                <button
+                  onClick={() => toggleFile(f.path)}
+                  className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                >
+                  <Code2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                  <span className="text-[11px] font-mono text-slate-200 truncate flex-1">
+                    {f.path.split('/').pop()}
+                  </span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${langColor(lang)}`}>
+                    {lang}
+                  </span>
+                  <span className="text-[10px] text-slate-600 shrink-0">{lines}L · {formatBytes(f.size)}</span>
+                  {isOpen
+                    ? <ChevronDown className="w-3 h-3 text-slate-600 shrink-0" />
+                    : <ChevronRight className="w-3 h-3 text-slate-600 shrink-0" />}
+                </button>
+                <button
+                  onClick={() => copyFile(f.content, f.path)}
+                  className="p-1.5 rounded hover:bg-white/8 text-slate-500 hover:text-teal-400 transition-colors shrink-0"
+                  title="Copy"
+                >
+                  {isCopied ? <Check className="w-3 h-3 text-teal-400" /> : <Copy className="w-3 h-3" />}
+                </button>
+                <button
+                  onClick={() => downloadFile(f.content, f.path)}
+                  className="p-1.5 rounded hover:bg-white/8 text-slate-500 hover:text-teal-400 transition-colors shrink-0"
+                  title="Download"
+                >
+                  <Download className="w-3 h-3" />
+                </button>
+              </div>
+              {/* Code preview */}
+              {isOpen && (
+                <div className="bg-[#030810] border-t border-white/6">
+                  <pre className="p-4 text-[11px] text-slate-300 font-mono leading-relaxed whitespace-pre overflow-x-auto scrollbar-thin max-h-[60vh]">
+                    {f.content}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -532,6 +698,11 @@ function AgentConversation({ msg, expandedRows, toggleRow }: {
           <p className="text-xs text-red-400">{msg.error}</p>
         </div>
       )}
+
+      {/* ── Task artifacts (shown after pipeline completes) ── */}
+      {msg.taskResult && isDone && (
+        <TaskResultPanel result={msg.taskResult} />
+      )}
     </div>
   )
 }
@@ -547,6 +718,7 @@ export function ChatPage() {
   const [llmCalls, setLlmCalls] = useState<LlmCall[]>([])
   const [containerLogs, setContainerLogs] = useState<ContainerLog[]>([])
   const [activeTaskId, setActiveTaskId] = useState<string | undefined>()
+  const activeTaskIdRef = useRef<string | undefined>()
   const [filesRefreshKey, setFilesRefreshKey] = useState(0)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -708,6 +880,7 @@ export function ChatPage() {
           if (evType === 'task_created') {
             setTaskTitle(payload.title)
             setActiveTaskId(payload.task_id)
+            activeTaskIdRef.current = payload.task_id
             setContainerLogs([])  // clear previous run logs
             upsertStatusRow(asstMsgId, 'sandbox', `Sandbox ready · task ${payload.task_id.slice(0, 8)}`, true)
             upsertStatusRow(asstMsgId, 'workspace', 'Workspace ready', true)
@@ -737,7 +910,22 @@ export function ChatPage() {
             })
             if (payload.final_state !== 'ANSWERED') {
               setSaved(true)
-              setFilesRefreshKey(k => k + 1)  // trigger files panel refresh
+              setFilesRefreshKey(k => k + 1)
+              // Fetch artifacts and attach to the message
+              const tid = activeTaskIdRef.current
+              if (tid) {
+                const tok = localStorage.getItem(DEV_TOKEN_KEY)
+                const hdrs: Record<string, string> = {}
+                if (tok) hdrs['Authorization'] = `Bearer ${tok}`
+                fetch(`${API_BASE}/api/v1/workspace/result/${tid}`, { headers: hdrs })
+                  .then(r => r.ok ? r.json() : null)
+                  .then(data => {
+                    if (data && data.files?.length) {
+                      updateMsg(asstMsgId, { taskResult: data as TaskResult })
+                    }
+                  })
+                  .catch(() => {})
+              }
             }
           }
         }
