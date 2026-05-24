@@ -1,3 +1,16 @@
+"""
+Configuration — environment variables.
+
+Supabase Postgres (recommended for production):
+  DATABASE_URL=postgresql+asyncpg://postgres:PASSWORD@db.REF.supabase.co:5432/postgres
+  Or use the connection pooler for serverless:
+  DATABASE_URL=postgresql+asyncpg://postgres.REF:PASSWORD@aws-0-us-west-1.pooler.supabase.com:6543/postgres
+
+For local dev:
+  DATABASE_URL=postgresql+asyncpg://devbuddy:devbuddy@localhost:5432/devbuddy
+
+Note: Supabase already has pgvector enabled by default.
+"""
 from pydantic_settings import BaseSettings
 from typing import Optional, Literal
 
@@ -7,12 +20,17 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     SECRET_KEY: str = "change-me"
 
+    # Supabase Postgres (or any Postgres). Use the pooler URL for serverless/Fly.io
+    # Example: postgresql+asyncpg://postgres.PID:PASS@aws-0-region.pooler.supabase.com:6543/postgres
     DATABASE_URL: str
-    DATABASE_URL_SYNC: str = ""
+    DATABASE_URL_SYNC: str = ""  # Optional sync fallback for migrations
 
     SUPABASE_URL: str = "https://placeholder.supabase.co"
     SUPABASE_ANON_KEY: str = "placeholder"
     SUPABASE_JWT_SECRET: str = "dev-local-secret-change-in-production-min32chars!"
+
+    # pgvector is assumed available (Supabase includes it). For self-hosted, run:
+    # CREATE EXTENSION IF NOT EXISTS vector;
 
     LOKI_URL: str = "http://loki:3100"
 

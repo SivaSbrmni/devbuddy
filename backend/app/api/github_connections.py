@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.logger import get_logger
+from app.core.crypto import encrypt_secret, decrypt_secret
 from app.models.github_connection import GithubConnection
 
 router = APIRouter(prefix="/github", tags=["github"])
@@ -110,7 +111,7 @@ async def add_repo(
         name=body.name,
         repo_url=body.repo_url.rstrip("/"),
         default_branch=body.default_branch,
-        github_token=body.github_token or None,
+        github_token=encrypt_secret(body.github_token) if body.github_token else None,
         is_active=body.is_active,
         clone_status="pending",
     )
@@ -142,7 +143,7 @@ async def update_repo(
     if body.default_branch is not None:
         conn.default_branch = body.default_branch
     if body.github_token is not None:
-        conn.github_token = body.github_token or None
+        conn.github_token = encrypt_secret(body.github_token) if body.github_token else None
     if body.is_active is not None:
         conn.is_active = body.is_active
     conn.updated_at = datetime.utcnow()
@@ -228,7 +229,8 @@ async def _clone_repo_bg(conn_id: str) -> None:
         await db.commit()
 
         try:
-            clone_url = _inject_token(conn.repo_url, conn.github_token or "")
+            plain_token = decrypt_secret(conn.github_token) if conn.github_token else ""
+            clone_url = _inject_token(conn.repo_url, plain_token or "")
 
             if os.path.isdir(os.path.join(clone_dir, ".git")):
                 # Already cloned — just pull

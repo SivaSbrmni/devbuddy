@@ -11,6 +11,7 @@ from typing import AsyncGenerator
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.config import settings
+from app.core.ratelimit import limiter, RATE_CHAT
 from app.services.task_service import create_task, transition_task_state
 from app.services.llm_service import analyze_intent, run_stage, chat_with_history
 from app.services.agent_executor import execute_task
@@ -446,12 +447,15 @@ async def _safe_consolidate(db: AsyncSession, user_id: str, user_msg: str, ai_ms
 
 
 @router.post("")
+@limiter.limit(RATE_CHAT)
 async def chat(
     body: ChatRequest,
     request: Request,
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Bind authenticated user onto request.state so rate limiter keys per-user
+    request.state.user = user
     return StreamingResponse(
         _stream_chat(body.message, user, db, request, history=body.history),
         media_type="text/event-stream",

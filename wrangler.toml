@@ -1,0 +1,23 @@
+# wrangler.toml — Cloudflare Pages configuration
+# Deploys the frontend automatically on push to main
+# Docs: https://developers.cloudflare.com/pages/
+
+name = "devbuddy"
+compatibility_date = "2024-01-01"
+
+# Build output directory (Vite default)
+[site]
+bucket = "./frontend/dist"
+
+# Optional: custom domain
+# routes = [
+#   { pattern = "devbuddy.app", custom_domain = true }
+# ]
+
+# Environment variables (set via Cloudflare dashboard or wrangler secret)
+[env.production]
+  # These are build-time env vars for the frontend
+  # VITE_* vars are replaced at build time by Vite
+  VITE_SUPABASE_URL = "https://oahumeurdneffekoerqa.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "sb_publishable_WCXQKuSKkQ268IRrpcxm7w_fZDBEqMO"
+  VITE_API_BASE_URL = "https://devbuddy-backend.fly.dev"

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.core.logger import get_logger
+from app.core.crypto import encrypt_secret, decrypt_secret
 from app.models.mcp_connection import McpConnection
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
@@ -105,7 +106,7 @@ async def create_connection(
         description=body.description,
         conn_type=body.conn_type,
         url=body.url,
-        api_key=body.api_key or None,
+        api_key=encrypt_secret(body.api_key) if body.api_key else None,
         config=body.config,
         is_active=body.is_active,
     )
@@ -134,7 +135,7 @@ async def update_connection(
     if body.url is not None:
         conn.url = body.url
     if body.api_key is not None:
-        conn.api_key = body.api_key or None
+        conn.api_key = encrypt_secret(body.api_key) if body.api_key else None
     if body.config is not None:
         conn.config = body.config
     if body.is_active is not None:
@@ -173,17 +174,18 @@ async def test_connection(
 
     ok = False
     msg = ""
+    plain_key = decrypt_secret(conn.api_key) if conn.api_key else ""
     try:
         headers = {}
-        if conn.api_key:
-            headers["Authorization"] = f"Bearer {conn.api_key}"
+        if plain_key:
+            headers["Authorization"] = f"Bearer {plain_key}"
 
         if conn.conn_type == "loki":
             test_url = (conn.url.rstrip("/")) + "/ready"
         elif conn.conn_type == "datadog":
             test_url = "https://api.datadoghq.com/api/v1/validate"
-            if conn.api_key:
-                headers["DD-API-KEY"] = conn.api_key
+            if plain_key:
+                headers["DD-API-KEY"] = plain_key
                 headers.pop("Authorization", None)
         else:
             test_url = conn.url
@@ -241,8 +243,9 @@ async def _query_source(conn: McpConnection, q: str, last_minutes: int, limit: i
     start = now - timedelta(minutes=last_minutes)
 
     headers: dict = {}
-    if conn.api_key:
-        headers["Authorization"] = f"Bearer {conn.api_key}"
+    plain_key = decrypt_secret(conn.api_key) if conn.api_key else ""
+    if plain_key:
+        headers["Authorization"] = f"Bearer {plain_key}"
 
     if conn.conn_type == "loki":
         logql = q or conn.config.get("default_query", '{service=~".+"}')

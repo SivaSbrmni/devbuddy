@@ -2,10 +2,11 @@ import uuid
 import json
 import asyncio
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.ratelimit import limiter, RATE_TASK
 from app.schemas.task import TaskCreate, TaskOut, TaskListOut, TaskStateTransition
 from app.services import task_service
 from app.services.task_service import get_or_create_default_tenant, get_or_create_user
@@ -18,11 +19,14 @@ _ws_connections: dict[str, list[WebSocket]] = {}
 
 
 @router.post("", response_model=TaskOut)
+@limiter.limit(RATE_TASK)
 async def create_task(
     data: TaskCreate,
+    request: Request,
     user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    request.state.user = user
     task = await task_service.create_task(db, data, user)
     await _broadcast_event(str(task.id), {"type": "TASK_CREATED", "state": task.state.value})
     return task

@@ -15,11 +15,8 @@ back to the LLM as a "tool result" message.
 from __future__ import annotations
 
 import ast
-import io
 import os
-import contextlib
 import asyncio
-import json
 from typing import Callable, Awaitable
 
 from app.core.logger import get_logger
@@ -80,31 +77,95 @@ def skills_schema() -> list[dict]:
 
 @skill(
     name="run_python",
-    description="Execute a Python code snippet in a sandboxed interpreter and return stdout/stderr.",
+    description=(
+        "Execute a Python code snippet in a SANDBOXED environment and return stdout/stderr. "
+        "Backend is selected by the SANDBOX_BACKEND env var: 'e2b' (recommended, real isolation), "
+        "'subprocess' (dev-only, semi-isolated), 'disabled' (default — no execution)."
+    ),
     parameters={
         "type": "object",
         "properties": {
             "code": {"type": "string", "description": "Python source code to execute."},
+            "timeout": {"type": "integer", "description": "Max seconds to wait (default 15)."},
         },
         "required": ["code"],
     },
 )
 async def _run_python(args: dict) -> str:
+    """
+    SECURITY: Earlier versions used in-process exec() which is RCE-equivalent.
+    This is now gated behind SANDBOX_BACKEND with a safe default of 'disabled'.
+
+    Recommended production setup:
+      SANDBOX_BACKEND=e2b
+      E2B_API_KEY=...   (free tier: e2b.dev)
+    """
     code = args.get("code", "")
+    timeout = int(args.get("timeout", 15))
     try:
         ast.parse(code)
     except SyntaxError as e:
         return f"SyntaxError: {e}"
 
-    stdout_buf = io.StringIO()
+    backend = os.environ.get("SANDBOX_BACKEND", "disabled").lower()
+
+    if backend == "e2b":
+        return await _run_python_e2b(code, timeout)
+    if backend == "subprocess":
+        return await _run_python_subprocess(code, timeout)
+
+    return (
+        "[sandbox_disabled] Code execution is disabled by default for safety. "
+        "Set SANDBOX_BACKEND=e2b (recommended, free tier at e2b.dev) "
+        "or SANDBOX_BACKEND=subprocess (dev only) to enable execution."
+    )
+
+
+async def _run_python_e2b(code: str, timeout: int) -> str:
+    """Real sandbox via e2b.dev — Firecracker microVMs, free tier available."""
+    api_key = os.environ.get("E2B_API_KEY")
+    if not api_key:
+        return "[sandbox_error] SANDBOX_BACKEND=e2b but E2B_API_KEY is not set."
     try:
-        with contextlib.redirect_stdout(stdout_buf):
-            exec_globals: dict = {}
-            exec(compile(code, "<agent>", "exec"), exec_globals)  # noqa: S102
-        output = stdout_buf.getvalue()
-        return output if output.strip() else "(no output)"
-    except Exception as exc:
-        return f"RuntimeError: {exc}"
+        # Lazy import so e2b_code_interpreter stays optional
+        from e2b_code_interpreter import Sandbox  # type: ignore[import-not-found]
+    except ImportError:
+        return (
+            "[sandbox_error] e2b_code_interpreter not installed. "
+            "Add `e2b-code-interpreter` to requirements.txt."
+        )
+    try:
+        # Run e2b in a worker thread (its client is sync)
+        def _exec_sync() -> str:
+            with Sandbox(api_key=api_key, timeout=timeout) as sbx:
+                exe = sbx.run_code(code)
+                stdout = "\n".join(exe.logs.stdout) if exe.logs.stdout else ""
+                stderr = "\n".join(exe.logs.stderr) if exe.logs.stderr else ""
+                err = f"\nERROR: {exe.error.value}" if exe.error else ""
+                return (stdout or "(no output)") + (f"\nSTDERR: {stderr}" if stderr else "") + err
+
+        return await asyncio.to_thread(_exec_sync)
+    except Exception as exc:  # noqa: BLE001
+        return f"[sandbox_error] e2b: {exc}"
+
+
+async def _run_python_subprocess(code: str, timeout: int) -> str:
+    """Dev fallback — runs in a subprocess with a deny-network env. NOT a real sandbox."""
+    proc = await asyncio.create_subprocess_exec(
+        "python", "-c", code,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env={"PYTHONDONTWRITEBYTECODE": "1", "PATH": os.environ.get("PATH", "")},
+    )
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        return f"[sandbox_error] subprocess: timeout after {timeout}s"
+    output = out.decode("utf-8", errors="replace") or "(no output)"
+    if err:
+        output += f"\nSTDERR: {err.decode('utf-8', errors='replace')}"
+    return output
 
 
 @skill(
