@@ -502,7 +502,7 @@ async def execute_task(
             await coordinator.register_completion(st.id, files_data)
 
         yield log(f"[act] [{st.id}] complete — {len(written)} file(s), status={st.status}")
-        return st
+        yield st
 
     # ── Execute based on strategy ───────────────────────────────────────────
     
@@ -523,8 +523,9 @@ async def execute_task(
                 # Return the final subtask state from results
                 for r in reversed(results):
                     if isinstance(r, SubTask):
-                        return r
-                return st
+                        yield r
+                        return
+                yield st
         
         # Simpler approach: execute sequentially but with the parallel-aware code
         # (Full parallel requires more refactoring of the generator pattern)
