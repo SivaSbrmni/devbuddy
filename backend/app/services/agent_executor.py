@@ -389,7 +389,8 @@ async def execute_task(
                 st.status = "failed"
                 st.errors.append("Dependencies did not complete in time")
                 yield log(f"[orchestrate] [{st.id}] Dependency timeout — marking failed", "stderr")
-                return st
+                yield st
+                return
             yield log(f"[orchestrate] [{st.id}] Dependencies ready, starting execution")
 
         yield log(f"[act] ─── Sub-task [{st.id}] (wave {wave_num}): {st.title}")

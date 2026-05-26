@@ -13,6 +13,86 @@ import { LlmSettingsModal } from '@/components/LlmSettingsModal'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 
+// Simple markdown renderer for inline formatting
+function renderMarkdown(text: string) {
+  if (!text) return null
+  
+  return text.split('\n').map((line, lineIndex) => {
+    // Handle headers (###, ##, #)
+    if (line.startsWith('### ')) {
+      return <div key={lineIndex} className="font-bold text-amber-300 mt-2 mb-1">{line.replace(/^###\s*/, '')}</div>
+    }
+    if (line.startsWith('## ')) {
+      return <div key={lineIndex} className="font-bold text-amber-300 text-base mt-2 mb-1">{line.replace(/^##\s*/, '')}</div>
+    }
+    if (line.startsWith('# ')) {
+      return <div key={lineIndex} className="font-bold text-amber-300 text-lg mt-2 mb-1">{line.replace(/^#\s*/, '')}</div>
+    }
+    
+    // Handle bullet points
+    if (line.trim().match(/^[-*]\s/)) {
+      const content = line.trim().replace(/^[-*]\s/, '')
+      return <div key={lineIndex} className="ml-4 flex gap-2"><span>•</span><span>{renderInlineMarkdown(content)}</span></div>
+    }
+    
+    // Handle numbered lists
+    if (line.trim().match(/^\d+\.\s/)) {
+      return <div key={lineIndex} className="ml-4">{renderInlineMarkdown(line.trim())}</div>
+    }
+    
+    // Regular line with inline markdown
+    if (line.trim()) {
+      return <div key={lineIndex}>{renderInlineMarkdown(line)}</div>
+    }
+    
+    return <div key={lineIndex} className="h-2" />
+  })
+}
+
+// Render inline markdown (bold, italic, code)
+function renderInlineMarkdown(text: string) {
+  const parts: React.ReactNode[] = []
+  let currentIndex = 0
+  
+  // Match **bold**, *italic*, `code`, [PASS], etc.
+  const regex = /(\*\*[^*\n]+?\*\*|\*[^*\n]+?\*|`[^`\n]+?`|\[PASS\]|\[FAIL\])/g
+  let match
+  
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before match
+    if (match.index > currentIndex) {
+      parts.push(text.substring(currentIndex, match.index))
+    }
+    
+    const matched = match[0]
+    if (matched.startsWith('**') && matched.endsWith('**')) {
+      // Bold
+      parts.push(<strong key={match.index} className="font-bold text-slate-100">{matched.slice(2, -2)}</strong>)
+    } else if (matched.startsWith('*') && matched.endsWith('*') && !matched.startsWith('**')) {
+      // Italic
+      parts.push(<em key={match.index} className="italic text-slate-300">{matched.slice(1, -1)}</em>)
+    } else if (matched.startsWith('`') && matched.endsWith('`')) {
+      // Code
+      parts.push(<code key={match.index} className="bg-black/30 px-1 py-0.5 rounded text-teal-300 font-mono text-[11px]">{matched.slice(1, -1)}</code>)
+    } else if (matched === '[PASS]') {
+      parts.push(<span key={match.index} className="text-green-400 font-semibold">{matched}</span>)
+    } else if (matched === '[FAIL]') {
+      parts.push(<span key={match.index} className="text-red-400 font-semibold">{matched}</span>)
+    } else {
+      parts.push(matched)
+    }
+    
+    currentIndex = match.index + matched.length
+  }
+  
+  // Add remaining text
+  if (currentIndex < text.length) {
+    parts.push(text.substring(currentIndex))
+  }
+  
+  return parts.length > 0 ? parts : text
+}
+
 type PanelTab = 'activity' | 'mcp' | 'llmlogs' | 'terminal' | 'files'
 
 interface IntentData {
@@ -121,7 +201,14 @@ function AgentEventRow({ text, icon, expanded, onToggle, children }: {
           {icon === 'intent' && <Activity className="w-3.5 h-3.5 text-amber-400" />}
           {icon === 'warn'   && <AlertCircle className="w-3.5 h-3.5 text-amber-400" />}
         </span>
-        <span className="flex-1 text-xs text-slate-300">{text}</span>
+        <span className="flex-1 text-xs text-slate-300">
+          {hasContent ? (
+            <>
+              {text.split(':')[0]}: {text.split(':').slice(1).join(':').substring(0, 60)}
+              {text.split(':').slice(1).join(':').length > 60 ? '...' : ''}
+            </>
+          ) : text}
+        </span>
         {hasContent && (
           expanded
             ? <ChevronDown className="w-3 h-3 text-slate-500 shrink-0" />
@@ -616,7 +703,9 @@ function AgentConversation({ msg, expandedRows, toggleRow }: {
       {/* ── Direct LLM reply (no pipeline) ── */}
       {msg.llmReply && (
         <div className="mt-2 px-4 py-3 rounded-xl border border-teal-500/20 bg-teal-500/5">
-          <p className="text-sm text-slate-200 leading-relaxed">{msg.llmReply}</p>
+          <div className="text-sm text-slate-200 leading-relaxed space-y-0.5">
+            {renderMarkdown(msg.llmReply)}
+          </div>
         </div>
       )}
 
@@ -674,9 +763,9 @@ function AgentConversation({ msg, expandedRows, toggleRow }: {
                       </div>
                       {/* LLM output */}
                       {s.output ? (
-                        <pre className="text-[11px] text-slate-300 bg-[#060d1a] border border-white/6 rounded-lg p-3 whitespace-pre-wrap break-words font-mono leading-relaxed overflow-x-hidden">
-                          {s.output}
-                        </pre>
+                        <div className="text-[11px] text-slate-300 bg-[#060d1a] border border-white/6 rounded-lg p-3 leading-relaxed overflow-x-hidden space-y-0.5">
+                          {renderMarkdown(s.output)}
+                        </div>
                       ) : !stageDone ? (
                         <div className="flex items-center gap-2 text-[11px] text-slate-500">
                           <Loader2 className="w-3 h-3 animate-spin" />
