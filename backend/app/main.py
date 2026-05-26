@@ -14,6 +14,9 @@ from app.core.logger import setup_logging, get_logger
 from app.core.database import engine
 from app.core.ratelimit import limiter
 from app.api import auth, tasks, audit, logs, chat, workspace, llm_config, mcp_connections, github_connections, memory
+from app.aep import models as aep_models  # noqa: F401 — register aep_* tables with Base.metadata
+from app.aep.api import admin_router as aep_admin_router, llm_gateway_router
+from app.aep.plugins import get_plugin_registry
 
 setup_logging()
 logger = get_logger("main")
@@ -30,6 +33,20 @@ async def lifespan(app: FastAPI):
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.warning("auto_create_tables_dev_only")
+
+    # ── AEP plugin discovery ─────────────────────────────────────────────
+    # In Phase 0 the agents/ package is empty and every feature flag
+    # defaults to False, so this is effectively a no-op. It is wired
+    # here so that subsequent phases can light up agents simply by
+    # toggling their feature flag and dropping the agent module into
+    # app/aep/plugins/agents/.
+    try:
+        registry = get_plugin_registry()
+        active = await registry.discover()
+        logger.info("aep_plugins_discovered", count=len(active), active=active)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("aep_plugin_discovery_failed", error=str(exc))
+
     logger.info("startup_complete")
     yield
     logger.info("shutdown")
@@ -105,6 +122,13 @@ app.include_router(llm_config.router, prefix="/api/v1")
 app.include_router(mcp_connections.router, prefix="/api/v1")
 app.include_router(github_connections.router, prefix="/api/v1")
 app.include_router(memory.router, prefix="/api/v1")
+
+# ── AEP layer ────────────────────────────────────────────────────────────────
+# The /LLM gateway is mounted at the root (no /api/v1 prefix) per the AEP
+# spec §2.2. The admin router lives under /api/v1/aep alongside the rest of
+# the API. Both are dormant in Phase 0 — see backend/app/aep/feature_flags.py.
+app.include_router(aep_admin_router, prefix="/api/v1")
+app.include_router(llm_gateway_router)
 
 
 @app.get("/health")
