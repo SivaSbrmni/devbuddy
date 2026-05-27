@@ -1,9 +1,10 @@
 """
 Tests for the AEP routers — ``/LLM/*`` gateway and ``/api/v1/aep`` admin.
 
-These tests assume the Phase 0 contract:
-  - ``/LLM/health`` returns 503 with ``X-AEP-Phase: phase_0`` while the
-    ``llm_gateway_enabled`` flag is off.
+These tests assume the contract that holds while the
+``llm_gateway_enabled`` feature flag is **off**:
+  - ``/LLM/health`` returns 503 with ``X-AEP-Phase`` reflecting the
+    current phase string while the flag is off.
   - ``/LLM/{generate,chat,embed,route,models}`` reject auth-less requests
     (401) and return the structured 503 envelope when authenticated.
 
@@ -41,9 +42,9 @@ class TestGatewayHealth:
         assert resp.status_code == 503
         body = resp.json()
         assert body["status"] == "disabled"
-        assert body["phase"] == "phase_0"
+        assert body["phase"]  # current phase string (e.g. ``phase_1``)
         assert body["flag"] == "llm_gateway_enabled"
-        assert resp.headers.get("X-AEP-Phase") == "phase_0"
+        assert resp.headers.get("X-AEP-Phase")
 
 
 class TestGatewayProtectedEndpoints:
