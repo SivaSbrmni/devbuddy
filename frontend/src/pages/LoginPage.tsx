@@ -92,23 +92,19 @@ export function LoginPage() {
               Continue with Google
             </Button>
 
-            {import.meta.env.DEV && (
-              <>
-                <div className="relative flex items-center gap-2">
-                  <div className="flex-1 h-px bg-border" />
-                  <span className="text-xs text-muted-foreground">or</span>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-                <Button
-                  onClick={() => devSignIn()}
-                  disabled={loading}
-                  className="w-full h-10 text-sm font-medium gap-2"
-                  variant="secondary"
-                >
-                  Dev Sign In (local only)
-                </Button>
-              </>
-            )}
+            <div className="relative flex items-center gap-2">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground">or</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            <Button
+              onClick={() => devSignIn()}
+              disabled={loading}
+              className="w-full h-10 text-sm font-medium gap-2"
+              variant="secondary"
+            >
+              Dev Sign In
+            </Button>
           </div>
 
           <p className="text-center text-xs text-muted-foreground">

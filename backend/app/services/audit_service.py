@@ -53,7 +53,7 @@ async def create_audit_log(
         details=details,
         trace_id=trace_id,
         ip_address=ip_address,
-        signature=_compute_signature(data),
+        entry_hash=_compute_signature(data),
     )
     db.add(entry)
     await db.flush()

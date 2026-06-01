@@ -6,10 +6,10 @@ export const DEV_TOKEN_KEY = 'devbuddy_dev_token'
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const devToken = localStorage.getItem(DEV_TOKEN_KEY)
-  if (devToken) return { Authorization: `Bearer ${devToken}` }
+  if (devToken) return { 'X-Auth-Token': devToken }
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
-  return token ? { Authorization: `Bearer ${token}` } : {}
+  return token ? { 'X-Auth-Token': token } : {}
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
