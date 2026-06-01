@@ -21,6 +21,7 @@ from app.aep.api import (
     github_webhooks_router as aep_webhooks_router,
     repositories_router as aep_repos_router,
     executions_router as aep_executions_router,
+    memory_router as aep_memory_router,
 )
 from app.aep.plugins import get_plugin_registry
 
@@ -140,6 +141,8 @@ app.include_router(aep_webhooks_router, prefix="/api/v1")
 app.include_router(aep_repos_router, prefix="/api/v1")
 # Phase 3 — Execution engine
 app.include_router(aep_executions_router, prefix="/api/v1")
+# Phase 4 — Memory system
+app.include_router(aep_memory_router, prefix="/api/v1")
 
 
 @app.get("/health")
