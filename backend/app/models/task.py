@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, ForeignKey, Text, JSON, Integer, Enum as SAEnum
+from sqlalchemy import String, DateTime, ForeignKey, Text, Integer, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.core.database import Base
 import enum
 
@@ -31,9 +31,9 @@ class Task(Base):
     description: Mapped[str] = mapped_column(Text, nullable=True)
     repo_id: Mapped[str] = mapped_column(String(255), nullable=True)
     branch: Mapped[str] = mapped_column(String(255), nullable=True)
-    state: Mapped[TaskState] = mapped_column(SAEnum(TaskState), default=TaskState.PENDING, nullable=False)
+    state: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
     policy_profile: Mapped[str] = mapped_column(String(100), default="standard")
-    task_metadata: Mapped[dict] = mapped_column(JSON, default=dict)
+    task_metadata: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     iteration_count: Mapped[int] = mapped_column(Integer, default=0)
     token_budget_used: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -51,14 +51,12 @@ class TaskEvent(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     task_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tasks.id"), nullable=False)
-    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     from_state: Mapped[str] = mapped_column(String(50), nullable=True)
     to_state: Mapped[str] = mapped_column(String(50), nullable=True)
-    actor_type: Mapped[str] = mapped_column(String(50), default="system")
+    actor_type: Mapped[str] = mapped_column(String(50), nullable=False)
     actor_id: Mapped[str] = mapped_column(String(255), nullable=True)
-    payload: Mapped[dict] = mapped_column(JSON, default=dict)
-    trace_id: Mapped[str] = mapped_column(String(255), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     task: Mapped["Task"] = relationship("Task", back_populates="events")

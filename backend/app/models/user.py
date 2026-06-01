@@ -13,11 +13,11 @@ class User(Base):
     supabase_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    display_name: Mapped[str] = mapped_column(String(255), nullable=True)
+    display_name: Mapped[str] = mapped_column("full_name", String(255), nullable=True)
     avatar_url: Mapped[str] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    last_login: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    last_login: Mapped[datetime] = mapped_column("last_seen_at", DateTime, nullable=True)
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="users")
     tasks: Mapped[list["Task"]] = relationship("Task", back_populates="created_by_user")

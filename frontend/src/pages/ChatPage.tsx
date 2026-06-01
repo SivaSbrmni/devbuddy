@@ -11,7 +11,7 @@ import {
 import { cn } from '@/lib/utils'
 import { LlmSettingsModal } from '@/components/LlmSettingsModal'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
 // Simple markdown renderer for inline formatting
 function renderMarkdown(text: string) {
@@ -552,7 +552,7 @@ function FilesPanel({ taskId, refreshKey }: { taskId?: string; refreshKey?: numb
     if (!taskId) return
     const token = localStorage.getItem('devbuddy_dev_token')
     const headers: Record<string, string> = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (token) headers['X-Auth-Token'] = token
     try {
       const res = await fetch(`${API_BASE}/api/v1/workspace/result/${taskId}`, { headers })
       if (res.ok) {
@@ -568,7 +568,7 @@ function FilesPanel({ taskId, refreshKey }: { taskId?: string; refreshKey?: numb
     try {
       const token = localStorage.getItem('devbuddy_dev_token')
       const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['X-Auth-Token'] = token
       const url = taskId
         ? `${API_BASE}/api/v1/workspace/files?task_id=${taskId}`
         : `${API_BASE}/api/v1/workspace/files`
@@ -837,7 +837,7 @@ export function ChatPage() {
   useEffect(() => {
     const token = localStorage.getItem(DEV_TOKEN_KEY)
     const headers: Record<string, string> = {}
-    if (token) headers['Authorization'] = `Bearer ${token}`
+    if (token) headers['X-Auth-Token'] = token
     fetch(`${API_BASE}/api/v1/llm/config`, { headers })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setLlmLabel(`${d.provider}/${d.model}`) })
@@ -900,7 +900,7 @@ export function ChatPage() {
     try {
       const token = localStorage.getItem(DEV_TOKEN_KEY)
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (token) headers['X-Auth-Token'] = token
 
       const resp = await fetch(`${API_BASE}/api/v1/chat`, {
         method: 'POST', headers,

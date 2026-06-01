@@ -73,7 +73,6 @@ async def create_task(db: AsyncSession, data: TaskCreate, user: dict) -> Task:
 
     event = TaskEvent(
         task_id=task.id,
-        tenant_id=tenant.id,
         event_type="TASK_CREATED",
         from_state=None,
         to_state=TaskState.PENDING.value,
@@ -149,7 +148,6 @@ async def transition_task_state(
 
     event = TaskEvent(
         task_id=task.id,
-        tenant_id=tenant_id,
         event_type="STATE_TRANSITION",
         from_state=from_state.value,
         to_state=transition.to_state.value,

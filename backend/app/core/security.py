@@ -1,15 +1,30 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
 from app.core.config import settings
 from app.core.logger import get_logger
 
 logger = get_logger("security")
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
-async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
-    token = credentials.credentials
+async def verify_token(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> dict:
+    # Accept token from Authorization: Bearer OR X-Auth-Token header.
+    # X-Auth-Token avoids conflicts when the app sits behind a reverse
+    # proxy that uses Authorization: Basic for tunnel auth.
+    token: str | None = None
+    if credentials:
+        token = credentials.credentials
+    if not token:
+        token = request.headers.get("X-Auth-Token")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
     try:
         payload = jwt.decode(
             token,
@@ -23,7 +38,6 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(beare
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
         )
 
 

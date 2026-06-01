@@ -3,7 +3,7 @@ import { Settings, X, CheckCircle2, Loader2, Eye, EyeOff, RefreshCw, ChevronDown
 import { cn } from '@/lib/utils'
 import { DEV_TOKEN_KEY } from '@/lib/api'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
 
 const PROVIDERS = [
   { id: 'ollama',   label: 'Ollama (local)',   hint: 'No API key needed' },
@@ -43,7 +43,7 @@ export function LlmSettingsModal({ open, onClose, onSaved }: LlmSettingsModalPro
 
   const authHeaders = useCallback((): Record<string, string> => {
     const token = localStorage.getItem(DEV_TOKEN_KEY)
-    return token ? { Authorization: `Bearer ${token}` } : {}
+    return token ? { 'X-Auth-Token': token } : {}
   }, [])
 
   const loadConfig = useCallback(async () => {
