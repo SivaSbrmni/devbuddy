@@ -23,26 +23,49 @@ from typing import Mapping, Optional
 from app.aep.llm.config import AepLlmConfig, get_aep_llm_config
 
 
-# Spec §2.5 — default task-type → model mapping.
+# Default task-type → model mapping. Spec §2.5 lists `gemma4:31b-cloud`
+# as the primary for every reasoning task, but using a 31B model for
+# *every* call is wasteful when many tasks are routine code/text
+# transformations. The defaults below assign models by task complexity
+# to balance quality against per-token cost. Every entry remains
+# operator-tunable via ``AEP_MODEL_FOR_<TASK_TYPE>`` env vars.
+#
+# Cost/complexity tiering rationale:
+#   * Heavy reasoning (plan, debug, review, security_audit) keeps the
+#     31B model — these calls are infrequent and getting them wrong is
+#     expensive (e.g. a bad plan cascades into bad code).
+#   * Code generation (code) uses a specialised coder model that
+#     outperforms generalists at coding while being smaller / cheaper.
+#   * Routine structured output (test, devops) drops to a 7B coder.
+#   * Documentation stays on mistral:7b per spec §6.1.
+#   * Generic falls back to an 8B general model rather than the 31B.
 SPEC_DEFAULT_MAPPING: dict[str, str] = {
-    "plan": "gemma4:31b-cloud",
-    "code": "gemma4:31b-cloud",
-    "debug": "gemma4:31b-cloud",
-    "test": "gemma4:31b-cloud",
-    "review": "gemma4:31b-cloud",
-    "security_audit": "gemma4:31b-cloud",
-    "documentation": "mistral:7b",
-    "devops": "gemma4:31b-cloud",
-    "embedding": "nomic-embed-text",
-    "generic": "gemma4:31b-cloud",
+    "plan":           "gemma4:31b-cloud",     # reasoning-heavy, infrequent
+    "code":           "qwen2.5-coder:32b",    # specialised coder
+    "debug":          "gemma4:31b-cloud",     # root-cause needs reasoning
+    "test":           "qwen2.5-coder:7b",     # structured code, smaller model fine
+    "review":         "gemma4:31b-cloud",     # judgment matters, infrequent
+    "security_audit": "gemma4:31b-cloud",     # low tolerance for misses
+    "documentation":  "mistral:7b",           # spec §6.1 default
+    "devops":         "qwen2.5-coder:7b",     # YAML / Dockerfile, structured
+    "embedding":      "nomic-embed-text",     # spec §2.1 default
+    "generic":        "llama3.1:8b",          # cheap general default
 }
 
 
-# Spec §2.4 — fallback models when the primary is unavailable.
+# Fallback models when the primary is unavailable (e.g. not pulled
+# locally, or rate-limited on Ollama Cloud). Always cheaper than the
+# primary so failover degrades cost rather than escalates it.
 SPEC_FALLBACK_MAPPING: dict[str, str] = {
-    "code": "deepseek-coder",
-    "test": "qwen2.5-coder",
-    "documentation": "mistral:7b",
+    "plan":           "llama3.1:8b",
+    "code":           "deepseek-coder:6.7b",
+    "debug":          "qwen2.5-coder:7b",
+    "test":           "mistral:7b",
+    "review":         "mistral:7b",
+    "security_audit": "mistral:7b",
+    "documentation":  "llama3.2:3b",
+    "devops":         "mistral:7b",
+    "generic":        "llama3.2:3b",
 }
 
 

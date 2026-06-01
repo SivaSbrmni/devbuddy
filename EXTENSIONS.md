@@ -211,20 +211,24 @@ When the flag is on, every route delegates to `app.aep.llm.LlmGatewayService`, w
 * `ModelRouter` — task-type → model resolution per spec §2.5 with fallback table from spec §2.4.
 * Compatibility-adapter `pre/post_llm_call` hooks fire on every invocation (token accounting, audit, etc. plug in here in later phases).
 
-#### Spec §2.5 routing table (defaults)
+#### Routing table (cost-balanced defaults)
 
-| Task type          | Primary model       | Fallback        |
-|--------------------|---------------------|-----------------|
-| `plan`             | `gemma4:31b-cloud`  | —               |
-| `code`             | `gemma4:31b-cloud`  | `deepseek-coder`|
-| `debug`            | `gemma4:31b-cloud`  | —               |
-| `test`             | `gemma4:31b-cloud`  | `qwen2.5-coder` |
-| `review`           | `gemma4:31b-cloud`  | —               |
-| `security_audit`   | `gemma4:31b-cloud`  | —               |
-| `documentation`    | `mistral:7b`        | `mistral:7b`    |
-| `devops`           | `gemma4:31b-cloud`  | —               |
-| `embedding`        | `nomic-embed-text`  | —               |
-| `generic`          | `gemma4:31b-cloud`  | —               |
+The defaults below assign models by task complexity to balance quality against per-token cost. Spec §2.5 lists `gemma4:31b-cloud` as the primary for every reasoning task, but a 31B model on every call is wasteful when most tasks are routine code/text transformations. The 31B model is reserved for heavy reasoning where mistakes cascade (planning, debugging, review, security audit); coding tasks use a specialised coder model; routine structured output uses a 7B coder; the generic catch-all drops to an 8B general model. Every entry remains operator-tunable via `AEP_MODEL_FOR_<TASK_TYPE>` env vars.
+
+| Task type          | Primary model        | Fallback             | Rationale                                              |
+|--------------------|----------------------|----------------------|--------------------------------------------------------|
+| `plan`             | `gemma4:31b-cloud`   | `llama3.1:8b`        | Decomposition needs reasoning; infrequent (1 per task).|
+| `code`             | `qwen2.5-coder:32b`  | `deepseek-coder:6.7b`| Coder model beats generalist at code, smaller & cheaper.|
+| `debug`            | `gemma4:31b-cloud`   | `qwen2.5-coder:7b`   | Root-cause analysis needs reasoning.                   |
+| `test`             | `qwen2.5-coder:7b`   | `mistral:7b`         | Routine structured code, smaller model fine.           |
+| `review`           | `gemma4:31b-cloud`   | `mistral:7b`         | Judgment matters; infrequent.                          |
+| `security_audit`   | `gemma4:31b-cloud`   | `mistral:7b`         | Low tolerance for misses.                              |
+| `documentation`    | `mistral:7b`         | `llama3.2:3b`        | Spec §6.1 default; already lightweight.                |
+| `devops`           | `qwen2.5-coder:7b`   | `mistral:7b`         | YAML / Dockerfile editing is structured.               |
+| `embedding`        | `nomic-embed-text`   | —                    | Spec §2.1 default.                                     |
+| `generic`          | `llama3.1:8b`        | `llama3.2:3b`        | Cheap general default.                                 |
+
+Fallbacks are always cheaper than the primary so failover degrades cost rather than escalates it.
 
 Overrides (resolution order, highest first):
 

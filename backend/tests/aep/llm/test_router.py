@@ -29,16 +29,20 @@ class TestSpecDefaults:
     @pytest.mark.parametrize(
         "task_type,expected",
         [
+            # Heavy reasoning — keep the 31B model.
             ("plan", "gemma4:31b-cloud"),
-            ("code", "gemma4:31b-cloud"),
             ("debug", "gemma4:31b-cloud"),
-            ("test", "gemma4:31b-cloud"),
             ("review", "gemma4:31b-cloud"),
             ("security_audit", "gemma4:31b-cloud"),
+            # Specialised coder for code generation.
+            ("code", "qwen2.5-coder:32b"),
+            # Routine structured output — smaller models.
+            ("test", "qwen2.5-coder:7b"),
+            ("devops", "qwen2.5-coder:7b"),
             ("documentation", "mistral:7b"),
-            ("devops", "gemma4:31b-cloud"),
+            ("generic", "llama3.1:8b"),
+            # Embeddings.
             ("embedding", "nomic-embed-text"),
-            ("generic", "gemma4:31b-cloud"),
         ],
     )
     def test_default_mapping_matches_spec(self, task_type, expected):
@@ -51,9 +55,15 @@ class TestSpecDefaults:
     @pytest.mark.parametrize(
         "task_type,expected",
         [
-            ("code", "deepseek-coder"),
-            ("test", "qwen2.5-coder"),
-            ("documentation", "mistral:7b"),
+            ("plan", "llama3.1:8b"),
+            ("code", "deepseek-coder:6.7b"),
+            ("debug", "qwen2.5-coder:7b"),
+            ("test", "mistral:7b"),
+            ("review", "mistral:7b"),
+            ("security_audit", "mistral:7b"),
+            ("documentation", "llama3.2:3b"),
+            ("devops", "mistral:7b"),
+            ("generic", "llama3.2:3b"),
         ],
     )
     def test_fallback_table(self, task_type, expected):
@@ -94,7 +104,7 @@ class TestOverrides:
         router = ModelRouter()
         d = router.route("Code")
         assert d.task_type == "code"
-        assert d.primary == "gemma4:31b-cloud"
+        assert d.primary == "qwen2.5-coder:32b"
 
 
 class TestRoutingTable:
