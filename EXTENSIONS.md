@@ -25,8 +25,8 @@ If you are adding a new agent, hook, or flag, read this first.
 
 | Phase | Description | Status |
 |------:|-------------|--------|
-| 0 | Foundation: tables, flags, adapter, plugin registry, `/LLM` stub | **shipped** (this PR) |
-| 1 | LLM gateway → real Ollama | not started |
+| 0 | Foundation: tables, flags, adapter, plugin registry, `/LLM` stub | **shipped** (#1) |
+| 1 | LLM gateway → real Ollama | **in progress** (#2 — gateway live behind `llm_gateway_enabled`) |
 | 2 | GitHub client + webhook receiver | not started |
 | 3 | Planner + Coder agents + GHA runtime | not started |
 | 4 | Memory system + pgvector | not started |
@@ -178,32 +178,107 @@ In Phase 0 the `app/aep/plugins/agents/` package is empty; `discover` returns an
 
 ## `/LLM` gateway contract
 
-Mounted at the application root (no `/api/v1` prefix) per AEP spec §2.2.
+Mounted at the application root (no `/api/v1` prefix) per AEP spec §2.2. The gateway is a single entry point — callers never talk to Ollama directly and the upstream URL is never exposed externally.
 
-| Method | Path           | Phase 0 behavior |
-|--------|----------------|------------------|
-| GET    | `/LLM/health`  | Public. Returns `200 {"status":"ok"}` when `llm_gateway_enabled` is on, else `503 {"status":"disabled", ...}`. |
-| POST   | `/LLM/generate`| Auth required. `503 GatewayErrorEnvelope` until Phase 1. |
-| POST   | `/LLM/chat`    | Auth required. `503 GatewayErrorEnvelope` until Phase 1. |
-| POST   | `/LLM/embed`   | Auth required. `503 GatewayErrorEnvelope` until Phase 1. |
-| POST   | `/LLM/route`   | Auth required. `503 GatewayErrorEnvelope` until Phase 1. |
-| GET    | `/LLM/models`  | Auth required. `503 GatewayErrorEnvelope` until Phase 1. |
+| Method | Path           | Behavior when `llm_gateway_enabled` is **on** | Behavior when **off** (default) |
+|--------|----------------|-----------------------------------------------|---------------------------------|
+| GET    | `/LLM/health`  | Public. Probes upstream Ollama (`GET /api/tags`); returns 200 with model count + base URL + cloud flag. | 503 `{"status":"disabled", ...}` |
+| POST   | `/LLM/generate`| Auth required. Proxies to `POST /api/generate`. `stream=true` returns `text/event-stream`. | 503 envelope |
+| POST   | `/LLM/chat`    | Auth required. Proxies to `POST /api/chat`. `stream=true` returns `text/event-stream`. | 503 envelope |
+| POST   | `/LLM/embed`   | Auth required. Proxies to `POST /api/embeddings` once per input string. | 503 envelope |
+| POST   | `/LLM/route`   | Auth required. Returns resolved `{task_type, model, fallback, source}` from the routing table. | 503 envelope |
+| GET    | `/LLM/models`  | Auth required. Returns upstream model list + default model + routing table snapshot. | 503 envelope |
 
 The 503 envelope is stable:
 
 ```json
 {
   "error": "service_unavailable",
-  "phase": "phase_0",
+  "phase": "phase_1",
   "message": "AEP LLM gateway is not enabled. ...",
   "flag": "llm_gateway_enabled",
   "timestamp": "2026-05-26T17:00:00+00:00"
 }
 ```
 
-The response also sets `X-AEP-Phase: phase_0` and `X-AEP-Flag: llm_gateway_enabled` for monitoring.
+Every response sets `X-AEP-Phase` and `X-AEP-Flag: llm_gateway_enabled` headers for monitoring. The request/response schemas (`GenerateRequest`, `ChatRequest`, `EmbedRequest`, `RouteRequest`) defined in `app/aep/api/llm_gateway.py` are the **stable contract** clients integrate against — they do NOT change between flag states.
 
-Phase 1 replaces every endpoint body with a real Ollama proxy. The request/response schemas (`GenerateRequest`, `ChatRequest`, `EmbedRequest`, `RouteRequest`) defined in `app/aep/api/llm_gateway.py` are the **stable contract** clients can integrate against today.
+### Phase 1 — Ollama backend
+
+When the flag is on, every route delegates to `app.aep.llm.LlmGatewayService`, which composes:
+
+* `OllamaClient` — async `httpx` client with retries (network errors + 5xx), strict status-code → exception translation, streaming via async generators.
+* `ModelRouter` — task-type → model resolution per spec §2.5 with fallback table from spec §2.4.
+* Compatibility-adapter `pre/post_llm_call` hooks fire on every invocation (token accounting, audit, etc. plug in here in later phases).
+
+#### Routing table (cost-balanced defaults)
+
+The defaults below assign models by task complexity to balance quality against per-token cost. Spec §2.5 lists `gemma4:31b-cloud` as the primary for every reasoning task, but a 31B model on every call is wasteful when most tasks are routine code/text transformations. The 31B model is reserved for heavy reasoning where mistakes cascade (planning, debugging, review, security audit); coding tasks use a specialised coder model; routine structured output uses a 7B coder; the generic catch-all drops to an 8B general model. Every entry remains operator-tunable via `AEP_MODEL_FOR_<TASK_TYPE>` env vars.
+
+| Task type          | Primary model        | Fallback             | Rationale                                              |
+|--------------------|----------------------|----------------------|--------------------------------------------------------|
+| `plan`             | `gemma4:31b-cloud`   | `llama3.1:8b`        | Decomposition needs reasoning; infrequent (1 per task).|
+| `code`             | `qwen2.5-coder:32b`  | `deepseek-coder:6.7b`| Coder model beats generalist at code, smaller & cheaper.|
+| `debug`            | `gemma4:31b-cloud`   | `qwen2.5-coder:7b`   | Root-cause analysis needs reasoning.                   |
+| `test`             | `qwen2.5-coder:7b`   | `mistral:7b`         | Routine structured code, smaller model fine.           |
+| `review`           | `gemma4:31b-cloud`   | `mistral:7b`         | Judgment matters; infrequent.                          |
+| `security_audit`   | `gemma4:31b-cloud`   | `mistral:7b`         | Low tolerance for misses.                              |
+| `documentation`    | `mistral:7b`         | `llama3.2:3b`        | Spec §6.1 default; already lightweight.                |
+| `devops`           | `qwen2.5-coder:7b`   | `mistral:7b`         | YAML / Dockerfile editing is structured.               |
+| `embedding`        | `nomic-embed-text`   | —                    | Spec §2.1 default.                                     |
+| `generic`          | `llama3.1:8b`        | `llama3.2:3b`        | Cheap general default.                                 |
+
+Fallbacks are always cheaper than the primary so failover degrades cost rather than escalates it.
+
+Overrides (resolution order, highest first):
+
+1. Explicit `model` field in the request body (or `model_override` for `/LLM/route`).
+2. `AEP_MODEL_FOR_<TASK_TYPE>` environment variable (e.g. `AEP_MODEL_FOR_CODE=phi3:medium`).
+3. The static table above.
+4. The configured `default_model` from `AepLlmConfig` (env `AEP_DEFAULT_MODEL`).
+
+#### Environment variables (Phase 1)
+
+| Variable                       | Default                       | Purpose |
+|--------------------------------|-------------------------------|---------|
+| `AEP_OLLAMA_BASE_URL`          | `http://ollama:11434`         | Upstream Ollama endpoint. Falls back to the existing `OLLAMA_URL` setting when unset. |
+| `OLLAMA_CLOUD_API_KEY`         | _(unset)_                     | Sent as `Authorization: Bearer <key>` to enable Ollama Cloud. Leave unset for a local sidecar. |
+| `AEP_DEFAULT_MODEL`            | `gemma4:31b-cloud`            | Primary model name (spec §2.1). |
+| `AEP_EMBEDDING_MODEL`          | `nomic-embed-text`            | Embedding model (spec §2.1). |
+| `AEP_OLLAMA_REQUEST_TIMEOUT`   | `120` (seconds)               | Upstream request timeout. |
+| `AEP_OLLAMA_CONNECT_TIMEOUT`   | `10` (seconds)                | Upstream connect timeout. |
+| `AEP_OLLAMA_MAX_RETRIES`       | `2`                           | Retries on transient network/5xx failures. |
+| `AEP_OLLAMA_BACKOFF_INITIAL`   | `0.5` (seconds)               | Initial exponential backoff delay. |
+| `AEP_OLLAMA_BACKOFF_MAX`       | `8.0` (seconds)               | Maximum backoff delay. |
+| `AEP_MODEL_FOR_<TASK_TYPE>`    | _(unset)_                     | Override the routing table for a specific task type. |
+
+#### Streaming SSE envelope
+
+`POST /LLM/generate` and `POST /LLM/chat` return `text/event-stream` when `stream=true`. Each event is a single JSON object:
+
+```
+data: {"model":"gemma4:31b-cloud","delta":"...token...","done":false,"prompt_tokens":123,"completion_tokens":17}\n\n
+```
+
+Upstream errors during a stream are surfaced as a final `event: error` SSE frame with the same envelope shape as non-streaming errors.
+
+#### Error envelope (Phase 1 upstream errors)
+
+When the flag is on and Ollama returns an error, the gateway translates it to an envelope:
+
+```json
+{
+  "error": "upstream_unavailable" | "upstream_timeout" | "upstream_http_error" | "model_not_found" | "invalid_request",
+  "message": "...",
+  "upstream_status": 502,
+  "details": { "path": "/api/generate", "model": "..." },
+  "phase": "phase_1",
+  "flag": "llm_gateway_enabled",
+  "timestamp": "2026-05-26T17:00:00+00:00"
+}
+```
+
+HTTP status: `502` for unreachable/HTTP errors, `504` for timeout, `404` for missing models, `400` for invalid requests.
 
 ---
 
@@ -268,6 +343,16 @@ This will become the standard pattern from Phase 3 onwards.
    ```
 3. **Restart the backend**. The `lifespan` hook re-runs `PluginRegistry.discover()`. If the flag is on, the agent goes active.
 4. **No host code changes are required**. Existing routers don't need to know about the new agent — it's reached through the registry only.
+
+---
+
+## Docker Compose topology
+
+`docker-compose.yml` (dev) and `docker-compose.prod.yml` (GCP VM) define an `ollama` service co-located with the backend on the internal Docker network. The backend reaches it as `http://ollama:11434` — that URL is never exposed externally.
+
+* **Model cache.** Dev uses the named volume `ollama_data`; prod bind-mounts `${DATA_ROOT}/ollama` so models survive VM reboots.
+* **Cloud mode.** Set `OLLAMA_CLOUD_API_KEY` and the backend will send `Authorization: Bearer <key>` to whatever `AEP_OLLAMA_BASE_URL` points at. The local sidecar can either proxy or be skipped entirely (set `AEP_OLLAMA_BASE_URL=https://...` to bypass it).
+* **Bringing the gateway online.** Setting `AEP_FLAG_LLM_GATEWAY_ENABLED=true` (or flipping the flag via `PUT /api/v1/aep/flags/llm_gateway_enabled`) is the *only* step needed to flip from Phase 0 (503) to Phase 1 (live).
 
 ---
 

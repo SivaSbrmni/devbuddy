@@ -24,6 +24,13 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-devbuddy}:${POSTGRES_PASSWORD:-devbuddy_pass}@postgres:5432/${POSTGRES_DB:-devbuddy}
       LOKI_URL: http://loki:3100
+      # AEP /LLM gateway target. Reached over the internal Docker network;
+      # never exposed to the host. Phase 1 only takes effect when the
+      # `llm_gateway_enabled` feature flag is on.
+      AEP_OLLAMA_BASE_URL: ${AEP_OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_CLOUD_API_KEY: ${OLLAMA_CLOUD_API_KEY:-}
+      AEP_DEFAULT_MODEL: ${AEP_DEFAULT_MODEL:-gemma4:31b-cloud}
+      AEP_EMBEDDING_MODEL: ${AEP_EMBEDDING_MODEL:-nomic-embed-text}
     ports:
       - "8000:8000"
     depends_on:
@@ -32,6 +39,26 @@ services:
     volumes:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # AEP Phase 1 — Ollama sidecar. Co-located with the backend on the
+  # internal network so the `/LLM` gateway can proxy requests over
+  # `http://ollama:11434` without exposing the upstream to the host.
+  # When `OLLAMA_CLOUD_API_KEY` is set the sidecar acts as a thin local
+  # proxy to Ollama Cloud (per `gemma4:31b-cloud` requirement in spec §2.1);
+  # otherwise it serves models locally from the persistent volume.
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_KEEP_ALIVE: "30m"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
 
   loki:
     image: grafana/loki:2.9.3
@@ -71,3 +98,4 @@ volumes:
   postgres_data:
   loki_data:
   grafana_data:
+  ollama_data:
