@@ -15,7 +15,13 @@ from app.core.database import engine
 from app.core.ratelimit import limiter
 from app.api import auth, tasks, audit, logs, chat, workspace, llm_config, mcp_connections, github_connections, memory
 from app.aep import models as aep_models  # noqa: F401 — register aep_* tables with Base.metadata
-from app.aep.api import admin_router as aep_admin_router, llm_gateway_router
+from app.aep.api import (
+    admin_router as aep_admin_router,
+    llm_gateway_router,
+    github_webhooks_router as aep_webhooks_router,
+    repositories_router as aep_repos_router,
+    executions_router as aep_executions_router,
+)
 from app.aep.plugins import get_plugin_registry
 
 setup_logging()
@@ -129,6 +135,11 @@ app.include_router(memory.router, prefix="/api/v1")
 # the API. Both are dormant in Phase 0 — see backend/app/aep/feature_flags.py.
 app.include_router(aep_admin_router, prefix="/api/v1")
 app.include_router(llm_gateway_router)
+# Phase 2 — GitHub integration
+app.include_router(aep_webhooks_router, prefix="/api/v1")
+app.include_router(aep_repos_router, prefix="/api/v1")
+# Phase 3 — Execution engine
+app.include_router(aep_executions_router, prefix="/api/v1")
 
 
 @app.get("/health")
