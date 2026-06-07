@@ -95,9 +95,21 @@ async def run_pipeline(
     await db.flush()
 
     orchestrator = TaskOrchestrator(db, model_router)
-    results = await orchestrator.run_pipeline(
-        project_id, task.id, body.requirements, body.tech_stack
-    )
+    try:
+        results = await orchestrator.run_pipeline(
+            project_id, task.id, body.requirements, body.tech_stack
+        )
+    except RuntimeError as exc:
+        task.status = "failed"
+        task.result = {"error": str(exc)}
+        await db.flush()
+        raise HTTPException(503, detail=str(exc))
+    except Exception as exc:
+        task.status = "failed"
+        task.result = {"error": str(exc)}
+        await db.flush()
+        raise HTTPException(500, detail=f"Pipeline failed: {exc}")
+
     task.status = "completed"
     task.result = results
     await db.flush()
@@ -127,9 +139,21 @@ async def run_coding_task(
     await db.flush()
 
     orchestrator = TaskOrchestrator(db, model_router)
-    results = await orchestrator.run_coding_task(
-        project_id, task.id, body.task_description, body.file_path, body.existing_code
-    )
+    try:
+        results = await orchestrator.run_coding_task(
+            project_id, task.id, body.task_description, body.file_path, body.existing_code
+        )
+    except RuntimeError as exc:
+        task.status = "failed"
+        task.result = {"error": str(exc)}
+        await db.flush()
+        raise HTTPException(503, detail=str(exc))
+    except Exception as exc:
+        task.status = "failed"
+        task.result = {"error": str(exc)}
+        await db.flush()
+        raise HTTPException(500, detail=f"Coding task failed: {exc}")
+
     task.status = "completed"
     task.result = results
     await db.flush()

@@ -16,7 +16,7 @@ export default function DashboardPage() {
     <div>
       <h2 style={{ marginBottom: 24 }}>Dashboard</h2>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 32 }}>
         <div className="card">
           <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>System Status</p>
           <p style={{ fontSize: 20, fontWeight: 600, color: health?.status === 'healthy' ? 'var(--success)' : 'var(--error)', marginTop: 8 }}>

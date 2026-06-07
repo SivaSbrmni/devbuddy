@@ -60,10 +60,10 @@ export default function ProjectDetailPage() {
       <h2 style={{ marginBottom: 8 }}>{project.name}</h2>
       <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>{project.description}</p>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         {(['pipeline', 'code', 'tasks', 'runs'] as const).map(t => (
           <button key={t} onClick={() => { setTab(t); setResult(null) }}
-            style={{ background: tab === t ? 'var(--accent)' : 'var(--bg-hover)' }}>
+            style={{ background: tab === t ? 'var(--accent)' : 'var(--bg-hover)', flex: '1 1 auto', minWidth: 70 }}>
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
@@ -126,11 +126,17 @@ export default function ProjectDetailPage() {
       )}
 
       {result && (
-        <div className="card" style={{ marginTop: 24 }}>
-          <h3 style={{ marginBottom: 12 }}>Result</h3>
-          <pre style={{ background: 'var(--bg)', padding: 12, borderRadius: 'var(--radius)', overflow: 'auto', maxHeight: 400, fontSize: 13 }}>
-            {JSON.stringify(result, null, 2)}
-          </pre>
+        <div className="card" style={{ marginTop: 24, borderColor: result.error ? 'var(--error)' : 'var(--border)' }}>
+          <h3 style={{ marginBottom: 12, color: result.error ? 'var(--error)' : 'var(--text)' }}>
+            {result.error ? 'Error' : 'Result'}
+          </h3>
+          {result.error ? (
+            <p style={{ color: 'var(--error)', fontSize: 14, wordBreak: 'break-word' }}>{result.error}</p>
+          ) : (
+            <pre style={{ background: 'var(--bg)', padding: 12, borderRadius: 'var(--radius)', overflow: 'auto', maxHeight: 400, fontSize: 13, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {JSON.stringify(result, null, 2)}
+            </pre>
+          )}
         </div>
       )}
     </div>

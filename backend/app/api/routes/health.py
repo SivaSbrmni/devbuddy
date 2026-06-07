@@ -32,3 +32,15 @@ async def health_db() -> dict:
             "error": str(exc),
             "traceback": traceback.format_exc(),
         }
+
+
+@router.get("/health/llm")
+async def health_llm() -> dict:
+    """Check LLM provider availability."""
+    from app.core.config import settings
+
+    return {
+        "anthropic": "configured" if settings.ANTHROPIC_API_KEY else "not_configured",
+        "llama": "configured" if settings.LLAMA_API_KEY else "not_configured",
+        "llama_base": settings.LLAMA_API_BASE,
+    }
