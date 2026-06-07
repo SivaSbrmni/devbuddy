@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     RAILWAY_TOKEN: str = ""
     VERCEL_TOKEN: str = ""
 
+    # --- CORS ---
+    CORS_ORIGINS: str = ""  # comma-separated extra origins
+
     # --- Repair Loop ---
     MAX_REPAIR_RETRIES: int = 5
 
