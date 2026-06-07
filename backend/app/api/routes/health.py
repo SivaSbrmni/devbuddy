@@ -43,4 +43,7 @@ async def health_llm() -> dict:
         "anthropic": "configured" if settings.ANTHROPIC_API_KEY else "not_configured",
         "llama": "configured" if settings.LLAMA_API_KEY else "not_configured",
         "llama_base": settings.LLAMA_API_BASE,
+        "ollama": "configured" if settings.OLLAMA_API_KEY else "not_configured",
+        "ollama_base": settings.OLLAMA_API_BASE,
+        "ollama_model": settings.OLLAMA_MODEL,
     }

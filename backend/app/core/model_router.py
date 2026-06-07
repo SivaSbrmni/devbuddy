@@ -112,6 +112,7 @@ class LLMRequest:
 COST_TABLE = {
     "anthropic": {"input": 3.0, "output": 15.0},
     "llama": {"input": 0.05, "output": 0.08},
+    "ollama": {"input": 0.0, "output": 0.0},  # Ollama cloud free tier
 }
 
 
@@ -126,6 +127,7 @@ class ModelRouter:
     def __init__(self) -> None:
         self._anthropic: anthropic.AsyncAnthropic | None = None
         self._llama_client: httpx.AsyncClient | None = None
+        self._ollama_client: httpx.AsyncClient | None = None
 
     async def startup(self) -> None:
         if settings.ANTHROPIC_API_KEY:
@@ -136,10 +138,18 @@ class ModelRouter:
                 headers={"Authorization": f"Bearer {settings.LLAMA_API_KEY}"},
                 timeout=120.0,
             )
+        if settings.OLLAMA_API_KEY:
+            self._ollama_client = httpx.AsyncClient(
+                base_url=settings.OLLAMA_API_BASE,
+                headers={"Authorization": f"Bearer {settings.OLLAMA_API_KEY}"},
+                timeout=120.0,
+            )
 
     async def shutdown(self) -> None:
         if self._llama_client:
             await self._llama_client.aclose()
+        if self._ollama_client:
+            await self._ollama_client.aclose()
 
     def _select_tier(self, category: TaskCategory) -> ModelTier:
         return TASK_TIER_MAP.get(category, ModelTier.ENGINEER)
@@ -149,8 +159,8 @@ class ModelRouter:
         log.info("model_router.routing", tier=tier.value, category=request.task_category.value)
 
         if tier == ModelTier.ENGINEER:
-            return await self._call_with_fallback(request, primary="anthropic", fallback="llama")
-        return await self._call_with_fallback(request, primary="llama", fallback="anthropic")
+            return await self._call_with_fallback(request, primary="anthropic", fallback="ollama")
+        return await self._call_with_fallback(request, primary="ollama", fallback="anthropic")
 
     async def _call_with_fallback(
         self, request: LLMRequest, *, primary: str, fallback: str
@@ -173,6 +183,8 @@ class ModelRouter:
             return await self._call_anthropic(request)
         if provider == "llama":
             return await self._call_llama(request)
+        if provider == "ollama":
+            return await self._call_ollama(request)
         raise ValueError(f"Unknown provider: {provider}")
 
     async def _call_anthropic(self, request: LLMRequest) -> LLMResponse:
@@ -241,6 +253,47 @@ class ModelRouter:
             output_tokens=output_tok,
             latency_ms=latency,
             cost_usd=_estimate_cost("llama", input_tok, output_tok),
+        )
+
+
+    async def _call_ollama(self, request: LLMRequest) -> LLMResponse:
+        if not self._ollama_client:
+            raise RuntimeError("Ollama client not configured")
+
+        messages: list[dict[str, str]] = []
+        if request.system_prompt:
+            messages.append({"role": "system", "content": request.system_prompt})
+        messages.extend(request.messages)
+
+        start = time.monotonic()
+        resp = await self._ollama_client.post(
+            "/chat",
+            json={
+                "model": settings.OLLAMA_MODEL,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "num_predict": min(request.max_tokens, settings.MAX_TOKENS_PER_REQUEST),
+                    "temperature": request.temperature,
+                },
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        latency = int((time.monotonic() - start) * 1000)
+
+        content = data.get("message", {}).get("content", "")
+        input_tok = data.get("prompt_eval_count", 0)
+        output_tok = data.get("eval_count", 0)
+
+        return LLMResponse(
+            content=content,
+            provider="ollama",
+            model=settings.OLLAMA_MODEL,
+            input_tokens=input_tok,
+            output_tokens=output_tok,
+            latency_ms=latency,
+            cost_usd=_estimate_cost("ollama", input_tok, output_tok),
         )
 
 
