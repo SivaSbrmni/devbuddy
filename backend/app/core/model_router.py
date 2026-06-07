@@ -159,7 +159,14 @@ class ModelRouter:
             return await self._call_provider(request, primary)
         except Exception as exc:
             log.warning("model_router.primary_failed", provider=primary, error=str(exc))
-            return await self._call_provider(request, fallback)
+            try:
+                return await self._call_provider(request, fallback)
+            except Exception as fallback_exc:
+                raise RuntimeError(
+                    f"No LLM provider available. Primary ({primary}): {exc}. "
+                    f"Fallback ({fallback}): {fallback_exc}. "
+                    "Configure ANTHROPIC_API_KEY or LLAMA_API_KEY in environment."
+                ) from fallback_exc
 
     async def _call_provider(self, request: LLMRequest, provider: str) -> LLMResponse:
         if provider == "anthropic":

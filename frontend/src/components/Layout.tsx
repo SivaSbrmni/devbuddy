@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
 
@@ -12,17 +13,25 @@ const NAV_ITEMS = [
 
 export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="app-layout">
+      {/* Mobile header */}
+      <header className="mobile-header">
+        <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+          ☰
+        </button>
+        <h1 className="mobile-title">DevBuddy Lite</h1>
+      </header>
+
+      {/* Backdrop for mobile */}
+      {sidebarOpen && (
+        <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <nav style={{
-        width: 220,
-        background: 'var(--bg-card)',
-        borderRight: '1px solid var(--border)',
-        padding: '20px 0',
-        flexShrink: 0,
-      }}>
+      <nav className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div style={{ padding: '0 20px 24px', borderBottom: '1px solid var(--border)' }}>
           <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>
             DevBuddy Lite
@@ -36,6 +45,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <li key={item.path}>
               <Link
                 to={item.path}
+                onClick={() => setSidebarOpen(false)}
                 style={{
                   display: 'block',
                   padding: '10px 20px',
@@ -54,7 +64,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </nav>
 
       {/* Main content */}
-      <main style={{ flex: 1, padding: 32, overflow: 'auto' }}>
+      <main className="main-content">
         {children}
       </main>
     </div>
