@@ -115,8 +115,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <p style={{ marginTop: '36px', color: '#4b4f63', fontSize: '13px' }}>
-        Already have access?{' '}
-        <a href="/app" style={{ color: '#6366f1', fontWeight: 600, textDecoration: 'none' }}>Sign in →</a>
+        © 2026 DevBuddy · Invite-only private beta
       </p>
     </div>
   )
