@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     LLAMA_API_KEY: str = ""
     LLAMA_MODEL: str = "llama-4-scout-17b-16e-instruct"
     LLAMA_API_BASE: str = "https://api.llama.com/v1"
+    OLLAMA_API_KEY: str = ""
+    OLLAMA_MODEL: str = "qwen3-coder-next"
+    OLLAMA_API_BASE: str = "https://ollama.com/api"
 
     # --- Token Budgets ---
     MAX_TOKENS_PER_REQUEST: int = 8192

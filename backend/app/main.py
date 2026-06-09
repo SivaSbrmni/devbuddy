@@ -5,8 +5,12 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.execution import router as execution_router
 from app.api.routes.health import router as health_router
@@ -24,6 +28,19 @@ from app.core.model_router import model_router
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup / shutdown lifecycle."""
     setup_logging(json=settings.ENVIRONMENT == "production")
+
+    # Ensure database tables exist
+    from app.db.base import Base
+    from app.db.session import engine
+
+    # Import all models so they register on Base.metadata
+    import app.models.project  # noqa: F401
+    import app.models.task  # noqa: F401
+    import app.models.execution  # noqa: F401
+    import app.models.memory  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
     # Initialize LLM router
     await model_router.startup()
@@ -56,7 +73,13 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://devbuddy.org",
+        "https://www.devbuddy.org",
+        "https://sivasbrmni-devbuddy.hf.space",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,3 +93,16 @@ app.include_router(skills_router, prefix=settings.API_PREFIX)
 app.include_router(execution_router, prefix=settings.API_PREFIX)
 app.include_router(workspace_router, prefix=settings.API_PREFIX)
 app.include_router(metrics_router, prefix=settings.API_PREFIX)
+
+# Serve pre-built React frontend as static files
+_static_dir = Path(__file__).resolve().parent.parent / "static"
+if _static_dir.is_dir():
+    app.mount("/assets", StaticFiles(directory=_static_dir / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def _spa_fallback(request: Request, full_path: str) -> FileResponse:
+        """Serve index.html for any non-API route (SPA client-side routing)."""
+        file_path = _static_dir / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(_static_dir / "index.html")

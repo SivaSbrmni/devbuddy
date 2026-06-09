@@ -1,4 +1,5 @@
-const API_BASE = '/api/v1'
+const BACKEND_URL = import.meta.env.VITE_API_URL || ''
+const API_BASE = `${BACKEND_URL}/api/v1`
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -68,4 +69,4 @@ export const triggerRepair = (projectId: string, taskId: string) =>
   request<any>(`/projects/${projectId}/repair?task_id=${taskId}`, { method: 'POST' })
 
 // Health
-export const healthCheck = () => fetch('/health').then(r => r.json())
+export const healthCheck = () => fetch(`${BACKEND_URL}/health`).then(r => r.json())
