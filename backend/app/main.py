@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.routes.auth import router as auth_router
 from app.api.routes.execution import router as execution_router
 from app.api.routes.health import router as health_router
 from app.api.routes.memory import router as memory_router
@@ -78,6 +79,7 @@ app.add_middleware(
         "http://localhost:3000",
         "https://devbuddy.org",
         "https://www.devbuddy.org",
+        "https://dev.devbuddy.org",
         "https://sivasbrmni-devbuddy.hf.space",
     ],
     allow_credentials=True,
@@ -87,6 +89,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(health_router)
+app.include_router(auth_router, prefix=settings.API_PREFIX)
 app.include_router(projects_router, prefix=settings.API_PREFIX)
 app.include_router(memory_router, prefix=settings.API_PREFIX)
 app.include_router(skills_router, prefix=settings.API_PREFIX)

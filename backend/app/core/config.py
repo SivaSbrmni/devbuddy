@@ -60,5 +60,16 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str = ""  # set via env
 
+    # --- Google OAuth ---
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
+    # Comma-separated list of allowed emails (empty = block all)
+    ALLOWED_EMAILS: str = "sivasbrmni@gmail.com"
+
+    @property
+    def allowed_emails_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.ALLOWED_EMAILS.split(",") if e.strip()}
+
 
 settings = Settings()
