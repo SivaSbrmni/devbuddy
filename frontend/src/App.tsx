@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
+import LandingPage from './pages/LandingPage'
 import DashboardPage from './pages/DashboardPage'
 import ProjectsPage from './pages/ProjectsPage'
 import ProjectDetailPage from './pages/ProjectDetailPage'
@@ -10,16 +11,21 @@ import MetricsPage from './pages/MetricsPage'
 
 export default function App() {
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/projects" element={<ProjectsPage />} />
-        <Route path="/projects/:id" element={<ProjectDetailPage />} />
-        <Route path="/workspace" element={<WorkspacePage />} />
-        <Route path="/knowledge" element={<KnowledgePage />} />
-        <Route path="/skills" element={<SkillsPage />} />
-        <Route path="/metrics" element={<MetricsPage />} />
-      </Routes>
-    </Layout>
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/app/*" element={
+        <Layout>
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/projects/:id" element={<ProjectDetailPage />} />
+            <Route path="/workspace" element={<WorkspacePage />} />
+            <Route path="/knowledge" element={<KnowledgePage />} />
+            <Route path="/skills" element={<SkillsPage />} />
+            <Route path="/metrics" element={<MetricsPage />} />
+          </Routes>
+        </Layout>
+      } />
+    </Routes>
   )
 }
