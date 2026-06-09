@@ -25,6 +25,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup / shutdown lifecycle."""
     setup_logging(json=settings.ENVIRONMENT == "production")
 
+    # Ensure database tables exist
+    from app.db.base import Base
+    from app.db.session import engine
+
+    # Import all models so they register on Base.metadata
+    import app.models.project  # noqa: F401
+    import app.models.task  # noqa: F401
+    import app.models.execution  # noqa: F401
+    import app.models.memory  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     # Initialize LLM router
     await model_router.startup()
 
