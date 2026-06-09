@@ -3,10 +3,22 @@ import { useState } from 'react'
 export default function LandingPage() {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (email) setSubmitted(true)
+    if (!email) return
+    setLoading(true)
+    try {
+      await fetch('https://formspree.io/f/meewkbqo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      setSubmitted(true)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -100,13 +112,13 @@ export default function LandingPage() {
                   outline: 'none',
                 }}
               />
-              <button type="submit" style={{
+              <button type="submit" disabled={loading} style={{
                 width: '100%', padding: '11px', borderRadius: '8px',
-                background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                background: loading ? '#4b4f63' : 'linear-gradient(135deg, #6366f1, #818cf8)',
                 color: 'white', fontWeight: 700, fontSize: '15px',
-                border: 'none', cursor: 'pointer', letterSpacing: '0.3px',
+                border: 'none', cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '0.3px',
               }}>
-                Request Invite →
+                {loading ? 'Sending…' : 'Request Invite →'}
               </button>
             </form>
           </>
