@@ -64,8 +64,17 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
+    # Where to send the user after Google login (e.g. https://devbuddy.org or https://dev.devbuddy.org)
+    FRONTEND_URL: str = ""
     # Comma-separated list of allowed emails (empty = block all)
     ALLOWED_EMAILS: str = "sivasbrmni@gmail.com"
+
+    @property
+    def frontend_url(self) -> str:
+        if self.FRONTEND_URL:
+            return self.FRONTEND_URL.rstrip("/")
+        # Fallback: derive from redirect URI (removes /api/v1/... path)
+        return self.GOOGLE_REDIRECT_URI.split("/api/")[0].rstrip("/")
 
     @property
     def allowed_emails_set(self) -> set[str]:

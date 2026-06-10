@@ -82,16 +82,8 @@ async def google_callback(
 
     token = _make_jwt(email, user.get("name", ""), user.get("picture", ""))
 
-    frontend_url = settings.GOOGLE_REDIRECT_URI.split("/api/")[0]
-    response = RedirectResponse(url=f"{frontend_url}/app")
-    response.set_cookie(
-        key="devbuddy_token",
-        value=token,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/",
+    response = RedirectResponse(
+        url=f"{settings.frontend_url}/app?token={token}"
     )
     return response
 
