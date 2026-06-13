@@ -22,6 +22,8 @@ from app.aep.api import (
     repositories_router as aep_repos_router,
     executions_router as aep_executions_router,
     memory_router as aep_memory_router,
+    observability_router as aep_observability_router,
+    secrets_router as aep_secrets_router,
 )
 from app.aep.plugins import get_plugin_registry
 
@@ -143,6 +145,9 @@ app.include_router(aep_repos_router, prefix="/api/v1")
 app.include_router(aep_executions_router, prefix="/api/v1")
 # Phase 4 — Memory system
 app.include_router(aep_memory_router, prefix="/api/v1")
+# Phase 6 — Observability + Secrets
+app.include_router(aep_observability_router, prefix="/api/v1")
+app.include_router(aep_secrets_router, prefix="/api/v1")
 
 
 @app.get("/health")
