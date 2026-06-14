@@ -1,3 +1,12 @@
+---
+title: DevBuddy
+emoji: 🚀
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # DevBuddy Lite — Autonomous Software Engineer Platform
 
 A production-quality autonomous software engineering system that understands requirements, plans work, writes code, debugs software, repairs failures, deploys applications, and continuously improves software with minimal human intervention.
