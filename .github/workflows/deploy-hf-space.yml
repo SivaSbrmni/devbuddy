@@ -6,6 +6,7 @@ on:
     paths:
       - 'backend/**'
       - 'deploy/**'
+      - '.github/workflows/deploy-hf-space.yml'
       - 'docker-compose.yml'
       - 'serve.py'
       - 'config.py'
@@ -38,6 +39,33 @@ jobs:
           git remote add hf https://huggingface.co/spaces/Sivasbrmni/devbuddy.git || true
           git remote set-url hf "https://oauth2:${HF_TOKEN}@huggingface.co/spaces/Sivasbrmni/devbuddy.git"
           git push hf main:main --force
+
+      - name: Sync OLLAMA_API_KEY to HF Space secrets
+        if: ${{ secrets.OLLAMA_API_KEY != '' }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+        run: |
+          pip install -q huggingface_hub
+          python3 -c "
+          from huggingface_hub import HfApi
+          api = HfApi(token='$HF_TOKEN')
+          try:
+              api.add_space_secret('Sivasbrmni/devbuddy', 'OLLAMA_API_KEY', '$OLLAMA_API_KEY')
+              print('OLLAMA_API_KEY secret synced to HF Space')
+          except AttributeError:
+              # Fallback for older huggingface_hub versions
+              from huggingface_hub.utils import get_session
+              import requests
+              resp = get_session().post(
+                  'https://huggingface.co/api/spaces/Sivasbrmni/devbuddy/secrets',
+                  headers={'Authorization': f'Bearer $HF_TOKEN'},
+                  json={'key': 'OLLAMA_API_KEY', 'value': '$OLLAMA_API_KEY'}
+              )
+              print(f'Secret sync status: {resp.status_code}')
+          except Exception as e:
+              print(f'Warning: could not sync secret: {e}')
+          "
 
       - name: Wait for HF Space to rebuild
         run: sleep 180

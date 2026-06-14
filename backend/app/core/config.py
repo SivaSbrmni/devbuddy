@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     LLAMA_MODEL: str = "llama-4-scout-17b-16e-instruct"
     LLAMA_API_BASE: str = "https://api.llama.com/v1"
     OLLAMA_API_KEY: str = ""
-    OLLAMA_MODEL: str = "qwen3-coder-next"
+    OLLAMA_MODEL: str = "qwen3-coder:480b"
     OLLAMA_API_BASE: str = "https://ollama.com/api"
 
     # --- Token Budgets ---
