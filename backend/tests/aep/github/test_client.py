@@ -1,11 +1,11 @@
-"""Tests for the GitHub client factory and PAT client."""
+"""Tests for the GitHub client factory and auth implementations."""
 import os
 from unittest.mock import patch
 
 import pytest
 
 from app.aep.github.client import (
-    GitHubNotFoundError,
+    OAuthClient,
     PersonalAccessTokenClient,
     get_github_client,
     reset_github_client,
@@ -60,3 +60,23 @@ class TestGetGitHubClient:
             c1 = get_github_client()
             c2 = get_github_client()
             assert c1 is c2
+
+
+class TestOAuthClient:
+    """OAuth client auth headers."""
+
+    @pytest.mark.asyncio
+    async def test_auth_headers_bearer(self) -> None:
+        client = OAuthClient("gho_abc123xyz")
+        headers = await client._auth_headers()
+        assert headers == {"Authorization": "Bearer gho_abc123xyz"}
+
+    @pytest.mark.asyncio
+    async def test_different_tokens_produce_different_headers(self) -> None:
+        c1 = OAuthClient("token_a")
+        c2 = OAuthClient("token_b")
+        h1 = await c1._auth_headers()
+        h2 = await c2._auth_headers()
+        assert h1 != h2
+        assert "token_a" in h1["Authorization"]
+        assert "token_b" in h2["Authorization"]

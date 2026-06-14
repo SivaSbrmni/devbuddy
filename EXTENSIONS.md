@@ -380,3 +380,110 @@ Notes for later phases:
 - `backend/app/aep/api/llm_gateway.py` — `/LLM` namespace contract
 - `backend/app/aep/api/admin.py` — `/api/v1/aep/*` admin routes
 - `backend/tests/aep/` — Phase 0 test suite
+- `docs/aep-github-app-setup.md` — GitHub App setup and configuration guide
+
+---
+
+## End-to-end happy-path test plan (Phase 3)
+
+This section documents the end-to-end integration test that exercises the
+complete AEP task lifecycle from submission through PR creation.
+
+### Prerequisites
+
+| Component         | Requirement                                                 |
+|-------------------|-------------------------------------------------------------|
+| PostgreSQL        | Running with migrations through `006` applied               |
+| Redis             | Running on port 6379                                        |
+| Ollama            | Running with `gemma4:31b-cloud` or fallback model available |
+| GitHub App        | Installed on a test repository with required permissions     |
+| Feature flags     | `agent_planner_enabled`, `agent_coder_enabled`, `github_actions_runtime_enabled` set to `true` |
+
+### Test steps
+
+1. **Submit a task**
+   ```bash
+   curl -X POST http://localhost:8000/api/v1/aep/executions \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{
+       "title": "Add health check endpoint",
+       "description": "Create a GET /health endpoint that returns {\"status\": \"ok\"}",
+       "repository_id": "<repo-uuid>"
+     }'
+   ```
+   **Expected:** Returns `201` with `state: "pending"`.
+
+2. **Trigger planning**
+   ```bash
+   curl -X POST http://localhost:8000/api/v1/aep/executions/<id>/plan \
+     -H "Authorization: Bearer <token>"
+   ```
+   **Expected:** State transitions `pending → planning → awaiting_approval`.
+   The Planner agent calls `/LLM/generate`, produces an `ExecutionPlan`
+   JSON with at least one step, and persists it to `aep_agent_plans`.
+
+3. **Verify plan output**
+   ```bash
+   curl http://localhost:8000/api/v1/aep/executions/<id> \
+     -H "Authorization: Bearer <token>"
+   ```
+   **Expected:** `state: "awaiting_approval"`, plan visible in response.
+
+4. **Approve the plan**
+   ```bash
+   curl -X POST http://localhost:8000/api/v1/aep/executions/<id>/approve \
+     -H "Authorization: Bearer <token>"
+   ```
+   **Expected:** State transitions to `executing`.
+
+5. **Execute (Coder agent)**
+   ```bash
+   curl -X POST http://localhost:8000/api/v1/aep/executions/<id>/execute \
+     -H "Authorization: Bearer <token>"
+   ```
+   **Expected:** Coder agent generates file changes, pushes to a feature
+   branch, opens a PR. State transitions
+   `executing → validating → completed`.
+
+6. **Verify execution steps**
+   ```bash
+   curl http://localhost:8000/api/v1/aep/executions/<id>/steps \
+     -H "Authorization: Bearer <token>"
+   ```
+   **Expected:** Returns ordered steps with `state: "completed"`,
+   non-zero `duration_ms`, and agent names matching the plan.
+
+7. **Verify PR on GitHub**
+
+   Check that the target repository has a new PR with the generated
+   code changes matching the task description.
+
+### Rejection path
+
+Repeat steps 1-3, then:
+
+4b. **Reject the plan**
+    ```bash
+    curl -X POST http://localhost:8000/api/v1/aep/executions/<id>/reject \
+      -H "Authorization: Bearer <token>"
+    ```
+    **Expected:** State transitions to `cancelled`. No code changes made.
+
+### Failure handling
+
+- If the LLM gateway returns an error, the execution should transition
+  to `failed` with an `error` field describing the failure.
+- If the GitHub client fails (auth error, rate limit), the step should
+  be marked `failed` and the execution enters the `failed` terminal state.
+- All failures are logged to `aep_audit_log` with a hash chain entry.
+
+### Automation (future)
+
+When GitHub Actions CI is configured on this repository, this test plan
+should be automated as a workflow that:
+1. Spins up a test database + Redis via services
+2. Runs migrations
+3. Mocks the Ollama endpoint with deterministic responses
+4. Exercises the full lifecycle
+5. Asserts final state and PR creation
