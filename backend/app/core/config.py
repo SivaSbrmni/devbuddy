@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     LLAMA_API_BASE: str = "https://api.llama.com/v1"
     OLLAMA_API_KEY: str = ""
     OLLAMA_MODEL: str = "qwen3-coder:480b"
-    OLLAMA_API_BASE: str = "https://api.ollama.com"
+    OLLAMA_API_BASE: str = "https://ollama.com"
 
     # --- Token Budgets ---
     MAX_TOKENS_PER_REQUEST: int = 8192

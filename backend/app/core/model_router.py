@@ -146,6 +146,7 @@ class ModelRouter:
                 base_url=settings.OLLAMA_API_BASE,
                 headers={"Authorization": f"Bearer {settings.OLLAMA_API_KEY}"},
                 timeout=120.0,
+                follow_redirects=True,
             )
 
     async def shutdown(self) -> None:
