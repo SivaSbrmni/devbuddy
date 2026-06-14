@@ -92,6 +92,11 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false)
+  const [mcpOpen, setMcpOpen] = useState(false)
+  const [knowledgeQuery, setKnowledgeQuery] = useState('')
+  const [knowledgeResults, setKnowledgeResults] = useState<any[]>([])
+  const [mcpTools, setMcpTools] = useState<any[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -125,6 +130,22 @@ export default function ChatPage() {
       }
     }
     fetchModels()
+  }, [])
+
+  // Fetch MCP tools on mount
+  useEffect(() => {
+    const fetchMcpTools = async () => {
+      try {
+        const resp = await fetch(`${API}/mcp/tools`)
+        if (resp.ok) {
+          const data = await resp.json()
+          setMcpTools(data)
+        }
+      } catch (e) {
+        console.error('Failed to fetch MCP tools:', e)
+      }
+    }
+    fetchMcpTools()
   }, [])
 
   const autoResize = () => {
@@ -207,6 +228,60 @@ export default function ChatPage() {
       updateActive([...newMsgs, { ...assistantMsg, content: errorMsg }], title)
     } finally {
       setLoading(false)
+      
+      // Extract knowledge from conversation after completion
+      if (active && active.messages.length > 2) {
+        try {
+          await fetch(`${API}/knowledge/extract`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversation_id: active.id,
+              messages: active.messages.map(m => ({ role: m.role, content: m.content }))
+            })
+          })
+        } catch (e) {
+          console.error('Failed to extract knowledge:', e)
+        }
+      }
+    }
+  }
+
+  const searchKnowledge = async () => {
+    if (!knowledgeQuery.trim()) return
+    try {
+      const resp = await fetch(`${API}/knowledge/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: knowledgeQuery, limit: 10 })
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        setKnowledgeResults(data)
+      }
+    } catch (e) {
+      console.error('Failed to search knowledge:', e)
+    }
+  }
+
+  const callMcpTool = async (serverId: string, toolName: string, args: any) => {
+    try {
+      const resp = await fetch(`${API}/mcp/tools/call`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          server_id: serverId,
+          tool_name: toolName,
+          arguments: args
+        })
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        return data
+      }
+    } catch (e) {
+      console.error('Failed to call MCP tool:', e)
+      return { success: false, error: String(e) }
     }
   }
 
@@ -385,11 +460,146 @@ export default function ChatPage() {
               {active?.title || 'New conversation'}
             </div>
           </div>
-          {/* Model selector */}
-          <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, color: '#c7d2fe', fontSize: 13, padding: '6px 12px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.6 : 1 }}>
-            {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Knowledge button */}
+            <button
+              onClick={() => setKnowledgeOpen(!knowledgeOpen)}
+              style={{
+                background: knowledgeOpen ? 'rgba(99,102,241,0.2)' : 'transparent',
+                border: knowledgeOpen ? '1px solid rgba(99,102,241,0.3)' : '1px solid #2a2d3a',
+                borderRadius: 8,
+                color: knowledgeOpen ? '#818cf8' : '#9ca3af',
+                fontSize: 12,
+                padding: '6px 12px',
+                cursor: 'pointer'
+              }}
+            >
+              📚 Knowledge
+            </button>
+            {/* MCP button */}
+            <button
+              onClick={() => setMcpOpen(!mcpOpen)}
+              style={{
+                background: mcpOpen ? 'rgba(99,102,241,0.2)' : 'transparent',
+                border: mcpOpen ? '1px solid rgba(99,102,241,0.3)' : '1px solid #2a2d3a',
+                borderRadius: 8,
+                color: mcpOpen ? '#818cf8' : '#9ca3af',
+                fontSize: 12,
+                padding: '6px 12px',
+                cursor: 'pointer'
+              }}
+            >
+              🔧 Tools
+            </button>
+            {/* Model selector */}
+            <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, color: '#c7d2fe', fontSize: 13, padding: '6px 12px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.6 : 1 }}>
+              {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </div>
         </div>
+
+        {/* Knowledge panel */}
+        {knowledgeOpen && (
+          <div style={{ padding: '12px 20px', borderBottom: '1px solid #1e2130', background: '#111318' }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input
+                type="text"
+                value={knowledgeQuery}
+                onChange={e => setKnowledgeQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') searchKnowledge() }}
+                placeholder="Search knowledge..."
+                style={{
+                  flex: 1,
+                  background: '#1a1d27',
+                  border: '1px solid #2a2d3a',
+                  borderRadius: 8,
+                  padding: '8px 12px',
+                  color: '#e4e6eb',
+                  fontSize: 13,
+                  outline: 'none'
+                }}
+              />
+              <button
+                onClick={searchKnowledge}
+                style={{
+                  background: 'rgba(99,102,241,0.12)',
+                  border: '1px solid rgba(99,102,241,0.3)',
+                  borderRadius: 8,
+                  color: '#818cf8',
+                  fontSize: 13,
+                  padding: '8px 16px',
+                  cursor: 'pointer'
+                }}
+              >
+                Search
+              </button>
+            </div>
+            {knowledgeResults.length > 0 && (
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                {knowledgeResults.map((k, i) => (
+                  <div key={i} style={{
+                    background: '#1a1d27',
+                    border: '1px solid #2a2d3a',
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                    marginBottom: 8
+                  }}>
+                    <div style={{ fontSize: 13, color: '#c7d2fe', fontWeight: 600, marginBottom: 4 }}>{k.title}</div>
+                    <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 6 }}>{k.content.slice(0, 200)}...</div>
+                    <div style={{ fontSize: 11, color: '#4b4f63' }}>
+                      {k.keywords.join(', ')} · {k.category}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* MCP tools panel */}
+        {mcpOpen && (
+          <div style={{ padding: '12px 20px', borderBottom: '1px solid #1e2130', background: '#111318' }}>
+            <div style={{ fontSize: 12, color: '#6366f1', fontWeight: 600, marginBottom: 8 }}>Available Tools</div>
+            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+              {mcpTools.map((tool, i) => (
+                <div key={i} style={{
+                  background: '#1a1d27',
+                  border: '1px solid #2a2d3a',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  marginBottom: 8,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontSize: 13, color: '#c7d2fe', fontWeight: 600 }}>{tool.name}</div>
+                    <div style={{ fontSize: 11, color: '#4b4f63' }}>{tool.server_name} · {tool.description}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const args = prompt(`Enter arguments for ${tool.name} (JSON):`, '{}')
+                      if (args) {
+                        callMcpTool(tool.server_id, tool.name, JSON.parse(args))
+                      }
+                    }}
+                    style={{
+                      background: 'rgba(99,102,241,0.12)',
+                      border: '1px solid rgba(99,102,241,0.3)',
+                      borderRadius: 6,
+                      color: '#818cf8',
+                      fontSize: 11,
+                      padding: '4px 10px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Run
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0' }}>

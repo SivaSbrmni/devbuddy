@@ -16,8 +16,10 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.execution import router as execution_router
 from app.api.routes.health import router as health_router
+from app.api.routes.knowledge import router as knowledge_router
 from app.api.routes.memory import router as memory_router
 from app.api.routes.metrics import router as metrics_router
+from app.api.routes.mcp import router as mcp_router
 from app.api.routes.models import router as models_router
 from app.api.routes.projects import router as projects_router
 from app.api.routes.skills import router as skills_router
@@ -100,6 +102,8 @@ app.include_router(workspace_router, prefix=settings.API_PREFIX)
 app.include_router(metrics_router, prefix=settings.API_PREFIX)
 app.include_router(models_router, prefix=settings.API_PREFIX)
 app.include_router(chat_router, prefix=settings.API_PREFIX)
+app.include_router(knowledge_router, prefix=settings.API_PREFIX)
+app.include_router(mcp_router, prefix=settings.API_PREFIX)
 
 # Serve pre-built React frontend as static files
 _static_dir = Path(__file__).resolve().parent.parent / "static"
