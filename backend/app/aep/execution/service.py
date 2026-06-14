@@ -337,6 +337,21 @@ class ExecutionService:
         )
         return [_execution_to_dict(e) for e in result.scalars().all()]
 
+    async def list_steps(
+        self,
+        execution_id: uuid.UUID,
+        *,
+        db: AsyncSession,
+    ) -> list[dict[str, Any]]:
+        """List all steps for a given execution, ordered by step_index."""
+        await self._get_execution(execution_id, db)
+        result = await db.execute(
+            select(AepExecutionStep)
+            .where(AepExecutionStep.execution_id == execution_id)
+            .order_by(AepExecutionStep.step_index)
+        )
+        return [_step_to_dict(s) for s in result.scalars().all()]
+
     # ── internal helpers ─────────────────────────────────────────────
 
     async def _get_execution(
@@ -390,6 +405,23 @@ def _execution_to_dict(e: AepExecution) -> dict[str, Any]:
         "created_at": e.created_at.isoformat() if e.created_at else None,
         "started_at": e.started_at.isoformat() if e.started_at else None,
         "completed_at": e.completed_at.isoformat() if e.completed_at else None,
+    }
+
+
+def _step_to_dict(s: AepExecutionStep) -> dict[str, Any]:
+    return {
+        "id": str(s.id),
+        "execution_id": str(s.execution_id),
+        "step_index": s.step_index,
+        "agent_name": s.agent_name,
+        "model": s.model,
+        "state": s.state,
+        "error": s.error,
+        "token_input": s.token_input,
+        "token_output": s.token_output,
+        "duration_ms": s.duration_ms,
+        "started_at": s.started_at.isoformat() if s.started_at else None,
+        "completed_at": s.completed_at.isoformat() if s.completed_at else None,
     }
 
 

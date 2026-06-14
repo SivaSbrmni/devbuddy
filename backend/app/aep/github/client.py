@@ -285,6 +285,26 @@ class GitHubAppClient(GitHubClient):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# OAuth implementation
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class OAuthClient(GitHubClient):
+    """GitHub client using an OAuth access token.
+
+    Used when acting on behalf of a logged-in user through the
+    OAuth flow. The token comes from the application's OAuth callback
+    and is stored per-session in the user record.
+    """
+
+    def __init__(self, access_token: str) -> None:
+        self._access_token = access_token
+
+    async def _auth_headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._access_token}"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Error types
 # ─────────────────────────────────────────────────────────────────────────────
 

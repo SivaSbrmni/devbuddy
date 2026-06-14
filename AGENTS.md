@@ -74,12 +74,12 @@ question to the owner via a PR comment or message.
 | Phase | Description                                                            | Status                        | PR        |
 |------:|------------------------------------------------------------------------|-------------------------------|-----------|
 | **0** | Foundation: tables, flags, adapter, plugin registry, `/LLM` stub        | **Shipped (merged)**          | [#1](https://github.com/SivaSbrmni/devbuddy/pull/1) |
-| **1** | LLM Gateway → real Ollama (local + Ollama Cloud)                        | **In progress** (functional, draft PR) | [#2](https://github.com/SivaSbrmni/devbuddy/pull/2) |
-| **2** | GitHub integration: client, webhook receiver, repo registration        | Not started                   | —         |
-| **3** | Single-agent execution: Planner + Coder + GHA Runtime Manager           | Not started                   | —         |
-| **4** | Memory & Context Engine: pgvector, repo indexing, retrieval             | Not started                   | —         |
-| **5** | Remaining agents (Debugger, Tester, Reviewer, Security, Docs, DevOps), Coordinator FSM, full UI | Not started                   | —         |
-| **6** | Hardening: SecretManager, CommandValidator, RBAC, tenant isolation, observability | Not started                   | —         |
+| **1** | LLM Gateway → real Ollama (local + Ollama Cloud)                        | **Shipped (merged)**          | [#2](https://github.com/SivaSbrmni/devbuddy/pull/2) |
+| **2** | GitHub integration: client, webhook receiver, repo registration        | **Shipped (merged)**          | [#8](https://github.com/SivaSbrmni/devbuddy/pull/8) |
+| **3** | Single-agent execution: Planner + Coder + GHA Runtime Manager           | **Shipped (merged)**          | [#8](https://github.com/SivaSbrmni/devbuddy/pull/8) |
+| **4** | Memory & Context Engine: pgvector, repo indexing, retrieval             | **Shipped (merged)**          | [#8](https://github.com/SivaSbrmni/devbuddy/pull/8) |
+| **5** | Remaining agents (Debugger, Tester, Reviewer, Security, Docs, DevOps), Coordinator FSM, full UI | **Shipped (merged)**          | [#8](https://github.com/SivaSbrmni/devbuddy/pull/8), [#9](https://github.com/SivaSbrmni/devbuddy/pull/9) |
+| **6** | Hardening: SecretManager, CommandValidator, RBAC, tenant isolation, observability | **Shipped (merged)**          | [#8](https://github.com/SivaSbrmni/devbuddy/pull/8) |
 
 Spec checklist mapping → see *Part 13* of the spec. Every checked-off
 item in this document corresponds to a checklist line in §13.
@@ -241,7 +241,7 @@ would exceed ~1500 lines of diff.
 
 Spec sections: §8, §13 (rows 7–8). Flags: `webhook_receiver_enabled`.
 
-- [ ] **GitHub client** — `backend/app/aep/github/client.py`. Abstract
+- [x] **GitHub client** — `backend/app/aep/github/client.py`. Abstract
       base + three concrete implementations:
     - `GitHubAppClient` (preferred — installation tokens, 5–15k req/hr)
     - `PersonalAccessTokenClient` (dev-friendly fallback)
@@ -251,22 +251,22 @@ Spec sections: §8, §13 (rows 7–8). Flags: `webhook_receiver_enabled`.
       `list_workflow_runs`, `get_workflow_run_logs`,
       `download_workflow_artifact`, `dispatch_workflow`, …) — see
       spec §8.2.
-- [ ] **Webhook receiver** — `backend/app/aep/api/github_webhooks.py`
+- [x] **Webhook receiver** — `backend/app/aep/api/github_webhooks.py`
       mounted at `/api/v1/aep/webhooks/github`. Verify HMAC signature
       using the per-repo secret stored in `aep_repositories`. Route
       events to an in-process `WebhookEventRouter`. Events to handle
       (spec §8.3): `pull_request`, `push`, `workflow_run`,
       `check_run`, `issue_comment`, `pull_request_review`,
       `installation`, `installation_repositories`.
-- [ ] **Repository registration API** —
+- [x] **Repository registration API** —
       `POST /api/v1/aep/repositories` and friends. Stores rows in
       `aep_repositories`. Validates that the integration credentials
       have the right scopes (`contents:write`, `pull_requests:write`,
       `actions:read`).
-- [ ] Wire `webhook_receiver_enabled` flag.
+- [x] Wire `webhook_receiver_enabled` flag.
 - [ ] Add tests for HMAC verification and the event router (one test
       per event type at minimum).
-- [ ] Document the GitHub App manifest / setup in
+- [x] Document the GitHub App manifest / setup in
       `docs/aep-github-app-setup.md` (referenced from EXTENSIONS.md).
 
 ### Phase 3 — Single-agent execution
@@ -275,7 +275,7 @@ Spec sections: §5, §6 (Planner + Coder only), §13 rows 9–12. Flags:
 `agent_planner_enabled`, `agent_coder_enabled`,
 `github_actions_runtime_enabled`.
 
-- [ ] **GHA Runtime Manager** — `backend/app/aep/gha/runtime.py`.
+- [x] **GHA Runtime Manager** — `backend/app/aep/gha/runtime.py`.
     - YAML generator: takes an `AgentPlan` step and emits a workflow
       file matching the template in spec §5.2.
     - Trigger: pushes the generated workflow to a feature branch and
@@ -284,22 +284,22 @@ Spec sections: §5, §6 (Planner + Coder only), §13 rows 9–12. Flags:
       receiver (Phase 2) and reflects state into `aep_workflow_runs`.
     - Log streaming: download partial logs via the GitHub API and
       stream to WebSocket subscribers (Phase 5 UI).
-- [ ] **Planner agent** —
+- [x] **Planner agent** —
       `backend/app/aep/plugins/agents/planner.py`. Subclasses
       `AgentPlugin`. Takes a raw task description; produces an
       `ExecutionPlan` JSON (spec §6.1 Planner). Uses
       `gemma4:31b-cloud` via the gateway. Persists output to
       `aep_agent_plans`.
-- [ ] **Coding agent** —
+- [x] **Coding agent** —
       `backend/app/aep/plugins/agents/coder.py`. Reads the plan,
       generates diffs/new files, writes a commit, opens a PR via the
       GitHub client. Falls back to `deepseek-coder` per spec §6.1.
-- [ ] **State machine** — implement the FSM transitions in spec §6.2
+- [x] **State machine** — implement the FSM transitions in spec §6.2
       (`PENDING → PLANNING → AWAITING_APPROVAL → EXECUTING → … → DONE
       | FAILED | CANCELLED`). Each transition writes a row to
       `aep_execution_steps` and dispatches
       `pre/post_state_transition` adapter hooks.
-- [ ] **Human-in-the-loop approval gate.** When
+- [x] **Human-in-the-loop approval gate.** When
       `human_approval_required=true` (default), the FSM pauses at
       `AWAITING_APPROVAL` until an admin endpoint approves or rejects
       the plan.
@@ -311,27 +311,27 @@ Spec sections: §5, §6 (Planner + Coder only), §13 rows 9–12. Flags:
 
 Spec sections: §7, §13 rows 16–17. Flags: `memory_system_enabled`.
 
-- [ ] Enable pgvector. Migration `004_pgvector_enable.py`:
+- [x] Enable pgvector. Migration `004_pgvector_enable.py`:
       `CREATE EXTENSION IF NOT EXISTS vector;` (no-op on Supabase /
       Cloud SQL with pgvector pre-enabled).
-- [ ] Migration `005_aep_memory_vectorise.py`: alter
+- [x] Migration `005_aep_memory_vectorise.py`: alter
       `aep_memory_entries.embedding` from `TEXT` to `vector(N)` where
       `N` matches the embedding model dimension (768 for
       `nomic-embed-text`, 1536 for some others). Re-encode existing
       rows during migration; downgrade reverts to TEXT.
-- [ ] **Context Engine** — `backend/app/aep/memory/context_engine.py`.
+- [x] **Context Engine** — `backend/app/aep/memory/context_engine.py`.
     - Repository indexing job: clone, parse AST, summarise files via
       `/LLM/chat` with the Documentation Agent's model, embed via
       `/LLM/embed`, persist to `aep_memory_entries`.
     - Incremental re-index on webhook `push` events.
     - Token-budget-aware retrieval: KNN over embeddings, then
       priority-ranked truncation.
-- [ ] **Memory service** — `backend/app/aep/memory/service.py` with
+- [x] **Memory service** — `backend/app/aep/memory/service.py` with
       typed methods: `store_working_context`, `recall_working_context`,
       `index_repository`, `retrieve_similar`, `store_failure_pattern`,
       `lookup_fix_strategy`. Working context uses Redis with key
       `aep:{tenant_id}:working:{execution_id}`.
-- [ ] Redis dependency: add to docker-compose. Document the cache vs
+- [x] Redis dependency: add to docker-compose. Document the cache vs
       durable split (Redis is per-task scratch; Postgres+pgvector is
       durable).
 
@@ -343,36 +343,36 @@ Coordinator), §6.3, §9, §13 rows 13–24. Flags: `agent_debugger_enabled`,
 `agent_security_audit_enabled`, `agent_documentation_enabled`,
 `agent_devops_enabled`, `multi_agent_enabled`, `autonomous_ui_enabled`.
 
-- [ ] **Debugger agent** — `plugins/agents/debugger.py`. Reads test
+- [x] **Debugger agent** — `plugins/agents/debugger.py`. Reads test
       logs, traces root cause, applies fix patches, iterates up to a
       configurable retry count.
-- [ ] **Tester agent** — `plugins/agents/tester.py`. Writes unit /
+- [x] **Tester agent** — `plugins/agents/tester.py`. Writes unit /
       integration tests; runs them; parses results; reports coverage
       delta.
-- [ ] **Reviewer agent** — `plugins/agents/reviewer.py`. Reviews
+- [x] **Reviewer agent** — `plugins/agents/reviewer.py`. Reviews
       generated diffs; comments on the PR; produces a severity-ranked
       issue list.
-- [ ] **Security Audit agent** — `plugins/agents/security_audit.py`.
+- [x] **Security Audit agent** — `plugins/agents/security_audit.py`.
       Scans for vulnerabilities, secret leakage, injection,
       dependency issues.
-- [ ] **Documentation agent** — `plugins/agents/documentation.py`.
+- [x] **Documentation agent** — `plugins/agents/documentation.py`.
       Uses `mistral:7b` per spec §6.1.
-- [ ] **DevOps agent** — `plugins/agents/devops.py`. Generates or
+- [x] **DevOps agent** — `plugins/agents/devops.py`. Generates or
       modifies CI/CD config, Dockerfiles, infra-as-code.
-- [ ] **Coordinator agent** — `plugins/agents/coordinator.py` +
+- [x] **Coordinator agent** — `plugins/agents/coordinator.py` +
       orchestrator service. Owns the multi-agent DAG, routes
       `AgentMessage` envelopes via Redis pubsub, persists state to
       `aep_executions`.
-- [ ] **Multi-agent coordination protocol** — spec §6.3
+- [x] **Multi-agent coordination protocol** — spec §6.3
       `AgentMessage` schema, shared memory slot, predecessor-output
       reads.
-- [ ] **Frontend module** — `frontend/src/aep/`. Mountable, isolated
+- [x] **Frontend module** — `frontend/src/aep/`. Mountable, isolated
       from existing pages, behind `autonomous_ui_enabled`. Required
       views (spec §9.1): Task Submission, Task Dashboard, Workflow
       Graph, Execution Timeline, Live Log Viewer, Diff Viewer,
       Repository Browser, PR Preview, Memory Inspector, Agent
       Activity Feed, Reasoning Trace, Approval Gate UI.
-- [ ] **Real-time layer** — WebSocket for agent state changes and log
+- [x] **Real-time layer** — WebSocket for agent state changes and log
       streaming; SSE for LLM token streaming in the reasoning trace
       view.
 
@@ -381,25 +381,25 @@ Coordinator), §6.3, §9, §13 rows 13–24. Flags: `agent_debugger_enabled`,
 Spec sections: §10, §11, §13 rows 18–21. Flag: `autonomous_engine_enabled`
 master switch finally flips on by default for opted-in tenants.
 
-- [ ] **SecretManager** — `backend/app/aep/security/secrets.py` with
+- [x] **SecretManager** — `backend/app/aep/security/secrets.py` with
       AES-256 encryption at rest, unified `set/get/rotate/delete`
       interface, integration with GitHub Secrets for workflow
       injection, write metadata to `aep_secrets_metadata`. Never log
       plaintext.
-- [ ] **CommandValidator** —
+- [x] **CommandValidator** —
       `backend/app/aep/security/command_validator.py`. Blocklists
       from spec §10.2. Every shell command injected into a workflow
       YAML passes through this validator and the result is logged to
       `aep_audit_log`.
-- [ ] **RBAC middleware** — `backend/app/aep/security/rbac.py`. Four
+- [x] **RBAC middleware** — `backend/app/aep/security/rbac.py`. Four
       roles (`aep:viewer`, `aep:operator`, `aep:admin`, `aep:system`).
       Integrates with the existing JWT auth via the Compatibility
       Adapter.
-- [ ] **Tenant isolation enforcement.** Add a SQLAlchemy event
+- [x] **Tenant isolation enforcement.** Add a SQLAlchemy event
       listener that asserts every `aep_*` query includes a `tenant_id`
       filter. Add Postgres RLS policies on every `aep_*` table.
       Namespace every Redis key under `aep:{tenant_id}:…`.
-- [ ] **Observability** — metrics (Prometheus), structured logging
+- [x] **Observability** — metrics (Prometheus), structured logging
       (already in place via structlog → Loki), distributed tracing
       (OpenTelemetry) propagated through API → Orchestrator → Agent
       → LLM Gateway → Ollama, and webhook handlers.
