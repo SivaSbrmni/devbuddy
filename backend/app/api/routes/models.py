@@ -88,6 +88,7 @@ async def list_models() -> list[dict[str, Any]]:
         models = [
             {"id": "claude-sonnet-4", "label": "Claude Sonnet 4", "provider": "anthropic", "family": "anthropic"},
             {"id": "qwen3-coder:480b", "label": "Qwen3 Coder", "provider": "ollama", "family": "ollama"},
+            {"id": "mistral-large-3", "label": "Mixtral 3", "provider": "ollama", "family": "ollama"},
         ]
     
     return models

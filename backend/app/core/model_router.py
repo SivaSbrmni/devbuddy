@@ -309,24 +309,23 @@ class ModelRouter:
         start = time.monotonic()
         model = request.model or settings.OLLAMA_MODEL
         resp = await self._ollama_client.post(
-            "/chat",
+            "/chat/completions",
             json={
                 "model": model,
                 "messages": messages,
                 "stream": False,
-                "options": {
-                    "num_predict": min(request.max_tokens, settings.MAX_TOKENS_PER_REQUEST),
-                    "temperature": request.temperature,
-                },
+                "max_tokens": min(request.max_tokens, settings.MAX_TOKENS_PER_REQUEST),
+                "temperature": request.temperature,
             },
         )
         resp.raise_for_status()
         data = resp.json()
         latency = int((time.monotonic() - start) * 1000)
 
-        content = data.get("message", {}).get("content", "")
-        input_tok = data.get("prompt_eval_count", 0)
-        output_tok = data.get("eval_count", 0)
+        content = data["choices"][0]["message"]["content"]
+        usage = data.get("usage", {})
+        input_tok = usage.get("prompt_tokens", 0)
+        output_tok = usage.get("completion_tokens", 0)
 
         return LLMResponse(
             content=content,
@@ -351,15 +350,13 @@ class ModelRouter:
         model = request.model or settings.OLLAMA_MODEL
         async with self._ollama_client.stream(
             "POST",
-            "/chat",
+            "/chat/completions",
             json={
                 "model": model,
                 "messages": messages,
                 "stream": True,
-                "options": {
-                    "num_predict": min(request.max_tokens, settings.MAX_TOKENS_PER_REQUEST),
-                    "temperature": request.temperature,
-                },
+                "max_tokens": min(request.max_tokens, settings.MAX_TOKENS_PER_REQUEST),
+                "temperature": request.temperature,
             },
             timeout=120.0,
         ) as resp:
@@ -368,9 +365,15 @@ class ModelRouter:
                 if not line:
                     continue
                 try:
+                    if line.startswith("data: "):
+                        line = line[6:]
+                    if line == "[DONE]":
+                        break
                     data = json.loads(line)
-                    if "message" in data and "content" in data["message"]:
-                        yield data["message"]["content"]
+                    if "choices" in data and len(data["choices"]) > 0:
+                        delta = data["choices"][0].get("delta", {})
+                        if "content" in delta:
+                            yield delta["content"]
                 except json.JSONDecodeError:
                     continue
 
