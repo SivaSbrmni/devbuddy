@@ -41,11 +41,14 @@ jobs:
           git push hf main:main --force
 
       - name: Sync OLLAMA_API_KEY to HF Space secrets
-        if: ${{ secrets.OLLAMA_API_KEY != '' }}
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
         run: |
+          if [ -z "$OLLAMA_API_KEY" ]; then
+            echo "OLLAMA_API_KEY not set in GitHub secrets — skipping sync"
+            exit 0
+          fi
           pip install -q huggingface_hub
           python3 -c "
           from huggingface_hub import HfApi
