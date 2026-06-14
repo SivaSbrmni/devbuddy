@@ -131,6 +131,21 @@ async def get_execution(
     return ExecutionOut(**result)
 
 
+@router.get("/{execution_id}/steps")
+async def list_execution_steps(
+    execution_id: uuid.UUID,
+    user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """List all steps for an execution."""
+    svc = get_execution_service()
+    try:
+        steps = await svc.list_steps(execution_id, db=db)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Execution not found")
+    return {"steps": steps, "count": len(steps)}
+
+
 @router.post("/{execution_id}/plan", response_model=ExecutionOut)
 async def trigger_planning(
     execution_id: uuid.UUID,
