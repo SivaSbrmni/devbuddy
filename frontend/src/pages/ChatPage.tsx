@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import JSZip from 'jszip'
 
 const BACKEND = import.meta.env.VITE_API_URL || ''
 const API = `${BACKEND}/api/v1`
@@ -21,6 +24,8 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   ts: number
+  steps?: string[]
+  files?: { name: string; content: string }[]
 }
 
 interface Conversation {
@@ -86,6 +91,7 @@ export default function ChatPage() {
   const [model, setModel] = useState(FALLBACK_MODELS[0].id)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -144,7 +150,7 @@ export default function ChatPage() {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     // Create empty assistant message for streaming
-    const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', ts: Date.now() }
+    const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', ts: Date.now(), steps: [], files: [] }
     updateActive([...newMsgs, assistantMsg], title)
 
     try {
@@ -180,9 +186,18 @@ export default function ChatPage() {
               if (data.startsWith('[ERROR]')) {
                 throw new Error(data.slice(7))
               }
-              fullContent += data
-              // Update message with accumulated content
-              updateActive([...newMsgs, { ...assistantMsg, content: fullContent }], title)
+              if (data.startsWith('[STEP]')) {
+                const step = data.slice(7)
+                assistantMsg.steps = [...(assistantMsg.steps || []), step]
+                updateActive([...newMsgs, { ...assistantMsg }], title)
+              } else if (data.startsWith('[FILE]')) {
+                const fileData = JSON.parse(data.slice(6))
+                assistantMsg.files = [...(assistantMsg.files || []), fileData]
+                updateActive([...newMsgs, { ...assistantMsg }], title)
+              } else {
+                fullContent += data
+                updateActive([...newMsgs, { ...assistantMsg, content: fullContent }], title)
+              }
             }
           }
         }
@@ -199,11 +214,91 @@ export default function ChatPage() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
   }
 
+  const downloadFiles = async (files: { name: string; content: string }[]) => {
+    const zip = new JSZip()
+    files.forEach(file => {
+      zip.file(file.name, file.content)
+    })
+    const blob = await zip.generateAsync({ type: 'blob' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `devbuddy-${Date.now()}.zip`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const CodeBlock = ({ children, className, ...props }: any) => {
+    const match = /language-(\w+)/.exec(className || '')
+    const language = match ? match[1] : 'text'
+    return (
+      <div style={{ position: 'relative', marginTop: 8, marginBottom: 8 }}>
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          background: '#2a2d3a',
+          color: '#9ca3af',
+          fontSize: 11,
+          padding: '4px 8px',
+          borderRadius: '0 4px 0 4px',
+          fontFamily: 'monospace'
+        }}>
+          {language}
+        </div>
+        <pre style={{
+          background: '#1a1d27',
+          border: '1px solid #2a2d3a',
+          borderRadius: 8,
+          padding: '12px',
+          overflowX: 'auto',
+          fontSize: 13,
+          lineHeight: 1.5,
+          color: '#e4e6eb'
+        }}>
+          <code className={className} {...props}>{children}</code>
+        </pre>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', background: '#0d0f14', color: '#e4e6eb', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
 
+      {/* ── Mobile overlay ── */}
+      {sidebarOpen && (
+        <div 
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 40,
+            display: window.innerWidth < 768 ? 'block' : 'none'
+          }}
+        />
+      )}
+
       {/* ── Left sidebar ── */}
-      <div style={{ width: 260, background: '#111318', borderRight: '1px solid #1e2130', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      <div style={{
+        width: 260,
+        background: '#111318',
+        borderRight: '1px solid #1e2130',
+        display: 'flex',
+        flexDirection: 'column',
+        flexShrink: 0,
+        position: window.innerWidth < 768 ? 'fixed' : 'relative',
+        left: window.innerWidth < 768 ? (sidebarOpen ? 0 : -260) : 0,
+        top: 0,
+        bottom: 0,
+        zIndex: 50,
+        transition: 'left 0.3s ease'
+      }}>
         {/* Logo */}
         <div style={{ padding: '18px 16px 12px', borderBottom: '1px solid #1e2130' }}>
           <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.5px', background: 'linear-gradient(135deg, #e4e6eb, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>DevBuddy</div>
@@ -244,6 +339,26 @@ export default function ChatPage() {
           </div>
           <button onClick={logout} title="Sign out" style={{ background: 'none', border: 'none', color: '#4b4f63', cursor: 'pointer', fontSize: 16 }}>⏻</button>
         </div>
+
+        {/* Close button for mobile */}
+        {window.innerWidth < 768 && (
+          <button
+            onClick={() => setSidebarOpen(false)}
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              background: 'none',
+              border: 'none',
+              color: '#4b4f63',
+              cursor: 'pointer',
+              fontSize: 20,
+              zIndex: 60
+            }}
+          >
+            ×
+          </button>
+        )}
       </div>
 
       {/* ── Main chat area ── */}
@@ -251,8 +366,24 @@ export default function ChatPage() {
 
         {/* Top bar */}
         <div style={{ padding: '12px 20px', borderBottom: '1px solid #1e2130', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div style={{ fontSize: 14, color: '#9ca3af' }}>
-            {active?.title || 'New conversation'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Hamburger menu for mobile */}
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              style={{
+                display: window.innerWidth < 768 ? 'block' : 'none',
+                background: 'none',
+                border: 'none',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                fontSize: 20
+              }}
+            >
+              ☰
+            </button>
+            <div style={{ fontSize: 14, color: '#9ca3af' }}>
+              {active?.title || 'New conversation'}
+            </div>
           </div>
           {/* Model selector */}
           <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, color: '#c7d2fe', fontSize: 13, padding: '6px 12px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.6 : 1 }}>
@@ -280,7 +411,67 @@ export default function ChatPage() {
                     {msg.role === 'user' ? (user?.picture ? <img src={user.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%' }} /> : 'U') : '🤖'}
                   </div>
                   <div style={{ maxWidth: '80%', background: msg.role === 'user' ? 'rgba(99,102,241,0.1)' : '#1a1d27', border: `1px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.2)' : '#2a2d3a'}`, borderRadius: 12, padding: '12px 16px' }}>
-                    <div style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                    {/* Steps indicator */}
+                    {msg.steps && msg.steps.length > 0 && (
+                      <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #2a2d3a' }}>
+                        <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 6 }}>🔄 Working...</div>
+                        {msg.steps.map((step, i) => (
+                          <div key={i} style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ color: '#6366f1' }}>→</span> {step}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Message content with markdown */}
+                    {msg.role === 'assistant' ? (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          code: CodeBlock,
+                          pre: ({ children }) => <>{children}</>,
+                          p: ({ children }) => <p style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', marginBottom: 8 }}>{children}</p>,
+                          ul: ({ children }) => <ul style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', paddingLeft: 20, marginBottom: 8 }}>{children}</ul>,
+                          ol: ({ children }) => <ol style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', paddingLeft: 20, marginBottom: 8 }}>{children}</ol>,
+                          li: ({ children }) => <li style={{ marginBottom: 4 }}>{children}</li>,
+                          strong: ({ children }) => <strong style={{ color: '#c7d2fe', fontWeight: 600 }}>{children}</strong>,
+                          em: ({ children }) => <em style={{ color: '#a5b4fc' }}>{children}</em>,
+                          a: ({ children, href }) => <a href={href} style={{ color: '#818cf8', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer">{children}</a>,
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    ) : (
+                      <div style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                    )}
+                    
+                    {/* Files download */}
+                    {msg.files && msg.files.length > 0 && (
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #2a2d3a' }}>
+                        <button
+                          onClick={() => downloadFiles(msg.files!)}
+                          style={{
+                            background: 'rgba(99,102,241,0.12)',
+                            border: '1px solid rgba(99,102,241,0.3)',
+                            borderRadius: 6,
+                            color: '#818cf8',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            padding: '6px 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6
+                          }}
+                        >
+                          📦 Download {msg.files.length} file{msg.files.length > 1 ? 's' : ''} as ZIP
+                        </button>
+                        <div style={{ marginTop: 8, fontSize: 11, color: '#4b4f63' }}>
+                          {msg.files.map(f => f.name).join(', ')}
+                        </div>
+                      </div>
+                    )}
+                    
                     <div style={{ fontSize: 11, color: '#4b4f63', marginTop: 6 }}>{new Date(msg.ts).toLocaleTimeString()}</div>
                   </div>
                 </div>
