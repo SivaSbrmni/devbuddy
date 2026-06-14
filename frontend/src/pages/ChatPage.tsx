@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import JSZip from 'jszip'
+import ToastContainer, { toast } from '../components/Toast'
 
 const BACKEND = import.meta.env.VITE_API_URL || ''
 const API = `${BACKEND}/api/v1`
@@ -206,6 +207,7 @@ export default function ChatPage() {
         body: JSON.stringify(payload),
       })
       if (resp.ok) {
+        toast('API keys saved successfully', 'success')
         // Refresh models after saving keys
         const modelsResp = await fetch(`${API}/models?token=${encodeURIComponent(token)}`)
         if (modelsResp.ok) {
@@ -214,9 +216,12 @@ export default function ChatPage() {
           if (data.length > 0) setModel(data[0].id)
         }
         setSettingsOpen(false)
+      } else {
+        toast('Failed to save API keys', 'error')
       }
     } catch (e) {
       console.error('Failed to save keys:', e)
+      toast('Failed to save API keys', 'error')
     } finally {
       setSavingKeys(false)
     }
@@ -379,6 +384,7 @@ export default function ChatPage() {
       abortControllerRef.current = null
     }
     setLoading(false)
+    toast('Request cancelled', 'info')
   }
 
   const searchKnowledge = async () => {
@@ -1159,6 +1165,7 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+      <ToastContainer />
     </div>
   )
 }
