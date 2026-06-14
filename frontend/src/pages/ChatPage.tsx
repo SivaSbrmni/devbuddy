@@ -14,10 +14,7 @@ interface Model {
   family: string
 }
 
-const FALLBACK_MODELS: Model[] = [
-  { id: 'claude-sonnet-4', label: 'Claude Sonnet 4', provider: 'anthropic', family: 'anthropic' },
-  { id: 'qwen3-coder:480b', label: 'Qwen3 Coder', provider: 'ollama', family: 'ollama' },
-]
+const FALLBACK_MODELS: Model[] = []
 
 interface Message {
   id: string
@@ -108,6 +105,13 @@ export default function ChatPage() {
   const [agentMode, setAgentMode] = useState(false)
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
   const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([])
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [providerKeys, setProviderKeys] = useState({
+    anthropic: { key: '', base_url: '' },
+    ollama: { key: '', base_url: '' },
+    llama: { key: '', base_url: '' },
+  })
+  const [savingKeys, setSavingKeys] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -122,17 +126,19 @@ export default function ChatPage() {
     if (!activeId && !loading) createNew()
   }, [])
 
-  // Fetch models on mount
+  // Fetch models and user settings on mount
   useEffect(() => {
+    const token = localStorage.getItem('devbuddy_token') || ''
+
     const fetchModels = async () => {
       try {
         setModelsLoading(true)
-        const resp = await fetch(`${API}/models`)
+        const resp = await fetch(`${API}/models?token=${encodeURIComponent(token)}`)
         if (resp.ok) {
           const data = await resp.json()
-          setModels(data)
-          if (data.length > 0 && !models.find(m => m.id === model)) {
-            setModel(data[0].id)
+          setModels(data.length > 0 ? data : [])
+          if (data.length > 0) {
+            setModel(prev => data.find((m: Model) => m.id === prev) ? prev : data[0].id)
           }
         }
       } catch (e) {
@@ -141,7 +147,26 @@ export default function ChatPage() {
         setModelsLoading(false)
       }
     }
+
+    const fetchSettings = async () => {
+      try {
+        const resp = await fetch(`${API}/settings?token=${encodeURIComponent(token)}`)
+        if (resp.ok) {
+          const data = await resp.json()
+          const p = data.providers || {}
+          setProviderKeys({
+            anthropic: { key: p.anthropic?.configured ? '••••••••' : '', base_url: p.anthropic?.base_url || '' },
+            ollama: { key: p.ollama?.configured ? '••••••••' : '', base_url: p.ollama?.base_url || '' },
+            llama: { key: p.llama?.configured ? '••••••••' : '', base_url: p.llama?.base_url || '' },
+          })
+        }
+      } catch (e) {
+        console.error('Failed to fetch settings:', e)
+      }
+    }
+
     fetchModels()
+    fetchSettings()
   }, [])
 
   // Fetch MCP tools on mount
@@ -159,6 +184,43 @@ export default function ChatPage() {
     }
     fetchMcpTools()
   }, [])
+
+  const saveProviderKeys = async () => {
+    const token = localStorage.getItem('devbuddy_token') || ''
+    setSavingKeys(true)
+    try {
+      const payload: any = {}
+      if (providerKeys.anthropic.key && providerKeys.anthropic.key !== '••••••••') {
+        payload.anthropic = providerKeys.anthropic
+      }
+      if (providerKeys.ollama.key && providerKeys.ollama.key !== '••••••••') {
+        payload.ollama = providerKeys.ollama
+      }
+      if (providerKeys.llama.key && providerKeys.llama.key !== '••••••••') {
+        payload.llama = providerKeys.llama
+      }
+
+      const resp = await fetch(`${API}/settings?token=${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (resp.ok) {
+        // Refresh models after saving keys
+        const modelsResp = await fetch(`${API}/models?token=${encodeURIComponent(token)}`)
+        if (modelsResp.ok) {
+          const data = await modelsResp.json()
+          setModels(data)
+          if (data.length > 0) setModel(data[0].id)
+        }
+        setSettingsOpen(false)
+      }
+    } catch (e) {
+      console.error('Failed to save keys:', e)
+    } finally {
+      setSavingKeys(false)
+    }
+  }
 
   const autoResize = () => {
     const el = textareaRef.current
@@ -584,13 +646,28 @@ export default function ChatPage() {
               <span style={{ fontSize: 14 }}>{agentMode ? '⚡' : '💬'}</span>
               {agentMode ? 'Agent' : 'Chat'}
             </button>
-            {/* User profile */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 12, borderLeft: '1px solid #2a2d3a' }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #818cf8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'white' }}>
-                {user?.email?.[0]?.toUpperCase() || 'U'}
-              </div>
-              <button onClick={logout} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 11, cursor: 'pointer' }}>Logout</button>
-            </div>
+            {/* Settings */}
+            <button
+              onClick={() => setSettingsOpen(true)}
+              style={{
+                background: 'transparent',
+                border: '1px solid #2a2d3a',
+                borderRadius: 8,
+                color: '#9ca3af',
+                fontSize: 12,
+                padding: '5px 10px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+            >
+              <span style={{ fontSize: 13 }}>⚙️</span>
+              Setup
+            </button>
+
+            {/* Logout */}
+            <button onClick={logout} title="Sign out" style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 11, cursor: 'pointer', padding: '6px 8px' }}>Logout</button>
           </div>
         </div>
 
@@ -781,6 +858,133 @@ export default function ChatPage() {
             </div>
           )}
         </div>
+
+        {/* Settings modal */}
+        {settingsOpen && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 100,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20
+          }} onClick={() => setSettingsOpen(false)}>
+            <div style={{
+              background: '#111318',
+              border: '1px solid #2a2d3a',
+              borderRadius: 16,
+              padding: '24px 28px',
+              maxWidth: 520,
+              width: '100%',
+              maxHeight: '85vh',
+              overflowY: 'auto',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
+            }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <h2 style={{ margin: 0, fontSize: 18, color: '#e4e6eb', fontWeight: 700 }}>LLM Provider Setup</h2>
+                <button onClick={() => setSettingsOpen(false)} style={{ background: 'none', border: 'none', color: '#4b4f63', cursor: 'pointer', fontSize: 20 }}>×</button>
+              </div>
+              <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
+                Add your API keys to unlock LLM providers. Keys are encrypted at rest. You can also override the default API base URL for each provider.
+              </p>
+
+              {[
+                { id: 'anthropic', name: 'Anthropic', icon: '🅰️', placeholder: 'sk-ant-api03-...', defaultUrl: 'https://api.anthropic.com' },
+                { id: 'ollama', name: 'Ollama', icon: '🦙', placeholder: 'Optional — leave empty for local', defaultUrl: 'http://localhost:11434' },
+                { id: 'llama', name: 'Llama API', icon: '🦙', placeholder: 'Bearer token...', defaultUrl: 'https://api.llama.com/v1' },
+              ].map(provider => (
+                <div key={provider.id} style={{ marginBottom: 20, padding: 16, background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <span style={{ fontSize: 16 }}>{provider.icon}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: '#c7d2fe' }}>{provider.name}</span>
+                    {providerKeys[provider.id as keyof typeof providerKeys].key === '••••••••' && (
+                      <span style={{ fontSize: 11, color: '#34d399', background: 'rgba(16,185,129,0.1)', padding: '2px 8px', borderRadius: 4 }}>Configured</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div>
+                      <label style={{ fontSize: 11, color: '#4b4f63', marginBottom: 4, display: 'block' }}>API Key</label>
+                      <input
+                        type="password"
+                        value={providerKeys[provider.id as keyof typeof providerKeys].key}
+                        onChange={e => setProviderKeys(prev => ({ ...prev, [provider.id]: { ...prev[provider.id as keyof typeof prev], key: e.target.value } }))}
+                        placeholder={provider.placeholder}
+                        style={{
+                          width: '100%',
+                          background: '#111318',
+                          border: '1px solid #2a2d3a',
+                          borderRadius: 8,
+                          padding: '8px 12px',
+                          color: '#e4e6eb',
+                          fontSize: 13,
+                          outline: 'none',
+                          fontFamily: 'monospace'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, color: '#4b4f63', marginBottom: 4, display: 'block' }}>Base URL (optional)</label>
+                      <input
+                        type="text"
+                        value={providerKeys[provider.id as keyof typeof providerKeys].base_url}
+                        onChange={e => setProviderKeys(prev => ({ ...prev, [provider.id]: { ...prev[provider.id as keyof typeof prev], base_url: e.target.value } }))}
+                        placeholder={provider.defaultUrl}
+                        style={{
+                          width: '100%',
+                          background: '#111318',
+                          border: '1px solid #2a2d3a',
+                          borderRadius: 8,
+                          padding: '8px 12px',
+                          color: '#e4e6eb',
+                          fontSize: 13,
+                          outline: 'none',
+                          fontFamily: 'monospace'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
+                <button
+                  onClick={() => setSettingsOpen(false)}
+                  style={{
+                    padding: '8px 16px',
+                    background: 'transparent',
+                    border: '1px solid #2a2d3a',
+                    borderRadius: 8,
+                    color: '#9ca3af',
+                    fontSize: 13,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveProviderKeys}
+                  disabled={savingKeys}
+                  style={{
+                    padding: '8px 20px',
+                    background: 'linear-gradient(135deg, #6366f1, #818cf8)',
+                    border: 'none',
+                    borderRadius: 8,
+                    color: 'white',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: savingKeys ? 'not-allowed' : 'pointer',
+                    opacity: savingKeys ? 0.7 : 1
+                  }}
+                >
+                  {savingKeys ? 'Saving...' : 'Save Keys'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Input area */}
         <div style={{ padding: '16px 20px 20px', borderTop: '1px solid #1e2130', flexShrink: 0, position: 'relative' }}>

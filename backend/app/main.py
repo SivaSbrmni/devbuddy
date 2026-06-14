@@ -22,6 +22,7 @@ from app.api.routes.memory import router as memory_router
 from app.api.routes.metrics import router as metrics_router
 from app.api.routes.mcp import router as mcp_router
 from app.api.routes.models import router as models_router
+from app.api.routes.settings import router as settings_router
 from app.api.routes.projects import router as projects_router
 from app.api.routes.skills import router as skills_router
 from app.api.routes.workspace import router as workspace_router
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import app.models.task  # noqa: F401
     import app.models.execution  # noqa: F401
     import app.models.memory  # noqa: F401
+    import app.models.user_settings  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -106,6 +108,7 @@ app.include_router(chat_router, prefix=settings.API_PREFIX)
 app.include_router(agent_router, prefix=settings.API_PREFIX)
 app.include_router(knowledge_router, prefix=settings.API_PREFIX)
 app.include_router(mcp_router, prefix=settings.API_PREFIX)
+app.include_router(settings_router, prefix=settings.API_PREFIX)
 
 # Serve pre-built React frontend as static files
 _static_dir = Path(__file__).resolve().parent.parent / "static"
