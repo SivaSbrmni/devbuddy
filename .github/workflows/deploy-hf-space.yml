@@ -40,22 +40,22 @@ jobs:
           git push hf main:main --force
 
       - name: Wait for HF Space to rebuild
-        run: sleep 60
+        run: sleep 180
 
       - name: Smoke test backend health
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          for i in $(seq 1 10); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          for i in $(seq 1 20); do
+            STATUS=$(curl --max-time 10 --connect-timeout 10 -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer $HF_TOKEN" \
               https://sivasbrmni-devbuddy.hf.space/health || true)
             if [ "$STATUS" = "200" ]; then
               echo "Backend is healthy!"
               exit 0
             fi
-            echo "Attempt $i/10 — backend not ready yet (status: $STATUS), waiting 15s..."
-            sleep 15
+            echo "Attempt $i/20 — backend not ready yet (status: $STATUS), waiting 20s..."
+            sleep 20
           done
           echo "Smoke test failed — backend did not become healthy in time"
           exit 1
