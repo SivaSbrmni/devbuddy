@@ -97,6 +97,8 @@ export default function ChatPage() {
   const [knowledgeQuery, setKnowledgeQuery] = useState('')
   const [knowledgeResults, setKnowledgeResults] = useState<any[]>([])
   const [mcpTools, setMcpTools] = useState<any[]>([])
+  const [activeTab, setActiveTab] = useState<'activity' | 'llm' | 'mcps' | 'files'>('activity')
+  const abortControllerRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -170,6 +172,9 @@ export default function ChatPage() {
     setLoading(true)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
+    // Create abort controller for this request
+    abortControllerRef.current = new AbortController()
+
     // Create empty assistant message for streaming
     const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', ts: Date.now(), steps: [], files: [] }
     updateActive([...newMsgs, assistantMsg], title)
@@ -179,9 +184,10 @@ export default function ChatPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: conv.messages.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
+          messages: newMsgs.map(m => ({ role: m.role, content: m.content })),
           model,
         }),
+        signal: abortControllerRef.current.signal,
       })
 
       if (!resp.ok) {
@@ -224,10 +230,13 @@ export default function ChatPage() {
         }
       }
     } catch (e) {
-      const errorMsg = `Error: ${e instanceof Error ? e.message : 'Failed to connect'}`
+      const errorMsg = e instanceof Error && e.name === 'AbortError' 
+        ? 'Request cancelled' 
+        : `Error: ${e instanceof Error ? e.message : 'Failed to connect'}`
       updateActive([...newMsgs, { ...assistantMsg, content: errorMsg }], title)
     } finally {
       setLoading(false)
+      abortControllerRef.current = null
       
       // Extract knowledge from conversation after completion
       if (active && active.messages.length > 2) {
@@ -245,6 +254,14 @@ export default function ChatPage() {
         }
       }
     }
+  }
+
+  const cancelRequest = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    setLoading(false)
   }
 
   const searchKnowledge = async () => {
@@ -459,6 +476,36 @@ export default function ChatPage() {
             <div style={{ fontSize: 14, color: '#9ca3af' }}>
               {active?.title || 'New conversation'}
             </div>
+            {/* Tab buttons */}
+            <div style={{ display: 'flex', gap: 4, marginLeft: 16 }}>
+              {[
+                { id: 'activity' as const, label: 'Activity', icon: '💬' },
+                { id: 'llm' as const, label: 'LLM', icon: '🧠' },
+                { id: 'mcps' as const, label: 'MCPs', icon: '🔧' },
+                { id: 'files' as const, label: 'Files', icon: '📁' },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    background: activeTab === tab.id ? 'rgba(99,102,241,0.15)' : 'transparent',
+                    border: activeTab === tab.id ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
+                    borderRadius: 6,
+                    color: activeTab === tab.id ? '#818cf8' : '#6b7280',
+                    fontSize: 11,
+                    fontWeight: activeTab === tab.id ? 600 : 400,
+                    padding: '4px 10px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {tab.icon} {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* Knowledge button */}
@@ -491,10 +538,13 @@ export default function ChatPage() {
             >
               🔧 Tools
             </button>
-            {/* Model selector */}
-            <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, color: '#c7d2fe', fontSize: 13, padding: '6px 12px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.6 : 1 }}>
-              {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
+            {/* User profile */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 12, borderLeft: '1px solid #2a2d3a' }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #818cf8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'white' }}>
+                {user?.email?.[0]?.toUpperCase() || 'U'}
+              </div>
+              <button onClick={logout} style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 11, cursor: 'pointer' }}>Logout</button>
+            </div>
           </div>
         </div>
 
@@ -601,100 +651,128 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Messages */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0' }}>
-          {messages.length === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 24 }}>
-              <div style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-2px', background: 'linear-gradient(135deg, #e4e6eb, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>DevBuddy</div>
-              <p style={{ color: '#6b7280', fontSize: 16, textAlign: 'center', maxWidth: 400 }}>Describe what you want to build and I'll handle the rest.</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 500 }}>
-                {['Build a REST API with FastAPI', 'Create a React dashboard', 'Set up a CI/CD pipeline', 'Debug my Python code'].map(s => (
-                  <button key={s} onClick={() => { setInput(s); textareaRef.current?.focus() }} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, padding: '8px 14px', color: '#9ca3af', fontSize: 13, cursor: 'pointer' }}>{s}</button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 20px' }}>
-              {messages.map(msg => (
-                <div key={msg.id} style={{ marginBottom: 24, display: 'flex', gap: 12, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, background: msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'rgba(16,185,129,0.15)', color: msg.role === 'user' ? '#818cf8' : '#34d399' }}>
-                    {msg.role === 'user' ? (user?.picture ? <img src={user.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%' }} /> : 'U') : '🤖'}
-                  </div>
-                  <div style={{ maxWidth: '80%', background: msg.role === 'user' ? 'rgba(99,102,241,0.1)' : '#1a1d27', border: `1px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.2)' : '#2a2d3a'}`, borderRadius: 12, padding: '12px 16px' }}>
-                    {/* Steps indicator */}
-                    {msg.steps && msg.steps.length > 0 && (
-                      <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #2a2d3a' }}>
-                        <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 6 }}>🔄 Working...</div>
-                        {msg.steps.map((step, i) => (
-                          <div key={i} style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ color: '#6366f1' }}>→</span> {step}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* Message content with markdown */}
-                    {msg.role === 'assistant' ? (
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          code: CodeBlock,
-                          pre: ({ children }) => <>{children}</>,
-                          p: ({ children }) => <p style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', marginBottom: 8 }}>{children}</p>,
-                          ul: ({ children }) => <ul style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', paddingLeft: 20, marginBottom: 8 }}>{children}</ul>,
-                          ol: ({ children }) => <ol style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', paddingLeft: 20, marginBottom: 8 }}>{children}</ol>,
-                          li: ({ children }) => <li style={{ marginBottom: 4 }}>{children}</li>,
-                          strong: ({ children }) => <strong style={{ color: '#c7d2fe', fontWeight: 600 }}>{children}</strong>,
-                          em: ({ children }) => <em style={{ color: '#a5b4fc' }}>{children}</em>,
-                          a: ({ children, href }) => <a href={href} style={{ color: '#818cf8', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer">{children}</a>,
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    ) : (
-                      <div style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
-                    )}
-                    
-                    {/* Files download */}
-                    {msg.files && msg.files.length > 0 && (
-                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #2a2d3a' }}>
-                        <button
-                          onClick={() => downloadFiles(msg.files!)}
-                          style={{
-                            background: 'rgba(99,102,241,0.12)',
-                            border: '1px solid rgba(99,102,241,0.3)',
-                            borderRadius: 6,
-                            color: '#818cf8',
-                            fontSize: 12,
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            padding: '6px 12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6
-                          }}
-                        >
-                          📦 Download {msg.files.length} file{msg.files.length > 1 ? 's' : ''} as ZIP
-                        </button>
-                        <div style={{ marginTop: 8, fontSize: 11, color: '#4b4f63' }}>
-                          {msg.files.map(f => f.name).join(', ')}
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div style={{ fontSize: 11, color: '#4b4f63', marginTop: 6 }}>{new Date(msg.ts).toLocaleTimeString()}</div>
+        {/* Tab content */}
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {activeTab === 'activity' && (
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0' }}>
+              {messages.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 24 }}>
+                  <div style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-2px', background: 'linear-gradient(135deg, #e4e6eb, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>DevBuddy</div>
+                  <p style={{ color: '#6b7280', fontSize: 16, textAlign: 'center', maxWidth: 400 }}>Describe what you want to build and I'll handle the rest.</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 500 }}>
+                    {['Build a REST API with FastAPI', 'Create a React dashboard', 'Set up a CI/CD pipeline', 'Debug my Python code'].map(s => (
+                      <button key={s} onClick={() => { setInput(s); textareaRef.current?.focus() }} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, padding: '8px 14px', color: '#9ca3af', fontSize: 13, cursor: 'pointer' }}>{s}</button>
+                    ))}
                   </div>
                 </div>
-              ))}
-              {loading && (
-                <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div>
-                  <div style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 12, padding: '14px 18px', display: 'flex', gap: 6, alignItems: 'center' }}>
-                    {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1', animation: `pulse 1.2s ${i*0.2}s infinite` }} />)}
-                  </div>
+              ) : (
+                <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 20px' }}>
+                  {messages.map(msg => (
+                    <div key={msg.id} style={{ marginBottom: 24, display: 'flex', gap: 12, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, background: msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'rgba(16,185,129,0.15)', color: msg.role === 'user' ? '#818cf8' : '#34d399' }}>
+                        {msg.role === 'user' ? (user?.picture ? <img src={user.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%' }} /> : 'U') : '🤖'}
+                      </div>
+                      <div style={{ maxWidth: '80%', background: msg.role === 'user' ? 'rgba(99,102,241,0.1)' : '#1a1d27', border: `1px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.2)' : '#2a2d3a'}`, borderRadius: 12, padding: '12px 16px' }}>
+                        {msg.steps && msg.steps.length > 0 && (
+                          <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #2a2d3a' }}>
+                            <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 6 }}>🔄 Working...</div>
+                            {msg.steps.map((step, i) => (
+                              <div key={i} style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ color: '#6366f1' }}>→</span> {step}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {msg.role === 'assistant' ? (
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              code: CodeBlock,
+                              pre: ({ children }) => <>{children}</>,
+                              p: ({ children }) => <p style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', marginBottom: 8 }}>{children}</p>,
+                              ul: ({ children }) => <ul style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', paddingLeft: 20, marginBottom: 8 }}>{children}</ul>,
+                              ol: ({ children }) => <ol style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', paddingLeft: 20, marginBottom: 8 }}>{children}</ol>,
+                              li: ({ children }) => <li style={{ marginBottom: 4 }}>{children}</li>,
+                              strong: ({ children }) => <strong style={{ color: '#c7d2fe', fontWeight: 600 }}>{children}</strong>,
+                              em: ({ children }) => <em style={{ color: '#a5b4fc' }}>{children}</em>,
+                              a: ({ children, href }) => <a href={href} style={{ color: '#818cf8', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer">{children}</a>,
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                        ) : (
+                          <div style={{ fontSize: 14, lineHeight: 1.6, color: '#e4e6eb', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                        )}
+                        {msg.files && msg.files.length > 0 && (
+                          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #2a2d3a' }}>
+                            <button
+                              onClick={() => downloadFiles(msg.files!)}
+                              style={{
+                                background: 'rgba(99,102,241,0.12)',
+                                border: '1px solid rgba(99,102,241,0.3)',
+                                borderRadius: 6,
+                                color: '#818cf8',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                padding: '6px 12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6
+                              }}
+                            >
+                              📦 Download {msg.files.length} file{msg.files.length > 1 ? 's' : ''} as ZIP
+                            </button>
+                            <div style={{ marginTop: 8, fontSize: 11, color: '#4b4f63' }}>
+                              {msg.files.map(f => f.name).join(', ')}
+                            </div>
+                          </div>
+                        )}
+                        <div style={{ fontSize: 11, color: '#4b4f63', marginTop: 6 }}>{new Date(msg.ts).toLocaleTimeString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {loading && (
+                    <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div>
+                      <div style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 12, padding: '14px 18px', display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1', animation: `pulse 1.2s ${i*0.2}s infinite` }} />)}
+                      </div>
+                    </div>
+                  )}
+                  <div ref={bottomRef} />
                 </div>
               )}
-              <div ref={bottomRef} />
+            </div>
+          )}
+          
+          {activeTab === 'llm' && (
+            <div style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+              <div style={{ textAlign: 'center', color: '#6b7280' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>🧠</div>
+                <div style={{ fontSize: 14, marginBottom: 4 }}>LLM Call History</div>
+                <div style={{ fontSize: 12 }}>Coming soon - will show LLM API calls with metadata</div>
+              </div>
+            </div>
+          )}
+          
+          {activeTab === 'mcps' && (
+            <div style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+              <div style={{ textAlign: 'center', color: '#6b7280' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>🔧</div>
+                <div style={{ fontSize: 14, marginBottom: 4 }}>MCP Tool Calls</div>
+                <div style={{ fontSize: 12 }}>Coming soon - will show MCP tool execution history</div>
+              </div>
+            </div>
+          )}
+          
+          {activeTab === 'files' && (
+            <div style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+              <div style={{ textAlign: 'center', color: '#6b7280' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>📁</div>
+                <div style={{ fontSize: 14, marginBottom: 4 }}>Generated Files</div>
+                <div style={{ fontSize: 12 }}>Coming soon - will show all generated files with download options</div>
+              </div>
             </div>
           )}
         </div>
@@ -711,12 +789,29 @@ export default function ChatPage() {
               rows={1}
               style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#e4e6eb', fontSize: 14, lineHeight: 1.5, resize: 'none', maxHeight: 200, fontFamily: 'inherit', overflowY: 'auto' }}
             />
-            <button onClick={send} disabled={!input.trim() || loading} style={{ padding: '8px 16px', background: input.trim() && !loading ? 'linear-gradient(135deg, #6366f1, #818cf8)' : '#2a2d3a', border: 'none', borderRadius: 8, color: input.trim() && !loading ? 'white' : '#4b4f63', fontSize: 14, fontWeight: 600, cursor: input.trim() && !loading ? 'pointer' : 'not-allowed', flexShrink: 0 }}>
-              {loading ? '...' : '↑'}
+            <button 
+              onClick={loading ? cancelRequest : send} 
+              disabled={!input.trim() && !loading} 
+              style={{ 
+                padding: '8px 16px', 
+                background: loading ? 'rgba(239,68,68,0.15)' : (input.trim() ? 'linear-gradient(135deg, #6366f1, #818cf8)' : '#2a2d3a'), 
+                border: loading ? '1px solid rgba(239,68,68,0.3)' : 'none', 
+                borderRadius: 8, 
+                color: loading ? '#f87171' : (input.trim() ? 'white' : '#4b4f63'), 
+                fontSize: 14, 
+                fontWeight: 600, 
+                cursor: (input.trim() || loading) ? 'pointer' : 'not-allowed', 
+                flexShrink: 0 
+              }}
+            >
+              {loading ? '✕ Stop' : '↑'}
             </button>
           </div>
-          <div style={{ maxWidth: 760, margin: '8px auto 0', fontSize: 11, color: '#4b4f63', textAlign: 'center' }}>
-            Enter to send · Shift+Enter for new line · Model: {models.find(m => m.id === model)?.label || 'Loading...'}
+          <div style={{ maxWidth: 760, margin: '8px auto 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: '#4b4f63' }}>
+            <span>Enter to send · Shift+Enter for new line</span>
+            <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 6, color: '#c7d2fe', fontSize: 11, padding: '4px 8px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.6 : 1 }}>
+              {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
           </div>
         </div>
       </div>
