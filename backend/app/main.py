@@ -7,16 +7,18 @@ from typing import AsyncGenerator
 
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.auth import router as auth_router
+from app.api.routes.chat import router as chat_router
 from app.api.routes.execution import router as execution_router
 from app.api.routes.health import router as health_router
 from app.api.routes.memory import router as memory_router
 from app.api.routes.metrics import router as metrics_router
+from app.api.routes.models import router as models_router
 from app.api.routes.projects import router as projects_router
 from app.api.routes.skills import router as skills_router
 from app.api.routes.workspace import router as workspace_router
@@ -96,6 +98,8 @@ app.include_router(skills_router, prefix=settings.API_PREFIX)
 app.include_router(execution_router, prefix=settings.API_PREFIX)
 app.include_router(workspace_router, prefix=settings.API_PREFIX)
 app.include_router(metrics_router, prefix=settings.API_PREFIX)
+app.include_router(models_router, prefix=settings.API_PREFIX)
+app.include_router(chat_router, prefix=settings.API_PREFIX)
 
 # Serve pre-built React frontend as static files
 _static_dir = Path(__file__).resolve().parent.parent / "static"
@@ -105,6 +109,10 @@ if _static_dir.is_dir():
     @app.get("/{full_path:path}")
     async def _spa_fallback(request: Request, full_path: str) -> FileResponse:
         """Serve index.html for any non-API route (SPA client-side routing)."""
+        # Don't intercept API routes
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+        
         file_path = _static_dir / full_path
         if file_path.is_file():
             return FileResponse(file_path)

@@ -4,10 +4,16 @@ import { useAuth } from '../context/AuthContext'
 const BACKEND = import.meta.env.VITE_API_URL || ''
 const API = `${BACKEND}/api/v1`
 
-const MODELS = [
-  { id: 'claude-sonnet-4', label: 'Claude Sonnet 4' },
-  { id: 'llama-4-scout', label: 'Llama 4 Scout' },
-  { id: 'qwen3-coder', label: 'Qwen3 Coder' },
+interface Model {
+  id: string
+  label: string
+  provider: string
+  family: string
+}
+
+const FALLBACK_MODELS: Model[] = [
+  { id: 'claude-sonnet-4', label: 'Claude Sonnet 4', provider: 'anthropic', family: 'anthropic' },
+  { id: 'qwen3-coder:480b', label: 'Qwen3 Coder', provider: 'ollama', family: 'ollama' },
 ]
 
 interface Message {
@@ -75,7 +81,9 @@ function useConversations() {
 export default function ChatPage() {
   const { user, logout } = useAuth()
   const { convs, active, activeId, createNew, updateActive, selectConv, deleteConv } = useConversations()
-  const [model, setModel] = useState(MODELS[0].id)
+  const [models, setModels] = useState<Model[]>(FALLBACK_MODELS)
+  const [modelsLoading, setModelsLoading] = useState(true)
+  const [model, setModel] = useState(FALLBACK_MODELS[0].id)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -89,6 +97,28 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!activeId && !loading) createNew()
+  }, [])
+
+  // Fetch models on mount
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        setModelsLoading(true)
+        const resp = await fetch(`${API}/models`)
+        if (resp.ok) {
+          const data = await resp.json()
+          setModels(data)
+          if (data.length > 0 && !models.find(m => m.id === model)) {
+            setModel(data[0].id)
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch models:', e)
+      } finally {
+        setModelsLoading(false)
+      }
+    }
+    fetchModels()
   }, [])
 
   const autoResize = () => {
@@ -113,29 +143,53 @@ export default function ChatPage() {
     setLoading(true)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
+    // Create empty assistant message for streaming
+    const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', ts: Date.now() }
+    updateActive([...newMsgs, assistantMsg], title)
+
     try {
-      const token = localStorage.getItem('devbuddy_token') || ''
-      const resp = await fetch(`${API}/projects`, {
+      const resp = await fetch(`${API}/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: title, description: text, model_preference: model }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: conv.messages.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
+          model,
+        }),
       })
-      let replyContent = ''
-      if (resp.ok) {
-        const data = await resp.json()
-        replyContent = `Project **${data.name}** created (id: \`${data.id}\`). I'm analyzing your requirements and will begin planning the implementation.\n\n**Requirement Analysis:**\n- Task: ${text}\n- Model: ${MODELS.find(m => m.id === model)?.label}\n- Next: Breaking down into subtasks...`
-      } else {
-        replyContent = `Understood. I'll help you with: *${text}*\n\nI'm analyzing your requirements and preparing an action plan. What technology stack would you like to use?`
+
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`)
       }
-      const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: replyContent, ts: Date.now() }
-      updateActive([...newMsgs, assistantMsg], title)
-    } catch {
-      const assistantMsg: Message = {
-        id: crypto.randomUUID(), role: 'assistant',
-        content: `Got it — working on: *${text}*\n\nConnecting to backend... (make sure backend is running at ${BACKEND})`,
-        ts: Date.now(),
+
+      const reader = resp.body?.getReader()
+      const decoder = new TextDecoder()
+      let fullContent = ''
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const chunk = decoder.decode(value, { stream: true })
+          const lines = chunk.split('\n')
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6)
+              if (data === '[DONE]') break
+              if (data.startsWith('[ERROR]')) {
+                throw new Error(data.slice(7))
+              }
+              fullContent += data
+              // Update message with accumulated content
+              updateActive([...newMsgs, { ...assistantMsg, content: fullContent }], title)
+            }
+          }
+        }
       }
-      updateActive([...newMsgs, assistantMsg], title)
+    } catch (e) {
+      const errorMsg = `Error: ${e instanceof Error ? e.message : 'Failed to connect'}`
+      updateActive([...newMsgs, { ...assistantMsg, content: errorMsg }], title)
     } finally {
       setLoading(false)
     }
@@ -201,8 +255,8 @@ export default function ChatPage() {
             {active?.title || 'New conversation'}
           </div>
           {/* Model selector */}
-          <select value={model} onChange={e => setModel(e.target.value)} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, color: '#c7d2fe', fontSize: 13, padding: '6px 12px', cursor: 'pointer', outline: 'none' }}>
-            {MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+          <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, color: '#c7d2fe', fontSize: 13, padding: '6px 12px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.6 : 1 }}>
+            {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
           </select>
         </div>
 
@@ -261,7 +315,7 @@ export default function ChatPage() {
             </button>
           </div>
           <div style={{ maxWidth: 760, margin: '8px auto 0', fontSize: 11, color: '#4b4f63', textAlign: 'center' }}>
-            Enter to send · Shift+Enter for new line · Model: {MODELS.find(m => m.id === model)?.label}
+            Enter to send · Shift+Enter for new line · Model: {models.find(m => m.id === model)?.label || 'Loading...'}
           </div>
         </div>
       </div>

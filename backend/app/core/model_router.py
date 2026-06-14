@@ -10,6 +10,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -106,6 +107,8 @@ class LLMRequest:
     temperature: float = 0.0
     project_id: str | None = None
     task_id: str | None = None
+    model: str | None = None  # Per-request model override
+    provider: str | None = None  # Per-request provider override
 
 
 # Rough cost estimates per 1M tokens
@@ -155,6 +158,11 @@ class ModelRouter:
         return TASK_TIER_MAP.get(category, ModelTier.ENGINEER)
 
     async def complete(self, request: LLMRequest) -> LLMResponse:
+        # If provider/model specified, bypass tier routing
+        if request.provider:
+            log.info("model_router.override", provider=request.provider, model=request.model)
+            return await self._call_provider(request, request.provider)
+        
         tier = self._select_tier(request.task_category)
         log.info("model_router.routing", tier=tier.value, category=request.task_category.value)
 
@@ -187,13 +195,25 @@ class ModelRouter:
             return await self._call_ollama(request)
         raise ValueError(f"Unknown provider: {provider}")
 
+    async def _call_provider_stream(self, request: LLMRequest, provider: str):
+        """Yield text deltas for streaming responses."""
+        if provider == "anthropic":
+            async for delta in self._call_anthropic_stream(request):
+                yield delta
+        elif provider == "ollama":
+            async for delta in self._call_ollama_stream(request):
+                yield delta
+        else:
+            raise ValueError(f"Streaming not supported for provider: {provider}")
+
     async def _call_anthropic(self, request: LLMRequest) -> LLMResponse:
         if not self._anthropic:
             raise RuntimeError("Anthropic client not configured")
 
         start = time.monotonic()
+        model = request.model or settings.ANTHROPIC_MODEL
         kwargs: dict[str, Any] = {
-            "model": settings.ANTHROPIC_MODEL,
+            "model": model,
             "max_tokens": min(request.max_tokens, settings.MAX_TOKENS_PER_REQUEST),
             "messages": request.messages,
             "temperature": request.temperature,
@@ -210,12 +230,32 @@ class ModelRouter:
         return LLMResponse(
             content=content,
             provider="anthropic",
-            model=settings.ANTHROPIC_MODEL,
+            model=model,
             input_tokens=input_tok,
             output_tokens=output_tok,
             latency_ms=latency,
             cost_usd=_estimate_cost("anthropic", input_tok, output_tok),
         )
+
+    async def _call_anthropic_stream(self, request: LLMRequest):
+        """Stream Anthropic responses, yielding text deltas."""
+        if not self._anthropic:
+            raise RuntimeError("Anthropic client not configured")
+
+        model = request.model or settings.ANTHROPIC_MODEL
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": min(request.max_tokens, settings.MAX_TOKENS_PER_REQUEST),
+            "messages": request.messages,
+            "temperature": request.temperature,
+            "stream": True,
+        }
+        if request.system_prompt:
+            kwargs["system"] = request.system_prompt
+
+        async with self._anthropic.messages.stream(**kwargs) as stream:
+            async for text in stream.text_stream:
+                yield text
 
     async def _call_llama(self, request: LLMRequest) -> LLMResponse:
         if not self._llama_client:
@@ -266,10 +306,11 @@ class ModelRouter:
         messages.extend(request.messages)
 
         start = time.monotonic()
+        model = request.model or settings.OLLAMA_MODEL
         resp = await self._ollama_client.post(
             "/chat",
             json={
-                "model": settings.OLLAMA_MODEL,
+                "model": model,
                 "messages": messages,
                 "stream": False,
                 "options": {
@@ -289,12 +330,48 @@ class ModelRouter:
         return LLMResponse(
             content=content,
             provider="ollama",
-            model=settings.OLLAMA_MODEL,
+            model=model,
             input_tokens=input_tok,
             output_tokens=output_tok,
             latency_ms=latency,
             cost_usd=_estimate_cost("ollama", input_tok, output_tok),
         )
+
+    async def _call_ollama_stream(self, request: LLMRequest):
+        """Stream Ollama responses, yielding text deltas."""
+        if not self._ollama_client:
+            raise RuntimeError("Ollama client not configured")
+
+        messages: list[dict[str, str]] = []
+        if request.system_prompt:
+            messages.append({"role": "system", "content": request.system_prompt})
+        messages.extend(request.messages)
+
+        model = request.model or settings.OLLAMA_MODEL
+        async with self._ollama_client.stream(
+            "POST",
+            "/chat",
+            json={
+                "model": model,
+                "messages": messages,
+                "stream": True,
+                "options": {
+                    "num_predict": min(request.max_tokens, settings.MAX_TOKENS_PER_REQUEST),
+                    "temperature": request.temperature,
+                },
+            },
+            timeout=120.0,
+        ) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    if "message" in data and "content" in data["message"]:
+                        yield data["message"]["content"]
+                except json.JSONDecodeError:
+                    continue
 
 
 # Singleton
