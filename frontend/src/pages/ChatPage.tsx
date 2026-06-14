@@ -26,6 +26,13 @@ interface Message {
   ts: number
   steps?: string[]
   files?: { name: string; content: string }[]
+  agentEvents?: AgentEvent[]
+}
+
+interface AgentEvent {
+  type: 'step' | 'file' | 'command' | 'test' | 'review' | 'workspace' | 'artifact' | 'done' | 'error'
+  timestamp: number
+  payload: any
 }
 
 interface Conversation {
@@ -98,6 +105,9 @@ export default function ChatPage() {
   const [knowledgeResults, setKnowledgeResults] = useState<any[]>([])
   const [mcpTools, setMcpTools] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState<'activity' | 'llm' | 'mcps' | 'files'>('activity')
+  const [agentMode, setAgentMode] = useState(false)
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+  const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([])
   const abortControllerRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -157,6 +167,100 @@ export default function ChatPage() {
     el.style.height = Math.min(el.scrollHeight, 200) + 'px'
   }
 
+  const processSSEStream = async (
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    onChunk: (line: string) => void
+  ) => {
+    const decoder = new TextDecoder()
+    let buf = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) onChunk(line)
+    }
+    if (buf) onChunk(buf)
+  }
+
+  const sendChat = async (newMsgs: Message[], assistantMsg: Message, title: string) => {
+    const resp = await fetch(`${API}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: newMsgs.map(m => ({ role: m.role, content: m.content })),
+        model,
+      }),
+      signal: abortControllerRef.current!.signal,
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const reader = resp.body?.getReader()
+    if (!reader) return
+    let fullContent = ''
+    await processSSEStream(reader, (line) => {
+      if (!line.startsWith('data: ')) return
+      const data = line.slice(6)
+      if (data === '[DONE]') return
+      if (data.startsWith('[ERROR]')) throw new Error(data.slice(7))
+      if (data.startsWith('[STEP]')) {
+        assistantMsg.steps = [...(assistantMsg.steps || []), data.slice(7)]
+        updateActive([...newMsgs, { ...assistantMsg }], title)
+      } else if (data.startsWith('[FILE]')) {
+        try {
+          const fileData = JSON.parse(data.slice(6))
+          assistantMsg.files = [...(assistantMsg.files || []), fileData]
+          updateActive([...newMsgs, { ...assistantMsg }], title)
+        } catch {}
+      } else {
+        fullContent += data
+        updateActive([...newMsgs, { ...assistantMsg, content: fullContent }], title)
+      }
+    })
+  }
+
+  const sendAgent = async (text: string, newMsgs: Message[], assistantMsg: Message, title: string) => {
+    const resp = await fetch(`${API}/agent/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: text, model }),
+      signal: abortControllerRef.current!.signal,
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const reader = resp.body?.getReader()
+    if (!reader) return
+    let summaryContent = ''
+    await processSSEStream(reader, (line) => {
+      if (!line.startsWith('data: ')) return
+      let raw = line.slice(6).trim()
+      if (!raw || raw === '[DONE]') return
+      try {
+        const event: AgentEvent = JSON.parse(raw)
+        assistantMsg.agentEvents = [...(assistantMsg.agentEvents || []), event]
+        if (event.type === 'step') {
+          assistantMsg.steps = [...(assistantMsg.steps || []), event.payload?.message || event.payload?.agent || '']
+        } else if (event.type === 'file') {
+          const f = event.payload
+          if (f?.path && f?.content !== undefined) {
+            assistantMsg.files = [...(assistantMsg.files || []), { name: f.path, content: f.content }]
+            setWorkspaceFiles(prev => prev.includes(f.path) ? prev : [...prev, f.path])
+          }
+        } else if (event.type === 'workspace') {
+          if (event.payload?.workspace_id) setWorkspaceId(event.payload.workspace_id)
+          if (event.payload?.files) setWorkspaceFiles(event.payload.files)
+        } else if (event.type === 'done') {
+          summaryContent = event.payload?.summary || event.payload?.message || 'Agent completed.'
+          assistantMsg.content = summaryContent
+        } else if (event.type === 'error') {
+          assistantMsg.content = `Agent error: ${event.payload?.message || 'Unknown error'}`
+        }
+        updateActive([...newMsgs, { ...assistantMsg }], title)
+      } catch {}
+    })
+    if (!assistantMsg.content) assistantMsg.content = summaryContent || 'Agent run complete.'
+    updateActive([...newMsgs, { ...assistantMsg }], title)
+  }
+
   const send = async () => {
     const text = input.trim()
     if (!text || loading) return
@@ -172,73 +276,24 @@ export default function ChatPage() {
     setLoading(true)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
-    // Create abort controller for this request
     abortControllerRef.current = new AbortController()
-
-    // Create empty assistant message for streaming
-    const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', ts: Date.now(), steps: [], files: [] }
+    const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', ts: Date.now(), steps: [], files: [], agentEvents: [] }
     updateActive([...newMsgs, assistantMsg], title)
 
     try {
-      const resp = await fetch(`${API}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: newMsgs.map(m => ({ role: m.role, content: m.content })),
-          model,
-        }),
-        signal: abortControllerRef.current.signal,
-      })
-
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`)
-      }
-
-      const reader = resp.body?.getReader()
-      const decoder = new TextDecoder()
-      let fullContent = ''
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          const chunk = decoder.decode(value, { stream: true })
-          const lines = chunk.split('\n')
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6)
-              if (data === '[DONE]') break
-              if (data.startsWith('[ERROR]')) {
-                throw new Error(data.slice(7))
-              }
-              if (data.startsWith('[STEP]')) {
-                const step = data.slice(7)
-                assistantMsg.steps = [...(assistantMsg.steps || []), step]
-                updateActive([...newMsgs, { ...assistantMsg }], title)
-              } else if (data.startsWith('[FILE]')) {
-                const fileData = JSON.parse(data.slice(6))
-                assistantMsg.files = [...(assistantMsg.files || []), fileData]
-                updateActive([...newMsgs, { ...assistantMsg }], title)
-              } else {
-                fullContent += data
-                updateActive([...newMsgs, { ...assistantMsg, content: fullContent }], title)
-              }
-            }
-          }
-        }
+      if (agentMode) {
+        await sendAgent(text, newMsgs, assistantMsg, title)
+      } else {
+        await sendChat(newMsgs, assistantMsg, title)
       }
     } catch (e) {
-      const errorMsg = e instanceof Error && e.name === 'AbortError' 
-        ? 'Request cancelled' 
+      const errorMsg = e instanceof Error && e.name === 'AbortError'
+        ? 'Request cancelled'
         : `Error: ${e instanceof Error ? e.message : 'Failed to connect'}`
       updateActive([...newMsgs, { ...assistantMsg, content: errorMsg }], title)
     } finally {
       setLoading(false)
       abortControllerRef.current = null
-      
-      // Extract knowledge from conversation after completion
       if (active && active.messages.length > 2) {
         try {
           await fetch(`${API}/knowledge/extract`, {
@@ -508,6 +563,27 @@ export default function ChatPage() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Agent Mode toggle */}
+            <button
+              onClick={() => setAgentMode(!agentMode)}
+              style={{
+                background: agentMode ? 'rgba(16,185,129,0.15)' : 'transparent',
+                border: agentMode ? '1px solid rgba(16,185,129,0.4)' : '1px solid #2a2d3a',
+                borderRadius: 8,
+                color: agentMode ? '#34d399' : '#6b7280',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '6px 12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5
+              }}
+              title={agentMode ? 'Agent Mode ON — full autonomous pipeline' : 'Chat Mode — raw LLM'}
+            >
+              <span style={{ fontSize: 14 }}>{agentMode ? '⚡' : '💬'}</span>
+              {agentMode ? 'Agent' : 'Chat'}
+            </button>
             {/* Knowledge button */}
             <button
               onClick={() => setKnowledgeOpen(!knowledgeOpen)}
@@ -675,12 +751,32 @@ export default function ChatPage() {
                       <div style={{ maxWidth: '80%', background: msg.role === 'user' ? 'rgba(99,102,241,0.1)' : '#1a1d27', border: `1px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.2)' : '#2a2d3a'}`, borderRadius: 12, padding: '12px 16px' }}>
                         {msg.steps && msg.steps.length > 0 && (
                           <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #2a2d3a' }}>
-                            <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 6 }}>🔄 Working...</div>
-                            {msg.steps.map((step, i) => (
+                            <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 6 }}>
+                              {msg.agentEvents && msg.agentEvents.length > 0 ? '⚡ Agent pipeline' : '🔄 Working...'}
+                            </div>
+                            {msg.steps.filter(s => s).map((step, i) => (
                               <div key={i} style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span style={{ color: '#6366f1' }}>→</span> {step}
                               </div>
                             ))}
+                            {msg.agentEvents && msg.agentEvents.some(e => e.type === 'test') && (
+                              <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 6 }}>
+                                {msg.agentEvents.filter(e => e.type === 'test').map((e, i) => (
+                                  <div key={i} style={{ fontSize: 11, color: '#34d399' }}>
+                                    ✓ {e.payload?.summary || 'Tests passed'}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {msg.agentEvents && msg.agentEvents.some(e => e.type === 'review') && (
+                              <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 6 }}>
+                                {msg.agentEvents.filter(e => e.type === 'review').map((e, i) => (
+                                  <div key={i} style={{ fontSize: 11, color: '#818cf8' }}>
+                                    🔍 {e.payload?.summary || 'Code reviewed'}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                         {msg.role === 'assistant' ? (
@@ -767,12 +863,54 @@ export default function ChatPage() {
           )}
           
           {activeTab === 'files' && (
-            <div style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <div style={{ textAlign: 'center', color: '#6b7280' }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>📁</div>
-                <div style={{ fontSize: 14, marginBottom: 4 }}>Generated Files</div>
-                <div style={{ fontSize: 12 }}>Coming soon - will show all generated files with download options</div>
-              </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+              {workspaceFiles.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#6b7280' }}>
+                  <div style={{ fontSize: 32, marginBottom: 12 }}>📁</div>
+                  <div style={{ fontSize: 14, marginBottom: 4 }}>No files yet</div>
+                  <div style={{ fontSize: 12 }}>Enable Agent Mode and send a task — generated files appear here live</div>
+                </div>
+              ) : (
+                <div style={{ maxWidth: 760, margin: '0 auto' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <div style={{ fontSize: 13, color: '#9ca3af', fontWeight: 600 }}>{workspaceFiles.length} file{workspaceFiles.length !== 1 ? 's' : ''} generated</div>
+                    {messages.some(m => m.files && m.files.length > 0) && (
+                      <button
+                        onClick={() => {
+                          const allFiles = messages.flatMap(m => m.files || [])
+                          downloadFiles(allFiles)
+                        }}
+                        style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, color: '#818cf8', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 12px' }}
+                      >
+                        📦 Download All as ZIP
+                      </button>
+                    )}
+                  </div>
+                  {workspaceFiles.map((path, i) => {
+                    const fileData = messages.flatMap(m => m.files || []).find(f => f.name === path)
+                    return (
+                      <div key={i} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, marginBottom: 8, overflow: 'hidden' }}>
+                        <div style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: fileData ? '1px solid #2a2d3a' : 'none' }}>
+                          <div style={{ fontSize: 13, color: '#c7d2fe', fontFamily: 'monospace', fontWeight: 600 }}>{path}</div>
+                          {fileData && (
+                            <button
+                              onClick={() => downloadFiles([fileData])}
+                              style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: 11, cursor: 'pointer' }}
+                            >
+                              ↓ Download
+                            </button>
+                          )}
+                        </div>
+                        {fileData && (
+                          <pre style={{ margin: 0, padding: '10px 14px', fontSize: 12, color: '#9ca3af', fontFamily: 'monospace', overflowX: 'auto', maxHeight: 200, overflowY: 'auto' }}>
+                            {fileData.content.slice(0, 2000)}{fileData.content.length > 2000 ? '\n... (truncated)' : ''}
+                          </pre>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -808,7 +946,7 @@ export default function ChatPage() {
             </button>
           </div>
           <div style={{ maxWidth: 760, margin: '8px auto 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: '#4b4f63' }}>
-            <span>Enter to send · Shift+Enter for new line</span>
+            <span>Enter to send · Shift+Enter for new line{agentMode ? ' · ⚡ Agent mode active' : ''}</span>
             <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 6, color: '#c7d2fe', fontSize: 11, padding: '4px 8px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.6 : 1 }}>
               {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
