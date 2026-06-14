@@ -31,8 +31,8 @@ User → FastAPI API → Task Orchestrator → Requirement Analyzer → Planner 
 | Containers | Docker |
 | VCS | GitHub |
 | Execution | GitHub Actions |
-| Deploy | Railway / Vercel / Docker VPS |
-| LLM | Anthropic Claude + Llama Cloud |
+| Deploy | HuggingFace Spaces / Railway / Vercel / Docker VPS |
+| LLM | Ollama Cloud + Anthropic Claude + Llama Cloud |
 
 ## Quick Start
 

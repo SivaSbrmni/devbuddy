@@ -1,6 +1,6 @@
 # DevBuddy — Agent Reference Document
 
-> **Last updated:** 2026-06-10  
+> **Last updated:** 2026-06-15  
 > **Purpose:** Single source of truth for any AI agent working on this codebase. **Update this file after every meaningful change.**
 
 ---
@@ -9,7 +9,7 @@
 
 **DevBuddy** is an autonomous software engineering platform. It provides:
 
-- **AI-powered chat interface** for describing software projects
+- **AI-powered chat interface** with live model selection and streaming responses
 - **Autonomous pipeline**: Requirements → Analysis → Planning → Architecture → Coding → Review → Testing
 - **Multi-agent orchestration** using specialized AI agents (Requirement Analyzer, Planner, Architect, Coder, Reviewer, Tester, Deployment Agent)
 - **Model routing** with tiered LLM selection (cheap models for drafts, Claude for engineering tasks)
@@ -46,6 +46,8 @@ devbuddy/
 │   │   ├── main.py             # FastAPI entrypoint — routers, CORS, SPA fallback
 │   │   ├── api/routes/         # HTTP route handlers
 │   │   │   ├── auth.py         # Google OAuth + JWT endpoints
+│   │   │   ├── models.py       # Live model listing (Ollama + Claude)
+│   │   │   ├── chat.py         # Streaming chat SSE endpoint
 │   │   │   ├── projects.py     # Project CRUD + pipeline triggers
 │   │   │   ├── execution.py    # Task execution endpoints
 │   │   │   ├── memory.py       # Project memory/context endpoints
@@ -182,6 +184,22 @@ Endpoints (all under `/api/v1/auth`):
 | `/me` | GET | Validates JWT from query param, returns `{email, name, picture}` |
 | `/logout` | GET | Clears cookie, redirects to `/` |
 
+### 4.4 Models API (`app/api/routes/models.py`)
+
+Endpoints (under `/api/v1`):
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/models` | GET | Returns live model list from Ollama + Claude with `{id, label, provider, family}` |
+
+### 4.5 Chat API (`app/api/routes/chat.py`)
+
+Endpoints (under `/api/v1`):
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/chat` | POST | Streaming chat via SSE. Accepts `{messages: [{role, content}], model}`. Returns `data: {chunk}` stream.
+
 **Flow:**
 1. Frontend calls `window.location.href = {BACKEND}/api/v1/auth/google/login`
 2. User authenticates with Google
@@ -193,7 +211,7 @@ Endpoints (all under `/api/v1/auth`):
 8. Backend redirects to `{FRONTEND_URL}/app?token={jwt}`
 9. Frontend reads token from URL, stores in `localStorage`, fetches `/me`
 
-### 4.4 Model Router (`app/core/model_router.py`)
+### 4.6 Model Router (`app/core/model_router.py`)
 
 - **ModelTier**: `DRAFT` (Llama — cheap, fast) vs `ENGINEER` (Claude — precise)
 - **TaskCategory**: 18 categories mapped to tiers
@@ -201,7 +219,7 @@ Endpoints (all under `/api/v1/auth`):
 - **Cost tracking**: per-request cost estimation based on token counts
 - **Singleton**: `model_router` instantiated once at app startup
 
-### 4.5 Agents (`app/agents/`)
+### 4.7 Agents (`app/agents/`)
 
 All agents inherit from `BaseAgent`:
 
@@ -217,7 +235,7 @@ All agents inherit from `BaseAgent`:
 5. `Reviewer` → code review (Engineering Review Gateway)
 6. `Tester` → test generation
 
-### 4.6 Database Models
+### 4.8 Database Models
 
 **Project** (`app/models/project.py`):
 - `id: UUID` — primary key
@@ -244,6 +262,7 @@ All agents inherit from `BaseAgent`:
 **Hostname-based routing** (critical for GitHub Pages single-domain limitation):
 
 - `dev.devbuddy.org` → Chat app at `/`
+- `sivasbrmni-devbuddy.hf.space` → Chat app at `/`
 - `devbuddy.org` → Landing page at `/`, Chat app at `/app`
 
 All chat routes wrapped in `AuthProvider` → `LoginGate`.
@@ -269,7 +288,8 @@ Devin-style chat UI:
 - Main area: message history with user/assistant bubbles, model selector
 - Input: auto-resizing textarea, Enter to send, Shift+Enter for newline
 - Conversations stored in `localStorage` (`devbuddy_convs`)
-- Currently creates a Project on each message (placeholder behavior)
+- **Live model fetching**: Calls `/api/v1/models` on mount to populate model dropdown
+- **Streaming responses**: Uses SSE to stream chat responses from `/api/v1/chat`
 
 ### 5.5 Login Gate (`frontend/src/pages/LoginGate.tsx`)
 
@@ -296,13 +316,18 @@ Devin-style chat UI:
 | `GOOGLE_CLIENT_ID` | `<YOUR_GOOGLE_CLIENT_ID>` | Secret |
 | `GOOGLE_CLIENT_SECRET` | `<YOUR_GOOGLE_CLIENT_SECRET>` | Secret |
 | `GOOGLE_REDIRECT_URI` | `https://sivasbrmni-devbuddy.hf.space/api/v1/auth/google/callback` | Variable |
-| `FRONTEND_URL` | `https://devbuddy.org` | Variable |
+| `FRONTEND_URL` | `https://sivasbrmni-devbuddy.hf.space` | Variable |
 | `SECRET_KEY` | `<YOUR_SECRET_KEY>` | Secret |
 | `ALLOWED_EMAILS` | `sivasbrmni@gmail.com` | Variable |
 | `ANTHROPIC_API_KEY` | (user's key) | Secret |
+| `OLLAMA_API_KEY` | (user's key) | Secret |
 | `GITHUB_TOKEN` | (user's token) | Secret |
 
-**Important:** The HuggingFace Space has its own git repository. It does NOT auto-sync with GitHub. After pushing to GitHub `main`, you must also update the Space (via HuggingFace UI file upload or by linking the GitHub repo in Space settings).
+**Auto-deployment:** The HuggingFace Space auto-syncs with GitHub via `.github/workflows/deploy-hf-space.yml`. When you push to `main` with backend changes, the workflow:
+1. Pushes to the HF Space git repository
+2. Syncs `OLLAMA_API_KEY` from GitHub secrets to HF Space secrets
+3. Waits for the Space to rebuild
+4. Runs a smoke test on `/health`
 
 ### 6.2 GitHub Pages (Frontend)
 
