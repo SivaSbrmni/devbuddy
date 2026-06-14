@@ -1,0 +1,57 @@
+name: Deploy to HuggingFace Spaces
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'deploy/**'
+      - 'docker-compose.yml'
+      - 'serve.py'
+      - 'config.py'
+      - 'auth.py'
+      - 'main.py'
+  workflow_dispatch:
+
+concurrency:
+  group: "hf-space"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to HuggingFace Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git remote add hf https://huggingface.co/spaces/Sivasbrmni/devbuddy || true
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          # Use token in URL for auth
+          git push https://$HF_TOKEN@huggingface.co/spaces/Sivasbrmni/devbuddy main:main --force
+
+      - name: Wait for HF Space to rebuild
+        run: sleep 60
+
+      - name: Smoke test backend health
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          for i in $(seq 1 10); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer $HF_TOKEN" \
+              https://sivasbrmni-devbuddy.hf.space/health || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "Backend is healthy!"
+              exit 0
+            fi
+            echo "Attempt $i/10 — backend not ready yet (status: $STATUS), waiting 15s..."
+            sleep 15
+          done
+          echo "Smoke test failed — backend did not become healthy in time"
+          exit 1
