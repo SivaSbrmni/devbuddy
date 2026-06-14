@@ -584,36 +584,6 @@ export default function ChatPage() {
               <span style={{ fontSize: 14 }}>{agentMode ? '⚡' : '💬'}</span>
               {agentMode ? 'Agent' : 'Chat'}
             </button>
-            {/* Knowledge button */}
-            <button
-              onClick={() => setKnowledgeOpen(!knowledgeOpen)}
-              style={{
-                background: knowledgeOpen ? 'rgba(99,102,241,0.2)' : 'transparent',
-                border: knowledgeOpen ? '1px solid rgba(99,102,241,0.3)' : '1px solid #2a2d3a',
-                borderRadius: 8,
-                color: knowledgeOpen ? '#818cf8' : '#9ca3af',
-                fontSize: 12,
-                padding: '6px 12px',
-                cursor: 'pointer'
-              }}
-            >
-              📚 Knowledge
-            </button>
-            {/* MCP button */}
-            <button
-              onClick={() => setMcpOpen(!mcpOpen)}
-              style={{
-                background: mcpOpen ? 'rgba(99,102,241,0.2)' : 'transparent',
-                border: mcpOpen ? '1px solid rgba(99,102,241,0.3)' : '1px solid #2a2d3a',
-                borderRadius: 8,
-                color: mcpOpen ? '#818cf8' : '#9ca3af',
-                fontSize: 12,
-                padding: '6px 12px',
-                cursor: 'pointer'
-              }}
-            >
-              🔧 Tools
-            </button>
             {/* User profile */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 12, borderLeft: '1px solid #2a2d3a' }}>
               <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #818cf8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'white' }}>
@@ -623,109 +593,6 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
-
-        {/* Knowledge panel */}
-        {knowledgeOpen && (
-          <div style={{ padding: '12px 20px', borderBottom: '1px solid #1e2130', background: '#111318' }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <input
-                type="text"
-                value={knowledgeQuery}
-                onChange={e => setKnowledgeQuery(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') searchKnowledge() }}
-                placeholder="Search knowledge..."
-                style={{
-                  flex: 1,
-                  background: '#1a1d27',
-                  border: '1px solid #2a2d3a',
-                  borderRadius: 8,
-                  padding: '8px 12px',
-                  color: '#e4e6eb',
-                  fontSize: 13,
-                  outline: 'none'
-                }}
-              />
-              <button
-                onClick={searchKnowledge}
-                style={{
-                  background: 'rgba(99,102,241,0.12)',
-                  border: '1px solid rgba(99,102,241,0.3)',
-                  borderRadius: 8,
-                  color: '#818cf8',
-                  fontSize: 13,
-                  padding: '8px 16px',
-                  cursor: 'pointer'
-                }}
-              >
-                Search
-              </button>
-            </div>
-            {knowledgeResults.length > 0 && (
-              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                {knowledgeResults.map((k, i) => (
-                  <div key={i} style={{
-                    background: '#1a1d27',
-                    border: '1px solid #2a2d3a',
-                    borderRadius: 8,
-                    padding: '10px 12px',
-                    marginBottom: 8
-                  }}>
-                    <div style={{ fontSize: 13, color: '#c7d2fe', fontWeight: 600, marginBottom: 4 }}>{k.title}</div>
-                    <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 6 }}>{k.content.slice(0, 200)}...</div>
-                    <div style={{ fontSize: 11, color: '#4b4f63' }}>
-                      {k.keywords.join(', ')} · {k.category}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* MCP tools panel */}
-        {mcpOpen && (
-          <div style={{ padding: '12px 20px', borderBottom: '1px solid #1e2130', background: '#111318' }}>
-            <div style={{ fontSize: 12, color: '#6366f1', fontWeight: 600, marginBottom: 8 }}>Available Tools</div>
-            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-              {mcpTools.map((tool, i) => (
-                <div key={i} style={{
-                  background: '#1a1d27',
-                  border: '1px solid #2a2d3a',
-                  borderRadius: 8,
-                  padding: '10px 12px',
-                  marginBottom: 8,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <div>
-                    <div style={{ fontSize: 13, color: '#c7d2fe', fontWeight: 600 }}>{tool.name}</div>
-                    <div style={{ fontSize: 11, color: '#4b4f63' }}>{tool.server_name} · {tool.description}</div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const args = prompt(`Enter arguments for ${tool.name} (JSON):`, '{}')
-                      if (args) {
-                        callMcpTool(tool.server_id, tool.name, JSON.parse(args))
-                      }
-                    }}
-                    style={{
-                      background: 'rgba(99,102,241,0.12)',
-                      border: '1px solid rgba(99,102,241,0.3)',
-                      borderRadius: 6,
-                      color: '#818cf8',
-                      fontSize: 11,
-                      padding: '4px 10px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Run
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Tab content */}
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -916,40 +783,175 @@ export default function ChatPage() {
         </div>
 
         {/* Input area */}
-        <div style={{ padding: '16px 20px', borderTop: '1px solid #1e2130', flexShrink: 0 }}>
-          <div style={{ maxWidth: 760, margin: '0 auto', background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 12, padding: '12px 16px', display: 'flex', gap: 12, alignItems: 'flex-end' }}>
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={e => { setInput(e.target.value); autoResize() }}
-              onKeyDown={onKeyDown}
-              placeholder="Describe what you want to build..."
-              rows={1}
-              style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#e4e6eb', fontSize: 14, lineHeight: 1.5, resize: 'none', maxHeight: 200, fontFamily: 'inherit', overflowY: 'auto' }}
-            />
-            <button 
-              onClick={loading ? cancelRequest : send} 
-              disabled={!input.trim() && !loading} 
-              style={{ 
-                padding: '8px 16px', 
-                background: loading ? 'rgba(239,68,68,0.15)' : (input.trim() ? 'linear-gradient(135deg, #6366f1, #818cf8)' : '#2a2d3a'), 
-                border: loading ? '1px solid rgba(239,68,68,0.3)' : 'none', 
-                borderRadius: 8, 
-                color: loading ? '#f87171' : (input.trim() ? 'white' : '#4b4f63'), 
-                fontSize: 14, 
-                fontWeight: 600, 
-                cursor: (input.trim() || loading) ? 'pointer' : 'not-allowed', 
-                flexShrink: 0 
-              }}
-            >
-              {loading ? '✕ Stop' : '↑'}
-            </button>
-          </div>
-          <div style={{ maxWidth: 760, margin: '8px auto 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: '#4b4f63' }}>
-            <span>Enter to send · Shift+Enter for new line{agentMode ? ' · ⚡ Agent mode active' : ''}</span>
-            <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 6, color: '#c7d2fe', fontSize: 11, padding: '4px 8px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.6 : 1 }}>
-              {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
+        <div style={{ padding: '16px 20px 20px', borderTop: '1px solid #1e2130', flexShrink: 0, position: 'relative' }}>
+
+          {/* Knowledge popup */}
+          {knowledgeOpen && (
+            <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', maxWidth: 600, width: '90%', marginBottom: 8, background: '#111318', border: '1px solid #2a2d3a', borderRadius: 12, padding: 16, boxShadow: '0 -8px 32px rgba(0,0,0,0.4)', zIndex: 30 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#c7d2fe' }}>📚 Knowledge Search</span>
+                <button onClick={() => setKnowledgeOpen(false)} style={{ background: 'none', border: 'none', color: '#4b4f63', cursor: 'pointer', fontSize: 16 }}>×</button>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <input type="text" value={knowledgeQuery} onChange={e => setKnowledgeQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') searchKnowledge() }} placeholder="Search knowledge..." style={{ flex: 1, background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, padding: '8px 12px', color: '#e4e6eb', fontSize: 13, outline: 'none' }} />
+                <button onClick={searchKnowledge} style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 8, color: '#818cf8', fontSize: 13, padding: '8px 16px', cursor: 'pointer' }}>Search</button>
+              </div>
+              {knowledgeResults.length > 0 && (
+                <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+                  {knowledgeResults.map((k, i) => (
+                    <div key={i} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, padding: '10px 12px', marginBottom: 8 }}>
+                      <div style={{ fontSize: 13, color: '#c7d2fe', fontWeight: 600, marginBottom: 4 }}>{k.title}</div>
+                      <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 6 }}>{k.content.slice(0, 200)}...</div>
+                      <div style={{ fontSize: 11, color: '#4b4f63' }}>{k.keywords?.join(', ')} · {k.category}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tools popup */}
+          {mcpOpen && (
+            <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', maxWidth: 600, width: '90%', marginBottom: 8, background: '#111318', border: '1px solid #2a2d3a', borderRadius: 12, padding: 16, boxShadow: '0 -8px 32px rgba(0,0,0,0.4)', zIndex: 30 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#c7d2fe' }}>🔧 Available Tools</span>
+                <button onClick={() => setMcpOpen(false)} style={{ background: 'none', border: 'none', color: '#4b4f63', cursor: 'pointer', fontSize: 16 }}>×</button>
+              </div>
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                {mcpTools.map((tool, i) => (
+                  <div key={i} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, padding: '10px 12px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 13, color: '#c7d2fe', fontWeight: 600 }}>{tool.name}</div>
+                      <div style={{ fontSize: 11, color: '#4b4f63' }}>{tool.server_name} · {tool.description}</div>
+                    </div>
+                    <button onClick={() => { const args = prompt(`Enter arguments for ${tool.name} (JSON):`, '{}'); if (args) callMcpTool(tool.server_id, tool.name, JSON.parse(args)) }} style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, color: '#818cf8', fontSize: 11, padding: '4px 10px', cursor: 'pointer' }}>Run</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ maxWidth: 760, margin: '0 auto' }}>
+            {/* Main input container */}
+            <div style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 16, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
+              {/* Textarea */}
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={e => { setInput(e.target.value); autoResize() }}
+                onKeyDown={onKeyDown}
+                placeholder={agentMode ? 'Describe what you want to build...' : 'Ask me anything...'}
+                rows={1}
+                style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: '#e4e6eb', fontSize: 14, lineHeight: 1.5, resize: 'none', maxHeight: 200, fontFamily: 'inherit', overflowY: 'auto', padding: '0 4px' }}
+              />
+
+              {/* Bottom toolbar */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                {/* Left: tool buttons */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {/* Agent toggle */}
+                  <button
+                    onClick={() => setAgentMode(!agentMode)}
+                    title={agentMode ? 'Agent Mode ON — full autonomous pipeline' : 'Chat Mode — raw LLM'}
+                    style={{
+                      background: agentMode ? 'rgba(16,185,129,0.15)' : 'transparent',
+                      border: agentMode ? '1px solid rgba(16,185,129,0.3)' : '1px solid transparent',
+                      borderRadius: 8,
+                      color: agentMode ? '#34d399' : '#6b7280',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '5px 10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <span style={{ fontSize: 13 }}>{agentMode ? '⚡' : '💬'}</span>
+                    {agentMode ? 'Agent' : 'Chat'}
+                  </button>
+
+                  {/* Knowledge button */}
+                  <button
+                    onClick={() => { setKnowledgeOpen(!knowledgeOpen); setMcpOpen(false) }}
+                    title="Search knowledge base"
+                    style={{
+                      background: knowledgeOpen ? 'rgba(99,102,241,0.12)' : 'transparent',
+                      border: knowledgeOpen ? '1px solid rgba(99,102,241,0.25)' : '1px solid transparent',
+                      borderRadius: 8,
+                      color: knowledgeOpen ? '#818cf8' : '#6b7280',
+                      fontSize: 12,
+                      padding: '5px 10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <span style={{ fontSize: 13 }}>📚</span>
+                    Knowledge
+                  </button>
+
+                  {/* Tools button */}
+                  <button
+                    onClick={() => { setMcpOpen(!mcpOpen); setKnowledgeOpen(false) }}
+                    title="MCP Tools"
+                    style={{
+                      background: mcpOpen ? 'rgba(99,102,241,0.12)' : 'transparent',
+                      border: mcpOpen ? '1px solid rgba(99,102,241,0.25)' : '1px solid transparent',
+                      borderRadius: 8,
+                      color: mcpOpen ? '#818cf8' : '#6b7280',
+                      fontSize: 12,
+                      padding: '5px 10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    <span style={{ fontSize: 13 }}>🔧</span>
+                    Tools
+                  </button>
+                </div>
+
+                {/* Right: model selector + send */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} style={{ background: '#111318', border: '1px solid #2a2d3a', borderRadius: 8, color: '#9ca3af', fontSize: 11, padding: '5px 8px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.5 : 1 }}>
+                    {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                  </select>
+
+                  <button
+                    onClick={loading ? cancelRequest : send}
+                    disabled={!input.trim() && !loading}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: loading ? 'rgba(239,68,68,0.15)' : input.trim() ? 'linear-gradient(135deg, #6366f1, #818cf8)' : '#2a2d3a',
+                      border: loading ? '1px solid rgba(239,68,68,0.3)' : 'none',
+                      borderRadius: '50%',
+                      color: loading ? '#f87171' : input.trim() ? 'white' : '#4b4f63',
+                      fontSize: 16,
+                      fontWeight: 600,
+                      cursor: input.trim() || loading ? 'pointer' : 'not-allowed',
+                      flexShrink: 0,
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {loading ? '✕' : '↑'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Hint text */}
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 11, color: '#4b4f63' }}>
+              <span>Enter to send · Shift+Enter for new line</span>
+              {agentMode && <span style={{ color: '#34d399' }}>⚡ Agent mode</span>}
+            </div>
           </div>
         </div>
       </div>
