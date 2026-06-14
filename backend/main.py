@@ -1,4 +1,7 @@
-"""Entry point — re-exports the FastAPI application instance."""
+"""Entry point — re-exports the FastAPI application instance.
+
+Deploy trigger: 2026-06-14 (HF Space sync)
+"""
 
 from fastapi import FastAPI  # noqa: F401 — helps deploy-tool detection
 
