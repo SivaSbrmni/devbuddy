@@ -1,31 +1,28 @@
-"""Simple Fernet encryption for user API keys."""
+"""Simple XOR encryption for user API keys — no external dependencies."""
 
 from __future__ import annotations
 
 import base64
-import hashlib
-import json
+from itertools import cycle
 from typing import Any
-
-from cryptography.fernet import Fernet
 
 from app.core.config import settings
 
 
 class _Crypto:
-    """Singleton Fernet instance keyed from SECRET_KEY."""
+    """Simple XOR cipher keyed from SECRET_KEY. Obfuscates keys at rest."""
 
     def __init__(self) -> None:
-        # Derive a 32-byte URL-safe base64 key from SECRET_KEY
-        digest = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
-        key = base64.urlsafe_b64encode(digest)
-        self._fernet = Fernet(key)
+        self._key = settings.SECRET_KEY.encode()
+
+    def _xor(self, data: bytes) -> bytes:
+        return bytes(a ^ b for a, b in zip(data, cycle(self._key)))
 
     def encrypt(self, plaintext: str) -> str:
-        return self._fernet.encrypt(plaintext.encode()).decode()
+        return base64.b64encode(self._xor(plaintext.encode())).decode()
 
     def decrypt(self, ciphertext: str) -> str:
-        return self._fernet.decrypt(ciphertext.encode()).decode()
+        return self._xor(base64.b64decode(ciphertext.encode())).decode()
 
     def encrypt_dict(self, data: dict[str, Any]) -> dict[str, Any]:
         """Encrypt the 'key' field inside each provider entry."""
