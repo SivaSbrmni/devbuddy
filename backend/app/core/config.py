@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth/google/callback"
     # Where to send the user after Google login (e.g. https://devbuddy.org or https://dev.devbuddy.org)
-    FRONTEND_URL: str = ""
+    FRONTEND_URL: str = "https://sivasbrmni-devbuddy.hf.space"
     # Comma-separated list of allowed emails (empty = block all)
     ALLOWED_EMAILS: str = "sivasbrmni@gmail.com"
 

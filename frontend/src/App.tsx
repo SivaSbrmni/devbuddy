@@ -4,7 +4,7 @@ import ChatPage from './pages/ChatPage'
 import LoginGate from './pages/LoginGate'
 import { AuthProvider } from './context/AuthContext'
 
-const isDevDomain = window.location.hostname === 'dev.devbuddy.org'
+const isDevDomain = window.location.hostname === 'dev.devbuddy.org' || window.location.hostname === 'sivasbrmni-devbuddy.hf.space'
 
 export default function App() {
   return (
