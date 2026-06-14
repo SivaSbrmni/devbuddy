@@ -6,6 +6,8 @@ import pytest
 
 from app.aep.github.webhooks import (
     WebhookEventRouter,
+    get_event_router,
+    reset_event_router,
     verify_signature,
 )
 
@@ -111,3 +113,120 @@ class TestWebhookEventRouter:
 
         await router.dispatch("push", {})
         assert order == [1, 2]
+
+    @pytest.mark.asyncio
+    async def test_global_and_specific_both_fire(self) -> None:
+        router = WebhookEventRouter()
+        results: list[str] = []
+
+        @router.on_any
+        async def global_h(event: str, payload: dict) -> None:
+            results.append(f"global:{event}")
+
+        @router.on("push")
+        async def specific_h(event: str, payload: dict) -> None:
+            results.append("specific:push")
+
+        count = await router.dispatch("push", {})
+        assert count == 2
+        assert results == ["global:push", "specific:push"]
+
+
+class TestDefaultEventHandlers:
+    """Verify that the singleton router has handlers for all spec event types."""
+
+    def setup_method(self) -> None:
+        reset_event_router()
+
+    def teardown_method(self) -> None:
+        reset_event_router()
+
+    @pytest.mark.asyncio
+    async def test_push_event_dispatches(self) -> None:
+        router = get_event_router()
+        payload = {
+            "ref": "refs/heads/main",
+            "repository": {"full_name": "owner/repo"},
+            "commits": [{"id": "abc123"}],
+        }
+        count = await router.dispatch("push", payload)
+        # global handler + push-specific handler
+        assert count >= 2
+
+    @pytest.mark.asyncio
+    async def test_pull_request_event_dispatches(self) -> None:
+        router = get_event_router()
+        payload = {
+            "action": "opened",
+            "pull_request": {"number": 1, "title": "Test PR"},
+            "repository": {"full_name": "owner/repo"},
+        }
+        count = await router.dispatch("pull_request", payload)
+        assert count >= 2
+
+    @pytest.mark.asyncio
+    async def test_workflow_run_event_dispatches(self) -> None:
+        router = get_event_router()
+        payload = {
+            "action": "completed",
+            "workflow_run": {"id": 123, "status": "completed", "conclusion": "success"},
+            "repository": {"full_name": "owner/repo"},
+        }
+        count = await router.dispatch("workflow_run", payload)
+        assert count >= 2
+
+    @pytest.mark.asyncio
+    async def test_check_run_event_dispatches(self) -> None:
+        router = get_event_router()
+        payload = {
+            "action": "completed",
+            "check_run": {"name": "lint", "status": "completed", "conclusion": "success"},
+            "repository": {"full_name": "owner/repo"},
+        }
+        count = await router.dispatch("check_run", payload)
+        assert count >= 2
+
+    @pytest.mark.asyncio
+    async def test_issue_comment_event_dispatches(self) -> None:
+        router = get_event_router()
+        payload = {
+            "action": "created",
+            "comment": {"body": "test comment"},
+            "repository": {"full_name": "owner/repo"},
+        }
+        count = await router.dispatch("issue_comment", payload)
+        # Only global handler (no specific handler for issue_comment)
+        assert count >= 1
+
+    @pytest.mark.asyncio
+    async def test_pull_request_review_event_dispatches(self) -> None:
+        router = get_event_router()
+        payload = {
+            "action": "submitted",
+            "review": {"state": "approved"},
+            "repository": {"full_name": "owner/repo"},
+        }
+        count = await router.dispatch("pull_request_review", payload)
+        assert count >= 1
+
+    @pytest.mark.asyncio
+    async def test_installation_event_dispatches(self) -> None:
+        router = get_event_router()
+        payload = {
+            "action": "created",
+            "installation": {"id": 456},
+            "repository": {"full_name": "owner/repo"},
+        }
+        count = await router.dispatch("installation", payload)
+        assert count >= 1
+
+    @pytest.mark.asyncio
+    async def test_installation_repositories_event_dispatches(self) -> None:
+        router = get_event_router()
+        payload = {
+            "action": "added",
+            "repositories_added": [{"full_name": "owner/repo"}],
+            "repository": {"full_name": "owner/repo"},
+        }
+        count = await router.dispatch("installation_repositories", payload)
+        assert count >= 1

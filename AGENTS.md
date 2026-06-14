@@ -264,7 +264,7 @@ Spec sections: §8, §13 (rows 7–8). Flags: `webhook_receiver_enabled`.
       have the right scopes (`contents:write`, `pull_requests:write`,
       `actions:read`).
 - [x] Wire `webhook_receiver_enabled` flag.
-- [ ] Add tests for HMAC verification and the event router (one test
+- [x] Add tests for HMAC verification and the event router (one test
       per event type at minimum).
 - [x] Document the GitHub App manifest / setup in
       `docs/aep-github-app-setup.md` (referenced from EXTENSIONS.md).
@@ -303,7 +303,7 @@ Spec sections: §5, §6 (Planner + Coder only), §13 rows 9–12. Flags:
       `human_approval_required=true` (default), the FSM pauses at
       `AWAITING_APPROVAL` until an admin endpoint approves or rejects
       the plan.
-- [ ] End-to-end happy path: submit task → Planner produces plan →
+- [x] End-to-end happy path: submit task → Planner produces plan →
       operator approves → Coder pushes branch → GHA workflow runs →
       PR opened. Document the test plan in EXTENSIONS.md.
 
@@ -403,7 +403,7 @@ master switch finally flips on by default for opted-in tenants.
       (already in place via structlog → Loki), distributed tracing
       (OpenTelemetry) propagated through API → Orchestrator → Agent
       → LLM Gateway → Ollama, and webhook handlers.
-- [ ] **Load + security audit.** Document results and remediation in
+- [x] **Load + security audit.** Document results and remediation in
       `docs/aep-hardening-report.md`.
 
 ---
