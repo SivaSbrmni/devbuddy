@@ -1,0 +1,191 @@
+/* === DevBuddy Design System === */
+/* One CSS file to rule them all. Imported once at app root. */
+
+/* ── CSS Variables ── */
+:root {
+  /* Colors */
+  --db-bg: #0d0f14;
+  --db-bg-elevated: #111318;
+  --db-bg-card: #1a1d27;
+  --db-border: #2a2d3a;
+  --db-border-subtle: #1e2130;
+  --db-text: #e4e6eb;
+  --db-text-muted: #9ca3af;
+  --db-text-dim: #6b7280;
+  --db-text-faint: #4b4f63;
+  --db-accent: #6366f1;
+  --db-accent-light: #818cf8;
+  --db-accent-glow: rgba(99, 102, 241, 0.15);
+  --db-green: #34d399;
+  --db-red: #ef4444;
+  --db-yellow: #fbbf24;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.25);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.35);
+  --shadow-xl: 0 16px 60px rgba(0,0,0,0.4);
+  --shadow-glow: 0 0 20px rgba(99,102,241,0.15);
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+}
+
+/* ── Animations ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(30px); }
+}
+
+@keyframes modalBackdrop {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalContent {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes messageIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes typing-dot {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+/* ── Utility Classes ── */
+
+/* Skeleton */
+.db-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--db-bg-card) 25%,
+    #242836 50%,
+    var(--db-bg-card) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+/* Focus ring */
+.db-focus:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--db-accent-glow), 0 0 0 4px var(--db-accent);
+}
+
+/* Button base */
+.db-btn {
+  transition: all var(--transition-base);
+  cursor: pointer;
+  user-select: none;
+}
+.db-btn:hover {
+  transform: translateY(-1px);
+}
+.db-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Card hover */
+.db-card-hover {
+  transition: all var(--transition-base);
+}
+.db-card-hover:hover {
+  border-color: var(--db-border);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+/* Input focus */
+.db-input {
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+.db-input:focus {
+  outline: none;
+  border-color: var(--db-accent);
+  box-shadow: 0 0 0 3px var(--db-accent-glow);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--db-border);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--db-text-faint);
+}
+
+/* Selection */
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: var(--db-text);
+}

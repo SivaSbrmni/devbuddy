@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import JSZip from 'jszip'
 import ToastContainer, { toast } from '../components/Toast'
+import Skeleton, { MessageSkeleton, TypingIndicator } from '../components/Skeleton'
 
 const BACKEND = import.meta.env.VITE_API_URL || ''
 const API = `${BACKEND}/api/v1`
@@ -522,7 +523,7 @@ export default function ChatPage() {
 
         {/* New chat button */}
         <div style={{ padding: '10px 12px' }}>
-          <button onClick={createNew} style={{ width: '100%', padding: '8px 12px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 8, color: '#818cf8', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={createNew} className="db-btn db-focus" style={{ width: '100%', padding: '8px 12px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 'var(--radius-md)', color: '#818cf8', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all var(--transition-base)' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.2)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)' }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)' }}>
             <span style={{ fontSize: 16 }}>+</span> New conversation
           </button>
         </div>
@@ -533,26 +534,29 @@ export default function ChatPage() {
             <div style={{ fontSize: 12, color: '#4b4f63', padding: '12px 8px' }}>No conversations yet</div>
           )}
           {convs.map(c => (
-            <div key={c.id} onClick={() => selectConv(c.id)}
-              style={{ padding: '8px 10px', borderRadius: 8, marginBottom: 2, cursor: 'pointer', background: c.id === activeId ? 'rgba(99,102,241,0.1)' : 'transparent', border: c.id === activeId ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}
+            <div key={c.id} onClick={() => selectConv(c.id)} tabIndex={0} role="button"
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectConv(c.id); } }}
+              style={{ padding: '8px 10px', borderRadius: 'var(--radius-md)', marginBottom: 2, cursor: 'pointer', background: c.id === activeId ? 'rgba(99,102,241,0.1)' : 'transparent', border: c.id === activeId ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, transition: 'all var(--transition-fast)' }}
+              onMouseEnter={e => { if (c.id !== activeId) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; } }}
+              onMouseLeave={e => { if (c.id !== activeId) { e.currentTarget.style.background = 'transparent'; } }}
             >
-              <div style={{ overflow: 'hidden' }}>
-                <div style={{ fontSize: 13, color: c.id === activeId ? '#c7d2fe' : '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title}</div>
+              <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: c.id === activeId ? '#c7d2fe' : '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: c.id === activeId ? 600 : 400 }}>{c.title}</div>
                 <div style={{ fontSize: 11, color: '#4b4f63', marginTop: 2 }}>{c.messages.length} messages</div>
               </div>
-              <button onClick={e => { e.stopPropagation(); deleteConv(c.id) }} style={{ background: 'none', border: 'none', color: '#4b4f63', cursor: 'pointer', fontSize: 14, padding: '0 2px', flexShrink: 0 }}>×</button>
+              <button onClick={e => { e.stopPropagation(); deleteConv(c.id) }} className="db-btn" style={{ background: 'none', border: 'none', color: '#4b4f63', cursor: 'pointer', fontSize: 14, padding: '2px 6px', flexShrink: 0, borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = '#4b4f63'; e.currentTarget.style.background = 'transparent' }} title="Delete conversation">×</button>
             </div>
           ))}
         </div>
 
         {/* User info */}
         <div style={{ padding: '12px 16px', borderTop: '1px solid #1e2130', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {user?.picture && <img src={user.picture} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />}
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <div style={{ fontSize: 13, color: '#e4e6eb', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name}</div>
+          {user?.picture && <img src={user.picture} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--db-border)' }} />}
+          <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: '#e4e6eb', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || 'User'}</div>
             <div style={{ fontSize: 11, color: '#4b4f63', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.email}</div>
           </div>
-          <button onClick={logout} title="Sign out" style={{ background: 'none', border: 'none', color: '#4b4f63', cursor: 'pointer', fontSize: 16 }}>⏻</button>
+          <button onClick={logout} title="Sign out" className="db-btn" style={{ background: 'none', border: 'none', color: '#4b4f63', cursor: 'pointer', fontSize: 16, padding: '4px 6px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }} onMouseLeave={e => { e.currentTarget.style.color = '#4b4f63' }}>⏻</button>
         </div>
 
         {/* Close button for mobile */}
@@ -634,10 +638,11 @@ export default function ChatPage() {
             {/* Agent Mode toggle */}
             <button
               onClick={() => setAgentMode(!agentMode)}
+              className="db-btn db-focus"
               style={{
                 background: agentMode ? 'rgba(16,185,129,0.15)' : 'transparent',
                 border: agentMode ? '1px solid rgba(16,185,129,0.4)' : '1px solid #2a2d3a',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 color: agentMode ? '#34d399' : '#6b7280',
                 fontSize: 12,
                 fontWeight: 600,
@@ -645,8 +650,11 @@ export default function ChatPage() {
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 5
+                gap: 5,
+                transition: 'all var(--transition-base)'
               }}
+              onMouseEnter={e => { if (!agentMode) { e.currentTarget.style.borderColor = '#4b4f63'; e.currentTarget.style.color = '#9ca3af'; } }}
+              onMouseLeave={e => { if (!agentMode) { e.currentTarget.style.borderColor = '#2a2d3a'; e.currentTarget.style.color = '#6b7280'; } }}
               title={agentMode ? 'Agent Mode ON — full autonomous pipeline' : 'Chat Mode — raw LLM'}
             >
               <span style={{ fontSize: 14 }}>{agentMode ? '⚡' : '💬'}</span>
@@ -655,25 +663,29 @@ export default function ChatPage() {
             {/* Settings */}
             <button
               onClick={() => setSettingsOpen(true)}
+              className="db-btn db-focus"
               style={{
                 background: 'transparent',
                 border: '1px solid #2a2d3a',
-                borderRadius: 8,
+                borderRadius: 'var(--radius-md)',
                 color: '#9ca3af',
                 fontSize: 12,
                 padding: '5px 10px',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 4
+                gap: 4,
+                transition: 'all var(--transition-base)'
               }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#4b4f63'; e.currentTarget.style.color = '#c7d2fe'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2d3a'; e.currentTarget.style.color = '#9ca3af'; }}
             >
               <span style={{ fontSize: 13 }}>⚙️</span>
               Setup
             </button>
 
             {/* Logout */}
-            <button onClick={logout} title="Sign out" style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 11, cursor: 'pointer', padding: '6px 8px' }}>Logout</button>
+            <button onClick={logout} title="Sign out" className="db-btn" style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: 11, cursor: 'pointer', padding: '6px 8px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }} onMouseLeave={e => { e.currentTarget.style.color = '#9ca3af' }}>Logout</button>
           </div>
         </div>
 
@@ -687,7 +699,7 @@ export default function ChatPage() {
                   <p style={{ color: '#6b7280', fontSize: 16, textAlign: 'center', maxWidth: 400 }}>Describe what you want to build and I'll handle the rest.</p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 500 }}>
                     {['Build a REST API with FastAPI', 'Create a React dashboard', 'Set up a CI/CD pipeline', 'Debug my Python code'].map(s => (
-                      <button key={s} onClick={() => { setInput(s); textareaRef.current?.focus() }} style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 8, padding: '8px 14px', color: '#9ca3af', fontSize: 13, cursor: 'pointer' }}>{s}</button>
+                      <button key={s} onClick={() => { setInput(s); textareaRef.current?.focus() }} className="db-btn db-focus" style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 'var(--radius-md)', padding: '8px 14px', color: '#9ca3af', fontSize: 13, cursor: 'pointer', transition: 'all var(--transition-base)' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.color = '#c7d2fe'; e.currentTarget.style.background = 'rgba(99,102,241,0.08)' }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2d3a'; e.currentTarget.style.color = '#9ca3af'; e.currentTarget.style.background = '#1a1d27' }}>{s}</button>
                     ))}
                   </div>
                 </div>
@@ -695,10 +707,10 @@ export default function ChatPage() {
                 <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 20px' }}>
                   {messages.map(msg => (
                     <div key={msg.id} style={{ marginBottom: 24, display: 'flex', gap: 12, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
-                      <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, background: msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'rgba(16,185,129,0.15)', color: msg.role === 'user' ? '#818cf8' : '#34d399' }}>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, background: msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'rgba(16,185,129,0.15)', color: msg.role === 'user' ? '#818cf8' : '#34d399', border: `2px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.1)'}` }}>
                         {msg.role === 'user' ? (user?.picture ? <img src={user.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%' }} /> : 'U') : '🤖'}
                       </div>
-                      <div style={{ maxWidth: '80%', background: msg.role === 'user' ? 'rgba(99,102,241,0.1)' : '#1a1d27', border: `1px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.2)' : '#2a2d3a'}`, borderRadius: 12, padding: '12px 16px' }}>
+                      <div style={{ maxWidth: '80%', background: msg.role === 'user' ? 'rgba(99,102,241,0.1)' : '#1a1d27', border: `1px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.2)' : '#2a2d3a'}`, borderRadius: 14, padding: '14px 18px', animation: 'messageIn 0.3s ease', boxShadow: msg.role === 'user' ? '0 2px 8px rgba(99,102,241,0.08)' : '0 2px 8px rgba(0,0,0,0.1)' }}>
                         {msg.steps && msg.steps.length > 0 && (
                           <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #2a2d3a' }}>
                             <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 6 }}>
@@ -779,12 +791,7 @@ export default function ChatPage() {
                     </div>
                   ))}
                   {loading && (
-                    <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div>
-                      <div style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 12, padding: '14px 18px', display: 'flex', gap: 6, alignItems: 'center' }}>
-                        {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1', animation: `pulse 1.2s ${i*0.2}s infinite` }} />)}
-                      </div>
-                    </div>
+                    <TypingIndicator />
                   )}
                   <div ref={bottomRef} />
                 </div>
@@ -1086,18 +1093,22 @@ export default function ChatPage() {
                   <button
                     onClick={() => { setKnowledgeOpen(!knowledgeOpen); setMcpOpen(false) }}
                     title="Search knowledge base"
+                    className="db-btn db-focus"
                     style={{
                       background: knowledgeOpen ? 'rgba(99,102,241,0.12)' : 'transparent',
                       border: knowledgeOpen ? '1px solid rgba(99,102,241,0.25)' : '1px solid transparent',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       color: knowledgeOpen ? '#818cf8' : '#6b7280',
                       fontSize: 12,
                       padding: '5px 10px',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 4
+                      gap: 4,
+                      transition: 'all var(--transition-base)'
                     }}
+                    onMouseEnter={e => { if (!knowledgeOpen) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#9ca3af'; } }}
+                    onMouseLeave={e => { if (!knowledgeOpen) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#6b7280'; } }}
                   >
                     <span style={{ fontSize: 13 }}>📚</span>
                     Knowledge
@@ -1107,18 +1118,22 @@ export default function ChatPage() {
                   <button
                     onClick={() => { setMcpOpen(!mcpOpen); setKnowledgeOpen(false) }}
                     title="MCP Tools"
+                    className="db-btn db-focus"
                     style={{
                       background: mcpOpen ? 'rgba(99,102,241,0.12)' : 'transparent',
                       border: mcpOpen ? '1px solid rgba(99,102,241,0.25)' : '1px solid transparent',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-md)',
                       color: mcpOpen ? '#818cf8' : '#6b7280',
                       fontSize: 12,
                       padding: '5px 10px',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 4
+                      gap: 4,
+                      transition: 'all var(--transition-base)'
                     }}
+                    onMouseEnter={e => { if (!mcpOpen) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#9ca3af'; } }}
+                    onMouseLeave={e => { if (!mcpOpen) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#6b7280'; } }}
                   >
                     <span style={{ fontSize: 13 }}>🔧</span>
                     Tools
@@ -1127,16 +1142,17 @@ export default function ChatPage() {
 
                 {/* Right: model selector + send */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} style={{ background: '#111318', border: '1px solid #2a2d3a', borderRadius: 8, color: '#9ca3af', fontSize: 11, padding: '5px 8px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.5 : 1 }}>
+                  <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} className="db-focus" style={{ background: '#111318', border: '1px solid #2a2d3a', borderRadius: 'var(--radius-md)', color: '#9ca3af', fontSize: 11, padding: '5px 8px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.5 : 1, transition: 'all var(--transition-base)' }}>
                     {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                   </select>
 
                   <button
                     onClick={loading ? cancelRequest : send}
                     disabled={!input.trim() && !loading}
+                    className="db-btn db-focus"
                     style={{
-                      width: 32,
-                      height: 32,
+                      width: 34,
+                      height: 34,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1148,8 +1164,11 @@ export default function ChatPage() {
                       fontWeight: 600,
                       cursor: input.trim() || loading ? 'pointer' : 'not-allowed',
                       flexShrink: 0,
-                      transition: 'all 0.15s ease'
+                      transition: 'all var(--transition-base)',
+                      boxShadow: input.trim() && !loading ? '0 2px 12px rgba(99,102,241,0.3)' : 'none'
                     }}
+                    onMouseEnter={e => { if (input.trim() && !loading) { e.currentTarget.style.boxShadow = '0 4px 16px rgba(99,102,241,0.4)'; e.currentTarget.style.transform = 'translateY(-1px) scale(1.05)' }}}
+                    onMouseLeave={e => { if (input.trim() && !loading) { e.currentTarget.style.boxShadow = '0 2px 12px rgba(99,102,241,0.3)'; e.currentTarget.style.transform = 'translateY(0) scale(1)' }}}
                   >
                     {loading ? '✕' : '↑'}
                   </button>
