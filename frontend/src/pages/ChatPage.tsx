@@ -449,30 +449,42 @@ export default function ChatPage() {
   const CodeBlock = ({ children, className, ...props }: any) => {
     const match = /language-(\w+)/.exec(className || '')
     const language = match ? match[1] : 'text'
+    const [copied, setCopied] = useState(false)
+    const codeText = typeof children === 'string' ? children : ''
+    const copyCode = () => {
+      navigator.clipboard.writeText(codeText).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+    }
     return (
-      <div style={{ position: 'relative', marginTop: 8, marginBottom: 8 }}>
+      <div style={{ position: 'relative', marginTop: 10, marginBottom: 10 }}>
         <div style={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          background: '#2a2d3a',
-          color: '#9ca3af',
-          fontSize: 11,
-          padding: '4px 8px',
-          borderRadius: '0 4px 0 4px',
-          fontFamily: 'monospace'
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: '#1e2130',
+          border: '1px solid #2a2d3a',
+          borderBottom: 'none',
+          borderRadius: 'var(--radius-md) var(--radius-md) 0 0',
+          padding: '6px 12px',
         }}>
-          {language}
+          <div style={{ fontSize: 11, color: '#6b7280', fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{language}</div>
+          <button onClick={copyCode} className="db-btn" style={{ background: 'none', border: 'none', color: copied ? '#34d399' : '#6b7280', fontSize: 11, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)', display: 'flex', alignItems: 'center', gap: 4 }} onMouseEnter={e => { if (!copied) e.currentTarget.style.color = '#c7d2fe' }} onMouseLeave={e => { if (!copied) e.currentTarget.style.color = '#6b7280' }}>
+            {copied ? '✓ Copied' : '⎘ Copy'}
+          </button>
         </div>
         <pre style={{
-          background: '#1a1d27',
+          background: '#14161f',
           border: '1px solid #2a2d3a',
-          borderRadius: 8,
-          padding: '12px',
+          borderTop: 'none',
+          borderRadius: '0 0 var(--radius-md) var(--radius-md)',
+          padding: '14px',
           overflowX: 'auto',
           fontSize: 13,
-          lineHeight: 1.5,
-          color: '#e4e6eb'
+          lineHeight: 1.6,
+          color: '#d1d5db',
+          margin: 0
         }}>
           <code className={className} {...props}>{children}</code>
         </pre>
@@ -493,9 +505,11 @@ export default function ChatPage() {
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0,0,0,0.5)',
+            background: 'rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(4px)',
             zIndex: 40,
-            display: window.innerWidth < 768 ? 'block' : 'none'
+            display: window.innerWidth < 768 ? 'block' : 'none',
+            animation: 'fadeIn 0.2s ease',
           }}
         />
       )}
@@ -878,27 +892,29 @@ export default function ChatPage() {
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
             background: 'rgba(0,0,0,0.6)',
-            backdropFilter: 'blur(4px)',
+            backdropFilter: 'blur(8px)',
             zIndex: 100,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: 20
+            padding: 20,
+            animation: 'modalBackdrop 0.2s ease'
           }} onClick={() => setSettingsOpen(false)}>
             <div style={{
               background: '#111318',
               border: '1px solid #2a2d3a',
-              borderRadius: 16,
+              borderRadius: 'var(--radius-xl)',
               padding: '24px 28px',
               maxWidth: 520,
               width: '100%',
               maxHeight: '85vh',
               overflowY: 'auto',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.5)'
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)',
+              animation: 'modalContent 0.3s ease'
             }} onClick={e => e.stopPropagation()}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                 <h2 style={{ margin: 0, fontSize: 18, color: '#e4e6eb', fontWeight: 700 }}>LLM Provider Setup</h2>
-                <button onClick={() => setSettingsOpen(false)} style={{ background: 'none', border: 'none', color: '#4b4f63', cursor: 'pointer', fontSize: 20 }}>×</button>
+                <button onClick={() => setSettingsOpen(false)} className="db-btn" style={{ background: 'none', border: 'none', color: '#4b4f63', cursor: 'pointer', fontSize: 20, padding: '2px 8px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = '#e4e6eb' }} onMouseLeave={e => { e.currentTarget.style.color = '#4b4f63' }}>×</button>
               </div>
               <p style={{ margin: '0 0 20px', fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
                 Add your API keys to unlock LLM providers. Keys are encrypted at rest. You can also override the default API base URL for each provider.
@@ -925,11 +941,12 @@ export default function ChatPage() {
                         value={providerKeys[provider.id as keyof typeof providerKeys].key}
                         onChange={e => setProviderKeys(prev => ({ ...prev, [provider.id]: { ...prev[provider.id as keyof typeof prev], key: e.target.value } }))}
                         placeholder={provider.placeholder}
+                        className="db-input"
                         style={{
                           width: '100%',
                           background: '#111318',
                           border: '1px solid #2a2d3a',
-                          borderRadius: 8,
+                          borderRadius: 'var(--radius-md)',
                           padding: '8px 12px',
                           color: '#e4e6eb',
                           fontSize: 13,
@@ -945,11 +962,12 @@ export default function ChatPage() {
                         value={providerKeys[provider.id as keyof typeof providerKeys].base_url}
                         onChange={e => setProviderKeys(prev => ({ ...prev, [provider.id]: { ...prev[provider.id as keyof typeof prev], base_url: e.target.value } }))}
                         placeholder={provider.defaultUrl}
+                        className="db-input"
                         style={{
                           width: '100%',
                           background: '#111318',
                           border: '1px solid #2a2d3a',
-                          borderRadius: 8,
+                          borderRadius: 'var(--radius-md)',
                           padding: '8px 12px',
                           color: '#e4e6eb',
                           fontSize: 13,
@@ -965,32 +983,41 @@ export default function ChatPage() {
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
                 <button
                   onClick={() => setSettingsOpen(false)}
+                  className="db-btn db-focus"
                   style={{
                     padding: '8px 16px',
                     background: 'transparent',
                     border: '1px solid #2a2d3a',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     color: '#9ca3af',
                     fontSize: 13,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    transition: 'all var(--transition-base)'
                   }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#4b4f63'; e.currentTarget.style.color = '#c7d2fe'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2d3a'; e.currentTarget.style.color = '#9ca3af'; }}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={saveProviderKeys}
                   disabled={savingKeys}
+                  className="db-btn db-focus"
                   style={{
                     padding: '8px 20px',
                     background: 'linear-gradient(135deg, #6366f1, #818cf8)',
                     border: 'none',
-                    borderRadius: 8,
+                    borderRadius: 'var(--radius-md)',
                     color: 'white',
                     fontSize: 13,
                     fontWeight: 600,
                     cursor: savingKeys ? 'not-allowed' : 'pointer',
-                    opacity: savingKeys ? 0.7 : 1
+                    opacity: savingKeys ? 0.7 : 1,
+                    transition: 'all var(--transition-base)',
+                    boxShadow: '0 2px 12px rgba(99,102,241,0.3)'
                   }}
+                  onMouseEnter={e => { if (!savingKeys) { e.currentTarget.style.boxShadow = '0 4px 16px rgba(99,102,241,0.4)'; e.currentTarget.style.transform = 'translateY(-1px)' }}}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 12px rgba(99,102,241,0.3)'; e.currentTarget.style.transform = 'translateY(0)' }}
                 >
                   {savingKeys ? 'Saving...' : 'Save Keys'}
                 </button>
@@ -1050,7 +1077,7 @@ export default function ChatPage() {
 
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
             {/* Main input container */}
-            <div style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 16, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.2)' }}>
+            <div style={{ background: '#1a1d27', border: '1px solid #2a2d3a', borderRadius: 'var(--radius-xl)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.2)', transition: 'border-color var(--transition-base), box-shadow var(--transition-base)' }} className="db-input-container" id="chat-input-container">
               {/* Textarea */}
               <textarea
                 ref={textareaRef}
@@ -1059,7 +1086,10 @@ export default function ChatPage() {
                 onKeyDown={onKeyDown}
                 placeholder={agentMode ? 'Describe what you want to build...' : 'Ask me anything...'}
                 rows={1}
+                className="db-input"
                 style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: '#e4e6eb', fontSize: 14, lineHeight: 1.5, resize: 'none', maxHeight: 200, fontFamily: 'inherit', overflowY: 'auto', padding: '0 4px' }}
+                onFocus={e => { const container = document.getElementById('chat-input-container'); if (container) { container.style.borderColor = 'rgba(99,102,241,0.4)'; container.style.boxShadow = '0 4px 24px rgba(0,0,0,0.2), 0 0 0 3px rgba(99,102,241,0.1)'; } }}
+                onBlur={e => { const container = document.getElementById('chat-input-container'); if (container) { container.style.borderColor = '#2a2d3a'; container.style.boxShadow = '0 4px 24px rgba(0,0,0,0.2)'; } }}
               />
 
               {/* Bottom toolbar */}
