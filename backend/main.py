@@ -2,7 +2,7 @@
 
 
 
-from fastapi import FastAPI  # noqa: F401 — helps deploy-tool detection
+from fastapi import FastAPI  # noqa: F401 — deploy-tool detection
 
 # The real app with all routers, middleware, and lifespan is defined in app/main.py
 from app.main import app  # noqa: F401
