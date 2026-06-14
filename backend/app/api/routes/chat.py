@@ -30,7 +30,11 @@ def _resolve_provider(model_id: str) -> str:
 
 async def _stream_chat(request: ChatRequest):
     """Stream LLM response as SSE events."""
+    import structlog
+    log = structlog.get_logger()
+    
     provider = _resolve_provider(request.model)
+    log.info("chat_request", model=request.model, provider=provider, messages_count=len(request.messages))
     
     # Build LLM request
     llm_req = LLMRequest(
@@ -51,8 +55,11 @@ async def _stream_chat(request: ChatRequest):
         # Send done event
         yield "data: [DONE]\n\n"
     except Exception as e:
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        log.error("chat_error", error=str(e), traceback=traceback.format_exc())
         # Send error event
-        yield f"data: [ERROR] {str(e)}\n\n"
+        yield f"data: [ERROR] {error_detail}\n\n"
 
 
 @router.post("")
