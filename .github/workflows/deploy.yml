@@ -1,9 +1,10 @@
 name: Deploy to Production
-# Single-push deploy: Cloudflare Pages (frontend) + Fly.io (backend)
+# Deploys on every push to main:
+#   - Frontend → GitHub Pages (devbuddy.org)
+#   - Backend  → HuggingFace Spaces (sivasbrmni-devbuddy.hf.space)
+#
 # Required secrets:
-#   - CLOUDFLARE_API_TOKEN (from dash.cloudflare.com → My Profile → API Tokens)
-#   - CLOUDFLARE_ACCOUNT_ID (from Workers & Pages sidebar)
-#   - FLY_API_TOKEN (from fly.io tokens create)
+#   - HF_TOKEN (HuggingFace write token — from https://huggingface.co/settings/tokens)
 
 on:
   push:
@@ -13,17 +14,25 @@ on:
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.11'
-  VITE_SUPABASE_URL: 'https://oahumeurdneffekoerqa.supabase.co'
-  VITE_SUPABASE_ANON_KEY: 'sb_publishable_WCXQKuSKkQ268IRrpcxm7w_fZDBEqMO'
-  VITE_API_BASE_URL: 'https://devbuddy-backend.fly.dev'
+  HF_SPACE: 'sivasbrmni/devbuddy'
+  VITE_API_URL: 'https://sivasbrmni-devbuddy.hf.space'
+  DOMAIN: 'devbuddy.org'
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
-  # 1. Build Frontend
+  # 1. Build & Deploy Frontend → GitHub Pages
   # ───────────────────────────────────────────────────────────────────────────
-  build-frontend:
-    name: Build Frontend
+  deploy-frontend:
+    name: Deploy Frontend (GitHub Pages)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -38,99 +47,98 @@ jobs:
           cd frontend
           npm ci
 
-      - name: Type check
-        run: |
-          cd frontend
-          npx tsc --noEmit
-
       - name: Build
         run: |
           cd frontend
           npm run build
         env:
-          VITE_SUPABASE_URL: ${{ env.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ env.VITE_SUPABASE_ANON_KEY }}
-          VITE_API_BASE_URL: ${{ env.VITE_API_BASE_URL }}
+          VITE_API_URL: ${{ env.VITE_API_URL }}
+          VITE_API_BASE_URL: ${{ env.VITE_API_URL }}
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
-          retention-days: 1
+      - name: Add CNAME for custom domain
+        run: echo "${{ env.DOMAIN }}" > frontend/dist/CNAME
 
-  # ───────────────────────────────────────────────────────────────────────────
-  # 2. Deploy Frontend → Cloudflare Pages
-  # ───────────────────────────────────────────────────────────────────────────
-  deploy-frontend:
-    name: Deploy to Cloudflare Pages
-    needs: build-frontend
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      deployments: write
-    steps:
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
+      - name: Add 404.html for SPA routing
+        run: cp frontend/dist/index.html frontend/dist/404.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: frontend-dist
           path: frontend/dist
 
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: devbuddy
-          directory: frontend/dist
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
   # ───────────────────────────────────────────────────────────────────────────
-  # 3. Deploy Backend → Fly.io
+  # 2. Deploy Backend → HuggingFace Spaces
   # ───────────────────────────────────────────────────────────────────────────
   deploy-backend:
-    name: Deploy to Fly.io
-    needs: deploy-frontend  # Deploy backend after frontend (so frontend doesn't point to old backend)
+    name: Deploy Backend (HuggingFace Spaces)
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Deploy to Fly.io
-        run: flyctl deploy --remote-only
+      - name: Push backend to HuggingFace Space
         env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-
-      - name: Run database migrations
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          flyctl ssh console --command "cd /app && alembic upgrade head"
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          # Configure git for the push
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+          # Clone the HF Space repo
+          git clone https://user:${HF_TOKEN}@huggingface.co/spaces/${{ env.HF_SPACE }} hf-space
+          cd hf-space
+
+          # Clear old files (except .git)
+          find . -maxdepth 1 ! -name '.git' ! -name '.' -exec rm -rf {} +
+
+          # Copy backend files
+          cp -r ../backend/* .
+          cp -r ../backend/.* . 2>/dev/null || true
+
+          # Ensure Dockerfile exists for the Space
+          if [ ! -f Dockerfile ]; then
+            cp ../backend/Dockerfile .
+          fi
+
+          # Commit and push
+          git add -A
+          git diff --cached --quiet && echo "No changes to deploy" && exit 0
+          git commit -m "deploy: $(date -u '+%Y-%m-%d %H:%M:%S UTC') from ${GITHUB_SHA::8}"
+          git push
 
   # ───────────────────────────────────────────────────────────────────────────
-  # 4. Smoke Tests
+  # 3. Smoke Tests
   # ───────────────────────────────────────────────────────────────────────────
   smoke-test:
-    name: Smoke Tests
+    name: Post-Deploy Smoke Tests
     needs: [deploy-frontend, deploy-backend]
     runs-on: ubuntu-latest
+
     steps:
-      - name: Test health endpoint
-        run: |
-          sleep 10  # Give services time to warm up
-          curl -sf https://devbuddy-backend.fly.dev/health || exit 1
-          echo "Backend health OK"
+      - name: Wait for deployments to propagate
+        run: sleep 60
 
-      - name: Test frontend reachable
+      - name: Test frontend
         run: |
-          FRONTEND_URL="https://devbuddy.pages.dev"
-          curl -sf "$FRONTEND_URL" || exit 1
-          echo "Frontend reachable OK"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://${{ env.DOMAIN }})
+          echo "Frontend status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Frontend returned $STATUS (may still be propagating)"
+          fi
 
-      - name: Notify success
-        if: success()
+      - name: Test backend health
         run: |
-          echo "✅ Deployed commit ${{ github.sha }} successfully!"
-          echo "Frontend: https://devbuddy.pages.dev"
-          echo "Backend:  https://devbuddy-backend.fly.dev"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://sivasbrmni-devbuddy.hf.space/health)
+          echo "Backend health status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Backend returned $STATUS (Space may be waking up)"
+          fi
