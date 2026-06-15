@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { GitHubProvider, useGitHub } from '../context/GitHubContext'
 import GitHubPanel from '../components/GitHubPanel'
+import AgentTimeline, { AgentRun, TimelineStep } from '../components/AgentTimeline'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import JSZip from 'jszip'
@@ -112,9 +113,11 @@ export default function Workspace() {
   const { convs, active, activeId, createNew, updateActive, selectConv, deleteConv, restoreConv } = useConversations()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [githubPanelOpen, setGithubPanelOpen] = useState(false)
-  const [activeRepo, setActiveRepoLocal] = useState<{ name: string; owner: string; html_url: string } | null>(() => {
+  const [activeRepo, setActiveRepoLocal] = useState<{ name: string; owner: string; full_name: string; html_url: string; default_branch?: string } | null>(() => {
     try { return JSON.parse(localStorage.getItem('devbuddy_active_repo') || 'null') } catch { return null }
   })
+  const [agentRun, setAgentRun] = useState<AgentRun | null>(null)
+  const [agentTimelineOpen, setAgentTimelineOpen] = useState(false)
   const [models, setModels] = useState<Model[]>(FALLBACK_MODELS)
   const [modelsLoading, setModelsLoading] = useState(true)
   const [model, setModel] = useState(FALLBACK_MODELS[0].id)
@@ -282,6 +285,105 @@ export default function Workspace() {
     }
   }
 
+  const runGitHubAgent = useCallback(async (task: string) => {
+    if (!activeRepo) return false
+    const token = localStorage.getItem('devbuddy_token') || ''
+    const owner = activeRepo.owner || activeRepo.full_name?.split('/')[0] || ''
+    const repo = activeRepo.name
+
+    const run: AgentRun = {
+      taskId: Math.random().toString(36).slice(2, 10),
+      repo: `${owner}/${repo}`,
+      branch: '',
+      task,
+      status: 'running',
+      timeline: [],
+      plan: [],
+      modifiedFiles: [],
+      thinking: [],
+      toolCalls: [],
+      observations: [],
+      prUrl: '',
+      prNumber: '',
+      commitHash: '',
+      durationSeconds: 0,
+      error: '',
+    }
+    setAgentRun(run)
+    setAgentTimelineOpen(true)
+
+    try {
+      const resp = await fetch(`${API}/github-agent/run?token=${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task, owner, repo, conversation_id: activeId }),
+      })
+      if (!resp.ok) {
+        const err = await resp.text()
+        setAgentRun(r => r ? { ...r, status: 'error', error: err } : r)
+        return true
+      }
+
+      const reader = resp.body!.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const evt = JSON.parse(line.slice(6))
+            const type: string = evt.type
+            const payload = evt.payload
+
+            setAgentRun(r => {
+              if (!r) return r
+              const next = { ...r }
+              if (type === 'timeline') {
+                const idx = next.timeline.findIndex(s => s.step === payload.step)
+                const step: TimelineStep = { step: payload.step, status: payload.status, message: payload.message }
+                if (idx >= 0) { next.timeline = [...next.timeline]; next.timeline[idx] = step }
+                else next.timeline = [...next.timeline, step]
+              } else if (type === 'plan') {
+                next.plan = payload.steps || []
+              } else if (type === 'branch') {
+                next.branch = payload.name || ''
+              } else if (type === 'thinking') {
+                if (payload.thought) next.thinking = [...next.thinking, { iteration: payload.iteration, thought: payload.thought }]
+              } else if (type === 'tool_call') {
+                next.toolCalls = [...next.toolCalls, { tool: payload.tool, params: payload.params || {}, iteration: payload.iteration }]
+              } else if (type === 'observation') {
+                next.observations = [...next.observations, { iteration: payload.iteration, tool: payload.tool, output: payload.output }]
+              } else if (type === 'file_change') {
+                if (payload.path && !next.modifiedFiles.includes(payload.path)) next.modifiedFiles = [...next.modifiedFiles, payload.path]
+              } else if (type === 'pr') {
+                next.prUrl = payload.url || ''; next.prNumber = payload.number || ''
+              } else if (type === 'done') {
+                next.status = 'done'
+                next.prUrl = payload.pr_url || next.prUrl
+                next.commitHash = payload.commit_hash || ''
+                next.durationSeconds = payload.duration_seconds || 0
+                next.modifiedFiles = payload.modified_files?.length ? payload.modified_files : next.modifiedFiles
+              } else if (type === 'error') {
+                next.status = 'error'; next.error = payload.message || 'Unknown error'
+              }
+              return next
+            })
+          } catch (_) {}
+        }
+      }
+    } catch (e: any) {
+      setAgentRun(r => r ? { ...r, status: 'error', error: e.message } : r)
+    }
+    return true
+  }, [activeRepo, activeId])
+
   const autoResize = () => {
     const el = textareaRef.current
     if (!el) return
@@ -418,6 +520,20 @@ export default function Workspace() {
   const send = async () => {
     const text = input.trim()
     if (!text || loading) return
+
+    // If a GitHub repo is active and agent mode is on → run GitHub autonomous agent
+    if (activeRepo && agentMode) {
+      setInput('')
+      if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      // Also add the message to chat for context
+      let conv = active
+      if (!conv) conv = createNew()
+      const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text, ts: Date.now() }
+      const title = conv.messages.length === 0 ? text.slice(0, 50) : conv.title
+      updateActive([...conv.messages, userMsg], title)
+      await runGitHubAgent(text)
+      return
+    }
 
     // Auto-detect agent vs chat mode
     const shouldUseAgent = detectMode(text)
@@ -947,6 +1063,18 @@ export default function Workspace() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* Active agent run indicator */}
+            {agentRun && (
+              <button
+                onClick={() => setAgentTimelineOpen(true)}
+                className="db-btn db-focus"
+                style={{ background: agentRun.status === 'running' ? 'rgba(99,102,241,0.12)' : agentRun.status === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(52,211,153,0.08)', border: `1px solid ${agentRun.status === 'running' ? 'rgba(99,102,241,0.25)' : agentRun.status === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(52,211,153,0.2)'}`, borderRadius: 'var(--radius-md)', color: agentRun.status === 'running' ? 'var(--accent-hover)' : agentRun.status === 'error' ? 'var(--error)' : 'var(--success)', fontSize: 12, padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                {agentRun.status === 'running' ? <Icon name="loader" size={11} /> : agentRun.status === 'error' ? <Icon name="error" size={11} /> : <Icon name="check" size={11} />}
+                {agentRun.status === 'running' ? 'Agent running…' : agentRun.status === 'error' ? 'Agent error' : 'PR ready'}
+              </button>
+            )}
+
             {/* GitHub repo button */}
             <GitHubRepoButton activeRepo={activeRepo} onClick={() => setGithubPanelOpen(true)} />
 
@@ -1475,6 +1603,13 @@ export default function Workspace() {
           </div>
         </div>
       </div>
+
+      {/* Agent Timeline */}
+      <AgentTimeline
+        run={agentRun}
+        isOpen={agentTimelineOpen}
+        onClose={() => setAgentTimelineOpen(false)}
+      />
 
       {/* GitHub Panel */}
       <GitHubPanelWrapper
