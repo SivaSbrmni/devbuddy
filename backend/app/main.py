@@ -60,18 +60,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             
             if missing:
                 print(f"[db init] Missing tables: {missing}")
-                for table_name in sorted(missing):
-                    table = Base.metadata.tables[table_name]
-                    try:
-                        table.create(sync_conn, checkfirst=True)
-                        print(f"[db init] Created table: {table_name}")
-                    except Exception as e:
-                        err = str(e).lower()
-                        if "already exists" in err or "duplicate" in err:
-                            print(f"[db init] Table {table_name} already exists, skipping")
-                        else:
-                            print(f"[db init] ERROR creating {table_name}: {e}")
-                            raise
+                # Use create_all for proper dependency ordering (FKs handled correctly)
+                try:
+                    Base.metadata.create_all(sync_conn, checkfirst=True)
+                    print(f"[db init] All tables created successfully")
+                except Exception as e:
+                    err = str(e).lower()
+                    if "already exists" in err or "duplicate" in err:
+                        print(f"[db init] Some objects already exist, continuing")
+                    else:
+                        print(f"[db init] ERROR: {e}")
+                        raise
             else:
                 print(f"[db init] All tables exist: {existing}")
 

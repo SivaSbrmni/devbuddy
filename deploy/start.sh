@@ -79,18 +79,18 @@ async def create_tables():
         
         if missing:
             print(f'[start.sh] Creating missing tables: {missing}', flush=True)
-            for table_name in sorted(missing):
-                table = Base.metadata.tables[table_name]
+            # Use create_all for proper dependency ordering (FKs handled correctly)
+            def _safe_create_all(sync_conn):
                 try:
-                    await conn.run_sync(lambda sync_conn, t=table: t.create(sync_conn, checkfirst=True))
-                    print(f'[start.sh] Created table: {table_name}', flush=True)
+                    Base.metadata.create_all(sync_conn, checkfirst=True)
                 except Exception as e:
                     err = str(e).lower()
                     if 'already exists' in err or 'duplicate' in err:
-                        print(f'[start.sh] Table {table_name} already exists, skipping', flush=True)
+                        print(f'[start.sh] Some objects already exist, continuing', flush=True)
                     else:
-                        print(f'[start.sh] ERROR creating {table_name}: {e}', flush=True)
                         raise
+            await conn.run_sync(_safe_create_all)
+            print(f'[start.sh] Tables created successfully', flush=True)
         else:
             print(f'[start.sh] All tables already exist', flush=True)
 
