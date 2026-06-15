@@ -52,18 +52,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from sqlalchemy import inspect
 
     async with engine.begin() as conn:
-        def _safe_create_all(sync_conn):
-            try:
-                Base.metadata.create_all(sync_conn)
-            except Exception as exc:
-                err = str(exc).lower()
-                # Ignore duplicate table / index errors on restarts
-                if any(k in err for k in ("already exists", "duplicate")):
-                    print(f"[db init] skipping existing object: {exc}")
-                else:
-                    raise
+        def _create_missing_tables(sync_conn):
+            inspector = inspect(sync_conn)
+            existing = set(inspector.get_table_names())
+            all_tables = set(Base.metadata.tables.keys())
+            missing = all_tables - existing
+            
+            if missing:
+                print(f"[db init] Missing tables: {missing}")
+                for table_name in sorted(missing):
+                    table = Base.metadata.tables[table_name]
+                    try:
+                        table.create(sync_conn, checkfirst=True)
+                        print(f"[db init] Created table: {table_name}")
+                    except Exception as e:
+                        err = str(e).lower()
+                        if "already exists" in err or "duplicate" in err:
+                            print(f"[db init] Table {table_name} already exists, skipping")
+                        else:
+                            print(f"[db init] ERROR creating {table_name}: {e}")
+                            raise
+            else:
+                print(f"[db init] All tables exist: {existing}")
 
-        await conn.run_sync(_safe_create_all)
+        await conn.run_sync(_create_missing_tables)
 
     # Initialize LLM router
     await model_router.startup()

@@ -53,7 +53,9 @@ cd /app
 python3 -c "
 import asyncio
 import os
+import sys
 os.environ['DATABASE_URL'] = 'postgresql+asyncpg://devbuddy:devbuddy@127.0.0.1:5432/devbuddy'
+os.environ['ENVIRONMENT'] = 'production'
 
 from app.db.base import Base
 from app.db.session import engine
@@ -67,31 +69,33 @@ import app.models.user_settings
 
 async def create_tables():
     async with engine.begin() as conn:
-        # Get existing tables
         from sqlalchemy import inspect
         result = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
         existing = set(result)
-        print(f'Existing tables: {existing}')
+        print(f'[start.sh] Existing tables: {existing}', flush=True)
         
-        # Create all tables that don't exist
         all_tables = set(Base.metadata.tables.keys())
         missing = all_tables - existing
         
         if missing:
-            print(f'Creating missing tables: {missing}')
-            # Create only missing tables
-            for table_name in missing:
+            print(f'[start.sh] Creating missing tables: {missing}', flush=True)
+            for table_name in sorted(missing):
                 table = Base.metadata.tables[table_name]
                 try:
-                    await conn.run_sync(lambda sync_conn: table.create(sync_conn, checkfirst=True))
-                    print(f'Created table: {table_name}')
+                    await conn.run_sync(lambda sync_conn, t=table: t.create(sync_conn, checkfirst=True))
+                    print(f'[start.sh] Created table: {table_name}', flush=True)
                 except Exception as e:
-                    print(f'Error creating {table_name}: {e}')
+                    err = str(e).lower()
+                    if 'already exists' in err or 'duplicate' in err:
+                        print(f'[start.sh] Table {table_name} already exists, skipping', flush=True)
+                    else:
+                        print(f'[start.sh] ERROR creating {table_name}: {e}', flush=True)
+                        raise
         else:
-            print('All tables already exist')
+            print(f'[start.sh] All tables already exist', flush=True)
 
 asyncio.run(create_tables())
-" || echo "Table creation script failed, continuing..."
+" || { echo "CRITICAL: Table creation failed!"; exit 1; }
 
 # Set production defaults
 export ENVIRONMENT="${ENVIRONMENT:-production}"
