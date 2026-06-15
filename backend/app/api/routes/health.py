@@ -102,12 +102,15 @@ async def health_db_init() -> dict:
 
         async with engine.begin() as conn:
             def _create_all(sync_conn):
+                from sqlalchemy import text
                 inspector = inspect(sync_conn)
                 existing = set(inspector.get_table_names())
                 all_tables = set(Base.metadata.tables.keys())
                 missing = all_tables - existing
                 if not missing:
                     return {"created": [], "existing": sorted(existing)}
+                # Drop conflicting indexes from partial prior runs
+                sync_conn.execute(text("DROP INDEX IF EXISTS ix_user_settings_email"))
                 Base.metadata.create_all(sync_conn, checkfirst=True)
                 return {"created": sorted(missing), "existing": sorted(existing)}
 

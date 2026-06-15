@@ -53,6 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     async with engine.begin() as conn:
         def _create_missing_tables(sync_conn):
+            from sqlalchemy import text
             inspector = inspect(sync_conn)
             existing = set(inspector.get_table_names())
             all_tables = set(Base.metadata.tables.keys())
@@ -60,6 +61,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             
             if missing:
                 print(f"[db init] Missing tables: {missing}")
+                # Drop conflicting indexes that might exist from partial prior runs
+                sync_conn.execute(text("DROP INDEX IF EXISTS ix_user_settings_email"))
                 # Use create_all for proper dependency ordering (FKs handled correctly)
                 try:
                     Base.metadata.create_all(sync_conn, checkfirst=True)
@@ -67,7 +70,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 except Exception as e:
                     err = str(e).lower()
                     if "already exists" in err or "duplicate" in err:
-                        print(f"[db init] Some objects already exist, continuing")
+                        print(f"[db init] Some objects already exist, continuing: {e}")
                     else:
                         print(f"[db init] ERROR: {e}")
                         raise
