@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,7 +26,7 @@ class Milestone(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     order: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(
-        Enum("pending", "in_progress", "completed", "blocked", name="milestone_status"),
+        String(20),
         default="pending",
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -45,15 +45,11 @@ class Task(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     task_type: Mapped[str] = mapped_column(
-        Enum(
-            "requirement_analysis", "planning", "architecture", "coding",
-            "review", "testing", "debugging", "deployment", "improvement",
-            name="task_type",
-        ),
+        String(30),
         nullable=False,
     )
     status: Mapped[str] = mapped_column(
-        Enum("pending", "in_progress", "completed", "failed", "blocked", "cancelled", name="task_status"),
+        String(20),
         default="pending",
     )
     priority: Mapped[int] = mapped_column(Integer, default=0)

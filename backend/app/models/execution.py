@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,11 +24,11 @@ class Run(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     task_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("tasks.id"))
     run_type: Mapped[str] = mapped_column(
-        Enum("build", "test", "deploy", "repair", "improvement", name="run_type"),
+        String(20),
         nullable=False,
     )
     status: Mapped[str] = mapped_column(
-        Enum("queued", "running", "success", "failed", "cancelled", name="run_status"),
+        String(20),
         default="queued",
     )
     trigger: Mapped[str] = mapped_column(String(100), default="agent")

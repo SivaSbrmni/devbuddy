@@ -22,7 +22,11 @@ interface Model {
 }
 
 const FALLBACK_MODELS: Model[] = [
-  { id: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet', provider: 'anthropic', family: 'claude' }
+  { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', provider: 'anthropic', family: 'anthropic' },
+  { id: 'llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout', provider: 'llama', family: 'llama' },
+  { id: 'qwen3-coder:480b', label: 'Qwen 3 Coder', provider: 'ollama', family: 'ollama' },
+  { id: 'llama3.3:latest', label: 'Llama 3.3', provider: 'ollama', family: 'ollama' },
+  { id: 'deepseek-coder:latest', label: 'DeepSeek Coder', provider: 'ollama', family: 'ollama' },
 ]
 
 interface Message {
@@ -689,9 +693,9 @@ export default function Workspace() {
         {/* Divider */}
         <div style={{ width: 24, height: 1, background: 'var(--border-subtle)', margin: '8px 0' }} />
 
-        {/* Conversation dots — color-coded for visual memory */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', flex: 1, overflow: 'hidden', padding: '4px 0' }}>
-          {convs.slice(0, 6).map(c => {
+        {/* Conversations list */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'stretch', flex: 1, overflow: 'hidden', padding: '4px 6px', width: '100%' }}>
+          {convs.map(c => {
             const hue = c.title.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360
             const isActive = c.id === activeId
             return (
@@ -701,30 +705,60 @@ export default function Workspace() {
                 title={c.title}
                 className="db-btn"
                 style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  background: isActive ? `hsl(${hue}, 70%, 55%)` : `hsl(${hue}, 50%, 20%)`,
-                  border: isActive ? `2px solid hsl(${hue}, 70%, 65%)` : '1px solid var(--border)',
-                  color: 'white',
+                  width: '100%',
+                  padding: '6px 8px',
+                  borderRadius: 'var(--radius-md)',
+                  background: isActive ? `hsl(${hue}, 70%, 55%, 0.15)` : 'transparent',
+                  border: isActive ? `1px solid hsl(${hue}, 70%, 55%, 0.3)` : '1px solid transparent',
+                  color: isActive ? `hsl(${hue}, 70%, 65%)` : 'var(--text-muted)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  gap: 8,
                   fontSize: 11,
-                  fontWeight: 700,
+                  fontWeight: isActive ? 600 : 500,
                   transition: 'all var(--transition-fast)',
                   flexShrink: 0,
-                  boxShadow: isActive ? `0 0 0 2px hsl(${hue}, 70%, 55%, 0.3)` : 'none',
+                  textAlign: 'left',
+                  overflow: 'hidden',
+                }}
+                onMouseEnter={e => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                    e.currentTarget.style.color = 'var(--text)'
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent'
+                    e.currentTarget.style.color = 'var(--text-muted)'
+                  }
                 }}
               >
-                {c.title.charAt(0).toUpperCase()}
+                <span style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: '50%',
+                  background: isActive ? `hsl(${hue}, 70%, 55%)` : `hsl(${hue}, 50%, 25%)`,
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  flexShrink: 0,
+                }}>
+                  {c.title.charAt(0).toUpperCase()}
+                </span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                  {c.title}
+                </span>
+                <span style={{ fontSize: 9, color: 'var(--text-faint)', flexShrink: 0 }}>
+                  {c.messages.length}
+                </span>
               </button>
             )
           })}
-          {convs.length > 6 && (
-            <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>+{convs.length - 6}</span>
-          )}
         </div>
 
         {/* Bottom actions */}
