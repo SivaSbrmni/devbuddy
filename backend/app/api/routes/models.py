@@ -49,7 +49,7 @@ def _get_email_from_token(token: str | None) -> str | None:
 
 
 async def _fetch_ollama_models(base_url: str, api_key: str) -> list[dict[str, Any]]:
-    """Fetch models from Ollama /api/tags."""
+    """Fetch models from Ollama /api/tags. Fast timeout for non-blocking fallback."""
     try:
         headers = {}
         if api_key:
@@ -57,7 +57,7 @@ async def _fetch_ollama_models(base_url: str, api_key: str) -> list[dict[str, An
         async with httpx.AsyncClient(
             base_url=base_url or settings.OLLAMA_API_BASE,
             headers=headers,
-            timeout=30.0,
+            timeout=2.0,  # Fast timeout - don't block if Ollama not running
         ) as client:
             resp = await client.get("/api/tags")
             resp.raise_for_status()
@@ -79,7 +79,7 @@ async def _fetch_ollama_models(base_url: str, api_key: str) -> list[dict[str, An
                 })
             return models
     except Exception as e:
-        print(f"Failed to fetch Ollama models: {e}")
+        # Silently fail - Ollama not running is expected in many deployments
         return []
 
 
@@ -109,25 +109,26 @@ async def list_models(
     if llama_cfg.get("key") or settings.LLAMA_API_KEY:
         models.extend(_KNOWN_MODELS.get("llama", []))
 
-    # Ollama — always include known defaults, try live fetch if configured
+    # Ollama — try live fetch first from user's config or default localhost
     ollama_cfg = user_keys.get("ollama") or {}
     ollama_key = ollama_cfg.get("key") or settings.OLLAMA_API_KEY
     ollama_base = ollama_cfg.get("base_url") or settings.OLLAMA_API_BASE
-    # Show known Ollama models by default
-    models.extend(_KNOWN_MODELS.get("ollama", []))
-    # Try live fetch if user has configured a base URL or API key
-    user_configured_base = bool(ollama_cfg.get("base_url"))
-    has_key = bool(ollama_key)
-    if user_configured_base or has_key:
-        cache_key = f"{ollama_base}:{ollama_key[:4] if ollama_key else 'nokey'}"
-        now = asyncio.get_event_loop().time()
-        cached = _ollama_cache.get(cache_key)
-        if cached and now - cached[0] < _CACHE_TTL:
-            models.extend(cached[1])
-        else:
-            ollama_models = await _fetch_ollama_models(ollama_base, ollama_key)
+    
+    # Always try to fetch live Ollama models (fast timeout, non-blocking)
+    cache_key = f"{ollama_base}:{ollama_key[:4] if ollama_key else 'nokey'}"
+    now = asyncio.get_event_loop().time()
+    cached = _ollama_cache.get(cache_key)
+    
+    if cached and now - cached[0] < _CACHE_TTL:
+        models.extend(cached[1])
+    else:
+        ollama_models = await _fetch_ollama_models(ollama_base, ollama_key)
+        if ollama_models:
             _ollama_cache[cache_key] = (now, ollama_models)
             models.extend(ollama_models)
+        else:
+            # Fallback to known static models if Ollama is not running
+            models.extend(_KNOWN_MODELS.get("ollama", []))
 
     # Deduplicate
     seen = set()
