@@ -641,6 +641,7 @@ export default function Workspace() {
       {/* ── Left sidebar with conversation list ── */}
       <div style={{
         width: 240,
+        height: '100vh',
         background: 'var(--bg-elevated)',
         borderRight: '1px solid var(--border-subtle)',
         display: 'flex',
@@ -648,13 +649,14 @@ export default function Workspace() {
         flexShrink: 0,
         alignItems: 'stretch',
         padding: '12px 0',
-        gap: 4,
+        gap: 0,
         position: isMobile ? 'fixed' : 'relative',
         left: isMobile ? (sidebarOpen ? 0 : -240) : 0,
         top: 0,
         bottom: 0,
         zIndex: 50,
         transition: 'left 0.3s ease',
+        boxSizing: 'border-box',
       }}>
         {/* App logo + new chat */}
         <div style={{ padding: '4px 12px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -699,7 +701,7 @@ export default function Workspace() {
         </div>
 
         {/* Conversations list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'stretch', flex: 1, overflow: 'auto', padding: '4px 12px', width: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'stretch', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 12px', width: '100%' }}>
           {convs.length === 0 && (
             <div style={{ padding: '20px 8px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 12 }}>
               No conversations yet
@@ -869,7 +871,7 @@ export default function Workspace() {
       </div>
 
       {/* ── Main chat area ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Top bar — 2050 OS: minimal, contextual */}
         <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -1008,8 +1010,8 @@ export default function Workspace() {
         />
 
         {/* Chat area */}
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0' }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '24px 0' }}>
             {messages.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 20, padding: '40px 24px' }}>
                 {/* Welcome */}
