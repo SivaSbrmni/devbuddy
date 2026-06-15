@@ -70,6 +70,30 @@ jobs:
               print(f'Warning: could not sync secret: {e}')
           "
 
+      - name: Trigger Factory Rebuild
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install -q huggingface_hub
+          python3 -c "
+          from huggingface_hub import HfApi
+          api = HfApi(token='$HF_TOKEN')
+          try:
+              api.restart_space('Sivasbrmni/devbuddy', factory_rebuild=True)
+              print('Factory rebuild triggered successfully')
+          except Exception as e:
+              print(f'Warning: restart_space failed: {e}')
+              # Fallback: use raw API
+              import requests
+              resp = requests.post(
+                  'https://huggingface.co/api/spaces/Sivasbrmni/devbuddy/restart',
+                  headers={'Authorization': f'Bearer $HF_TOKEN'},
+                  json={'factory_rebuild': True}
+              )
+              print(f'Fallback API status: {resp.status_code}')
+              print(resp.text)
+          "
+
       - name: Wait for HF Space to rebuild
         run: sleep 180
 
