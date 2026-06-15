@@ -92,12 +92,17 @@ function useConversations() {
     if (activeId === id) setActiveId(list[0]?.id || '')
   }
 
-  return { convs, active, activeId, createNew, updateActive, selectConv, deleteConv }
+  const restoreConv = (conv: Conversation) => {
+    save([conv, ...convs])
+    setActiveId(conv.id)
+  }
+
+  return { convs, active, activeId, createNew, updateActive, selectConv, deleteConv, restoreConv }
 }
 
 export default function ChatPage() {
   const { user, logout } = useAuth()
-  const { convs, active, activeId, createNew, updateActive, selectConv, deleteConv } = useConversations()
+  const { convs, active, activeId, createNew, updateActive, selectConv, deleteConv, restoreConv } = useConversations()
   const [models, setModels] = useState<Model[]>(FALLBACK_MODELS)
   const [modelsLoading, setModelsLoading] = useState(true)
   const [model, setModel] = useState(FALLBACK_MODELS[0].id)
@@ -117,6 +122,7 @@ export default function ChatPage() {
   })
   const [savingKeys, setSavingKeys] = useState(false)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  const [lastDeleted, setLastDeleted] = useState<Conversation | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -132,6 +138,15 @@ export default function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Auto-open workspace when files are generated (but respect manual close)
+  useEffect(() => {
+    if (workspaceFiles.length > 0 && !workspaceOpen) {
+      // Small delay so it doesn't feel jarring during streaming
+      const timer = setTimeout(() => setWorkspaceOpen(true), 300)
+      return () => clearTimeout(timer)
+    }
+  }, [workspaceFiles.length])
 
   useEffect(() => {
     if (!activeId && !loading) createNew()
@@ -337,9 +352,56 @@ export default function ChatPage() {
     updateActive([...newMsgs, { ...assistantMsg }], title)
   }
 
+  // Auto-detect mode from prompt keywords
+  const detectMode = (text: string): boolean => {
+    const agentKeywords = ['build', 'create', 'setup', 'deploy', 'generate', 'make', 'scaffold', 'implement', 'write', 'develop']
+    const chatKeywords = ['explain', 'why', 'how does', 'what is', 'compare', 'debug', 'fix', 'review', 'check']
+    const lower = text.toLowerCase()
+    const agentScore = agentKeywords.filter(k => lower.includes(k)).length
+    const chatScore = chatKeywords.filter(k => lower.includes(k)).length
+    if (agentScore > chatScore) return true
+    if (chatScore > agentScore) return false
+    return agentMode // default to current mode if ambiguous
+  }
+
+  // Auto-route to best model based on prompt content
+  const routeModel = (text: string) => {
+    const lower = text.toLowerCase()
+    // Claude excels at code generation and structured tasks
+    const claudeKeywords = ['build', 'create', 'implement', 'write', 'code', 'api', 'function', 'component', 'script', 'fastapi', 'react', 'vue', 'angular']
+    // GPT-4 excels at reasoning and analysis
+    const gptKeywords = ['explain', 'analyze', 'compare', 'why', 'how', 'review', 'debug', 'optimize', 'refactor']
+    const claudeScore = claudeKeywords.filter(k => lower.includes(k)).length
+    const gptScore = gptKeywords.filter(k => lower.includes(k)).length
+    if (claudeScore > gptScore) {
+      const claude = models.find(m => m.family === 'claude')
+      if (claude) return claude.id
+    }
+    if (gptScore > claudeScore) {
+      const gpt = models.find(m => m.family === 'gpt')
+      if (gpt) return gpt.id
+    }
+    return model // keep current if ambiguous
+  }
+
   const send = async () => {
     const text = input.trim()
     if (!text || loading) return
+
+    // Auto-detect agent vs chat mode
+    const shouldUseAgent = detectMode(text)
+    if (shouldUseAgent !== agentMode) {
+      setAgentMode(shouldUseAgent)
+      toast(`Switched to ${shouldUseAgent ? 'Agent' : 'Chat'} mode`, 'info')
+    }
+
+    // Auto-route to best model
+    const bestModel = routeModel(text)
+    if (bestModel !== model) {
+      setModel(bestModel)
+      const m = models.find(x => x.id === bestModel)
+      if (m) toast(`Using ${m.label}`, 'info')
+    }
 
     let conv = active
     if (!conv) conv = createNew()
@@ -528,10 +590,29 @@ export default function ChatPage() {
                 <div style={{ fontSize: 13, color: c.id === activeId ? 'var(--accent-hover)' : 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: c.id === activeId ? 600 : 400 }}>{c.title}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>{c.messages.length > 0 ? `${c.messages.length} message${c.messages.length > 1 ? 's' : ''}` : 'Empty'}</div>
               </div>
-              <button onClick={e => { e.stopPropagation(); deleteConv(c.id) }} className="db-btn conv-delete" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 14, padding: '2px 6px', flexShrink: 0, borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)', opacity: 0 }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--error)'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent' }} title="Delete conversation"><Icon name="trash" size={14} /></button>
+              <button onClick={e => {
+                e.stopPropagation()
+                const conv = convs.find(x => x.id === c.id)
+                if (conv) {
+                  setLastDeleted(conv)
+                  deleteConv(c.id)
+                  setTimeout(() => setLastDeleted(null), 5000)
+                }
+              }} className="db-btn conv-delete" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 14, padding: '2px 6px', flexShrink: 0, borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)', opacity: 0 }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--error)'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent' }} title="Delete conversation"><Icon name="trash" size={14} /></button>
             </div>
           ))}
         </div>
+
+        {/* Undo bar for deleted conversations */}
+        {lastDeleted && (
+          <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderTop: '1px solid rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, animation: 'fadeIn 0.2s ease' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Deleted <strong style={{ color: 'var(--text)' }}>{lastDeleted.title}</strong></span>
+            <button onClick={() => {
+              restoreConv(lastDeleted)
+              setLastDeleted(null)
+            }} className="db-btn" style={{ fontSize: 12, color: 'var(--accent-hover)', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 'var(--radius-sm)', padding: '3px 10px', cursor: 'pointer', fontWeight: 600 }}>Undo</button>
+          </div>
+        )}
 
         {/* User info */}
         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -698,7 +779,7 @@ export default function ChatPage() {
                 <p style={{ color: 'var(--text-dim)', fontSize: 16, textAlign: 'center', maxWidth: 400 }}>Describe what you want to build and I'll handle the rest.</p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 500 }}>
                   {['Build a REST API with FastAPI', 'Create a React dashboard', 'Set up a CI/CD pipeline', 'Debug my Python code'].map(s => (
-                    <button key={s} onClick={() => { setInput(s); textareaRef.current?.focus() }} className="db-btn db-focus" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 14px', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', transition: 'all var(--transition-base)' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.color = 'var(--accent-hover)'; e.currentTarget.style.background = 'rgba(99,102,241,0.08)' }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-card)' }}>{s}</button>
+                    <button key={s} onClick={() => { setInput(s); setTimeout(() => send(), 50) }} className="db-btn db-focus" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 14px', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', transition: 'all var(--transition-base)' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.color = 'var(--accent-hover)'; e.currentTarget.style.background = 'rgba(99,102,241,0.08)' }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-card)' }}>{s}</button>
                   ))}
                 </div>
               </div>
