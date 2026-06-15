@@ -18,8 +18,8 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Cache-bust to force rebuild when backend code changes
-ARG CACHE_BUST=2026-06-15-01
+# Cache-bust: force Docker to rebuild all layers after this point
+RUN echo "cache-bust-v2-2026-06-15-02" > /dev/null
 
 # Copy backend code
 COPY backend/app ./app
