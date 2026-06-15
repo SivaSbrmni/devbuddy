@@ -189,19 +189,29 @@ async def _ensure_workspace(state: AgentState) -> Path:
 
 
 async def _checkout_branch(ws_path: Path, branch: str, base_branch: str) -> tuple[int, str]:
-    """Create or checkout a devbuddy branch."""
-    # Fetch to make sure base exists
+    """Create or checkout a devbuddy branch, handling dirty/detached workspace."""
+    # Remove any stale git lock files
+    for lock in ws_path.glob(".git/*.lock"):
+        lock.unlink(missing_ok=True)
+
+    # Reset workspace to a clean state on base branch
+    await _run("git reset --hard HEAD", ws_path)
+    await _run("git clean -fd", ws_path)
     await _run(f"git fetch origin {base_branch}", ws_path)
-    # Check if branch already exists remotely
+    await _run(f"git checkout {base_branch}", ws_path)
+    await _run(f"git reset --hard origin/{base_branch}", ws_path)
+
+    # Check if our devbuddy branch already exists remotely
     code, out, _ = await _run(f"git ls-remote --heads origin {branch}", ws_path)
     if out.strip():
-        # Already exists — checkout
-        code, _, err = await _run(f"git checkout {branch} && git pull origin {branch}", ws_path)
+        # Already exists — fetch and checkout
+        await _run(f"git fetch origin {branch}", ws_path)
+        code, _, err = await _run(f"git checkout -B {branch} origin/{branch}", ws_path)
     else:
-        # Create from base
-        code, _, err = await _run(
-            f"git checkout origin/{base_branch} -b {branch}", ws_path
-        )
+        # Create fresh branch from base
+        # Delete local branch if it somehow exists in a bad state
+        await _run(f"git branch -D {branch}", ws_path)  # ignore failure
+        code, _, err = await _run(f"git checkout -b {branch}", ws_path)
     return code, branch
 
 

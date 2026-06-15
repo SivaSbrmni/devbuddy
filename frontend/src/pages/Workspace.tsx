@@ -334,14 +334,6 @@ export default function Workspace() {
       planning: 48, execution: 62, commit: 82, push: 90, pr: 96,
     }
 
-    // Also update AgentRun for top-bar indicator
-    const run: AgentRun = {
-      taskId: cardId, repo: `${owner}/${repo}`, branch: '', task,
-      status: 'running', timeline: [], plan: [], modifiedFiles: [],
-      thinking: [], toolCalls: [], observations: [],
-      prUrl: '', prNumber: '', commitHash: '', durationSeconds: 0, error: '',
-    }
-    setAgentRun(run)
 
     try {
       const resp = await fetch(`${API}/github-agent/run?token=${encodeURIComponent(token)}`, {
@@ -353,7 +345,6 @@ export default function Workspace() {
         const err = await resp.text()
         patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
           events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: err.slice(0, 120), status: 'error' } as TaskEvent] }))
-        setAgentRun(r => r ? { ...r, status: 'error', error: err } : r)
         return true
       }
 
@@ -436,23 +427,12 @@ export default function Workspace() {
               return next
             })
 
-            // Sync AgentRun for top-bar
-            setAgentRun(r => {
-              if (!r) return r
-              if (type === 'pr') return { ...r, prUrl: payload.url || r.prUrl, prNumber: payload.number || r.prNumber }
-              if (type === 'done') return { ...r, status: 'done', commitHash: payload.commit_hash || '', modifiedFiles: payload.modified_files || r.modifiedFiles }
-              if (type === 'error') return { ...r, status: 'error', error: payload.message }
-              if (type === 'branch') return { ...r, branch: payload.name || '' }
-              return r
-            })
-
           } catch (_) {}
         }
       }
     } catch (e: any) {
       patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
         events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: e.message, status: 'error' } as TaskEvent] }))
-      setAgentRun(r => r ? { ...r, status: 'error', error: e.message } : r)
     }
     return true
   }, [activeRepo, activeId, active?.title])
@@ -1274,18 +1254,6 @@ export default function Workspace() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {/* Active agent run indicator */}
-            {agentRun && (
-              <button
-                onClick={() => setAgentTimelineOpen(true)}
-                className="db-btn db-focus"
-                style={{ background: agentRun.status === 'running' ? 'rgba(99,102,241,0.12)' : agentRun.status === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(52,211,153,0.08)', border: `1px solid ${agentRun.status === 'running' ? 'rgba(99,102,241,0.25)' : agentRun.status === 'error' ? 'rgba(239,68,68,0.2)' : 'rgba(52,211,153,0.2)'}`, borderRadius: 'var(--radius-md)', color: agentRun.status === 'running' ? 'var(--accent-hover)' : agentRun.status === 'error' ? 'var(--error)' : 'var(--success)', fontSize: 12, padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
-              >
-                {agentRun.status === 'running' ? <Icon name="loader" size={11} /> : agentRun.status === 'error' ? <Icon name="error" size={11} /> : <Icon name="check" size={11} />}
-                {agentRun.status === 'running' ? 'Agent running…' : agentRun.status === 'error' ? 'Agent error' : 'PR ready'}
-              </button>
-            )}
-
             {/* GitHub repo button */}
             <GitHubRepoButton activeRepo={activeRepo} onClick={() => setGithubPanelOpen(true)} />
 
@@ -1858,13 +1826,6 @@ export default function Workspace() {
           </div>
         </div>
       </div>
-
-      {/* Agent Timeline */}
-      <AgentTimeline
-        run={agentRun}
-        isOpen={agentTimelineOpen}
-        onClose={() => setAgentTimelineOpen(false)}
-      />
 
       {/* GitHub Panel */}
       <GitHubPanelWrapper
