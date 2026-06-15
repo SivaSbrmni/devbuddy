@@ -1,8 +1,6 @@
 """Simple Hugging Face MCP server using the official MCP SDK and huggingface_hub."""
 
 import os
-from typing import AsyncIterator
-
 from huggingface_hub import HfApi, InferenceClient, list_models, model_info
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -73,13 +71,13 @@ async def list_tools() -> list[Tool]:
 
 
 @app.call_tool()
-async def call_tool(name: str, arguments: dict) -> AsyncIterator[TextContent]:
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     if name == "hf_search_models":
         query = arguments["query"]
         limit = arguments.get("limit", 10)
         models = list(list_models(search=query, limit=limit))
         lines = [f"- {m.id}  (downloads: {m.downloads}, likes: {m.likes})" for m in models]
-        yield TextContent(type="text", text="\n".join(lines) if lines else "No models found.")
+        return [TextContent(type="text", text="\n".join(lines) if lines else "No models found.")]
 
     elif name == "hf_get_model_info":
         repo_id = arguments["repo_id"]
@@ -92,7 +90,7 @@ async def call_tool(name: str, arguments: dict) -> AsyncIterator[TextContent]:
             f"Pipeline tag: {info.pipeline_tag or 'N/A'}\n"
             f"Description: {info.card_data.get('text', 'N/A') if info.card_data else 'N/A'}"
         )
-        yield TextContent(type="text", text=text)
+        return [TextContent(type="text", text=text)]
 
     elif name == "hf_text_generation":
         model = arguments["model"]
@@ -105,17 +103,17 @@ async def call_tool(name: str, arguments: dict) -> AsyncIterator[TextContent]:
             max_new_tokens=max_new,
             temperature=temp,
         )
-        yield TextContent(type="text", text=response)
+        return [TextContent(type="text", text=response)]
 
     elif name == "hf_download_file":
         repo_id = arguments["repo_id"]
         filename = arguments["filename"]
         local_dir = arguments.get("local_dir")
         path = api.hf_hub_download(repo_id=repo_id, filename=filename, local_dir=local_dir, token=HF_TOKEN)
-        yield TextContent(type="text", text=f"Downloaded to: {path}")
+        return [TextContent(type="text", text=f"Downloaded to: {path}")]
 
     else:
-        yield TextContent(type="text", text=f"Unknown tool: {name}")
+        return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
 
 async def main():

@@ -78,6 +78,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     err_msg = str(e).lower()
                     if "already exists" in err_msg or "duplicate" in err_msg:
                         print(f"[db init] Object already exists, will retry individually: {e}")
+                        # Rollback the aborted transaction before retrying
+                        sync_conn.rollback()
                         # Fallback: create each table individually
                         for table in Base.metadata.sorted_tables:
                             if table.name not in existing:
@@ -86,6 +88,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                                     print(f"[db init] Created table: {table.name}")
                                 except Exception as te:
                                     if "already exists" in str(te).lower() or "duplicate" in str(te).lower():
+                                        sync_conn.rollback()
                                         print(f"[db init] Skipping {table.name}: already exists")
                                     else:
                                         raise
