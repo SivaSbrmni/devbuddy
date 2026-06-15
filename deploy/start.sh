@@ -47,6 +47,52 @@ done
 echo "Checking for conflicting indexes..."
 su postgres -c "psql -d devbuddy -c 'DROP INDEX IF EXISTS ix_user_settings_email;'" > /dev/null 2>&1 || true
 
+# Ensure all tables exist (handles schema changes on HF Space restarts)
+echo "Ensuring database tables exist..."
+cd /app
+python3 -c "
+import asyncio
+import os
+os.environ['DATABASE_URL'] = 'postgresql+asyncpg://devbuddy:devbuddy@127.0.0.1:5432/devbuddy'
+
+from app.db.base import Base
+from app.db.session import engine
+
+# Import all models to register them
+import app.models.project
+import app.models.task
+import app.models.execution
+import app.models.memory
+import app.models.user_settings
+
+async def create_tables():
+    async with engine.begin() as conn:
+        # Get existing tables
+        from sqlalchemy import inspect
+        result = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
+        existing = set(result)
+        print(f'Existing tables: {existing}')
+        
+        # Create all tables that don't exist
+        all_tables = set(Base.metadata.tables.keys())
+        missing = all_tables - existing
+        
+        if missing:
+            print(f'Creating missing tables: {missing}')
+            # Create only missing tables
+            for table_name in missing:
+                table = Base.metadata.tables[table_name]
+                try:
+                    await conn.run_sync(lambda sync_conn: table.create(sync_conn, checkfirst=True))
+                    print(f'Created table: {table_name}')
+                except Exception as e:
+                    print(f'Error creating {table_name}: {e}')
+        else:
+            print('All tables already exist')
+
+asyncio.run(create_tables())
+" || echo "Table creation script failed, continuing..."
+
 # Set production defaults
 export ENVIRONMENT="${ENVIRONMENT:-production}"
 export DEBUG="${DEBUG:-false}"
