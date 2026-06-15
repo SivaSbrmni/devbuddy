@@ -18,6 +18,9 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Cache-bust to force rebuild when backend code changes
+ARG CACHE_BUST=2026-06-15-01
+
 # Copy backend code
 COPY backend/app ./app
 COPY backend/alembic ./alembic
