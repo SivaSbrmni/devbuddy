@@ -19,7 +19,8 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Cache-bust: force Docker to rebuild all layers after this point
-RUN echo "cache-bust-v2-2026-06-15-02" > /dev/null
+RUN echo "cache-bust-v3-2026-06-15-03" > /dev/null
+RUN rm -rf /app/app /app/alembic /app/alembic.ini /app/main.py /app/static /start.sh
 
 # Copy backend code
 COPY backend/app ./app
