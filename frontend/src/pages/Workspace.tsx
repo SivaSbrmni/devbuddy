@@ -708,42 +708,47 @@ export default function Workspace() {
             const firstUserMessage = c.messages.find(m => m.role === 'user')?.content || ''
             const description = firstUserMessage.substring(0, 40) + (firstUserMessage.length > 40 ? '...' : '') || 'New conversation'
             return (
-              <button
+              <div
                 key={c.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => selectConv(c.id)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectConv(c.id) } }}
                 title={c.title}
-                className="db-btn"
+                className="db-btn conv-item"
                 style={{
                   width: '100%',
-                  padding: '10px 12px',
+                  padding: '8px 10px',
                   borderRadius: 'var(--radius-md)',
-                  background: isActive ? `hsl(${hue}, 70%, 55%, 0.15)` : 'transparent',
-                  border: isActive ? `1px solid hsl(${hue}, 70%, 55%, 0.3)` : '1px solid transparent',
+                  background: isActive ? `hsla(${hue}, 70%, 55%, 0.15)` : 'transparent',
+                  border: isActive ? `1px solid hsla(${hue}, 70%, 55%, 0.3)` : '1px solid transparent',
                   color: isActive ? `hsl(${hue}, 70%, 65%)` : 'var(--text)',
                   cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'flex-start',
-                  gap: 4,
+                  gap: 3,
                   fontSize: 12,
                   fontWeight: isActive ? 600 : 500,
                   transition: 'all var(--transition-fast)',
                   flexShrink: 0,
                   textAlign: 'left',
                   overflow: 'hidden',
+                  position: 'relative',
+                  boxSizing: 'border-box',
                 }}
                 onMouseEnter={e => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-                  }
+                  if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                  const btn = e.currentTarget.querySelector('.conv-del-btn') as HTMLElement
+                  if (btn) btn.style.opacity = '1'
                 }}
                 onMouseLeave={e => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent'
-                  }
+                  if (!isActive) e.currentTarget.style.background = 'transparent'
+                  const btn = e.currentTarget.querySelector('.conv-del-btn') as HTMLElement
+                  if (btn) btn.style.opacity = '0'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0 }}>
                   <span style={{
                     width: 24,
                     height: 24,
@@ -762,17 +767,59 @@ export default function Workspace() {
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, fontSize: 13 }}>
                     {c.title}
                   </span>
-                  <span style={{ fontSize: 10, color: 'var(--text-faint)', flexShrink: 0, background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
-                    {c.messages.length}
-                  </span>
+                  {c.messages.length > 0 && (
+                    <span style={{ fontSize: 10, color: 'var(--text-faint)', flexShrink: 0, background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: 'var(--radius-sm)', minWidth: 16, textAlign: 'center' }}>
+                      {c.messages.length}
+                    </span>
+                  )}
+                  <button
+                    className="conv-del-btn"
+                    onClick={e => {
+                      e.stopPropagation()
+                      setLastDeleted(c)
+                      deleteConv(c.id)
+                      setTimeout(() => setLastDeleted(null), 5000)
+                    }}
+                    title="Delete conversation"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-faint)',
+                      cursor: 'pointer',
+                      padding: '2px 4px',
+                      borderRadius: 'var(--radius-sm)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      opacity: 0,
+                      transition: 'all var(--transition-fast)',
+                      lineHeight: 1,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--error)'; e.currentTarget.style.background = 'rgba(239,68,68,0.12)' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'none' }}
+                  >
+                    <Icon name="trash" size={12} />
+                  </button>
                 </div>
-                <span style={{ fontSize: 11, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', paddingLeft: 32 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', paddingLeft: 32 }}>
                   {description}
                 </span>
-              </button>
+              </div>
             )
           })}
         </div>
+
+        {/* Undo delete toast */}
+        {lastDeleted && (
+          <div style={{ margin: '4px 12px', padding: '8px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, animation: 'fadeIn 0.15s ease', flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>Deleted <strong style={{ color: 'var(--text)' }}>{lastDeleted.title}</strong></span>
+            <button
+              onClick={() => { restoreConv(lastDeleted); setLastDeleted(null) }}
+              style={{ fontSize: 11, color: 'var(--accent-hover)', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)', borderRadius: 'var(--radius-sm)', padding: '3px 10px', cursor: 'pointer', fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}
+            >Undo</button>
+          </div>
+        )}
 
         {/* Bottom actions */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', marginTop: 'auto' }}>
