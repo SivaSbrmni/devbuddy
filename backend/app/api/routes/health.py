@@ -110,8 +110,19 @@ async def health_db_init() -> dict:
                 if not missing:
                     return {"created": [], "existing": sorted(existing)}
                 # Drop conflicting indexes from partial prior runs
-                sync_conn.execute(text("DROP INDEX IF EXISTS ix_user_settings_email"))
-                Base.metadata.create_all(sync_conn, checkfirst=True)
+                for idx in ["ix_user_settings_email", "ix_pm_project_category", "ix_ke_category", 
+                            "ix_skills_category", "ix_mu_provider", "ix_audit_actor", 
+                            "ix_audit_action", "ix_audit_created"]:
+                    sync_conn.execute(text(f"DROP INDEX IF EXISTS {idx}"))
+                try:
+                    Base.metadata.create_all(sync_conn, checkfirst=True)
+                except Exception:
+                    for table in Base.metadata.sorted_tables:
+                        if table.name not in existing:
+                            try:
+                                table.create(sync_conn, checkfirst=True)
+                            except Exception:
+                                pass
                 return {"created": sorted(missing), "existing": sorted(existing)}
 
             result = await conn.run_sync(_create_all)

@@ -63,14 +63,34 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 print(f"[db init] Missing tables: {missing}")
                 # Drop conflicting indexes that might exist from partial prior runs
                 sync_conn.execute(text("DROP INDEX IF EXISTS ix_user_settings_email"))
-                # Use create_all for proper dependency ordering (FKs handled correctly)
+                sync_conn.execute(text("DROP INDEX IF EXISTS ix_pm_project_category"))
+                sync_conn.execute(text("DROP INDEX IF EXISTS ix_ke_category"))
+                sync_conn.execute(text("DROP INDEX IF EXISTS ix_skills_category"))
+                sync_conn.execute(text("DROP INDEX IF EXISTS ix_mu_provider"))
+                sync_conn.execute(text("DROP INDEX IF EXISTS ix_audit_actor"))
+                sync_conn.execute(text("DROP INDEX IF EXISTS ix_audit_action"))
+                sync_conn.execute(text("DROP INDEX IF EXISTS ix_audit_created"))
+                
+                # Create tables in dependency order using SQLAlchemy's create_all
+                # which handles FK ordering. Catch index errors and continue.
                 try:
                     Base.metadata.create_all(sync_conn, checkfirst=True)
                     print(f"[db init] All tables created successfully")
                 except Exception as e:
-                    err = str(e).lower()
-                    if "already exists" in err or "duplicate" in err:
-                        print(f"[db init] Some objects already exist, continuing: {e}")
+                    err_msg = str(e).lower()
+                    if "already exists" in err_msg or "duplicate" in err_msg:
+                        print(f"[db init] Object already exists, will retry individually: {e}")
+                        # Fallback: create each table individually
+                        for table in Base.metadata.sorted_tables:
+                            if table.name not in existing:
+                                try:
+                                    table.create(sync_conn, checkfirst=True)
+                                    print(f"[db init] Created table: {table.name}")
+                                except Exception as te:
+                                    if "already exists" in str(te).lower() or "duplicate" in str(te).lower():
+                                        print(f"[db init] Skipping {table.name}: already exists")
+                                    else:
+                                        raise
                     else:
                         print(f"[db init] ERROR: {e}")
                         raise
