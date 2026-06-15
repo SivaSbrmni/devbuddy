@@ -667,7 +667,7 @@ export default function Workspace() {
           {user?.picture ? (
             <img
               src={user.picture}
-              alt=""
+              alt={`${user?.name || 'User'} avatar`}
               onClick={logout}
               title="Sign out"
               style={{
@@ -821,13 +821,42 @@ export default function Workspace() {
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0' }}>
             {messages.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 24 }}>
-                <div style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-2px', background: 'linear-gradient(135deg, var(--text), var(--accent-hover))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>DevBuddy</div>
-                <p style={{ color: 'var(--text-dim)', fontSize: 16, textAlign: 'center', maxWidth: 400 }}>Describe what you want to build and I'll handle the rest.</p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 500 }}>
-                  {['Build a REST API with FastAPI', 'Create a React dashboard', 'Set up a CI/CD pipeline', 'Debug my Python code'].map(s => (
-                    <button key={s} onClick={() => { setInput(s); setTimeout(() => send(), 50) }} className="db-btn db-focus" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '8px 14px', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', transition: 'all var(--transition-base)' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.color = 'var(--accent-hover)'; e.currentTarget.style.background = 'rgba(99,102,241,0.08)' }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'var(--bg-card)' }}>{s}</button>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 20, padding: '40px 24px' }}>
+                {/* Welcome */}
+                <div style={{ textAlign: 'center', maxWidth: 480 }}>
+                  <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-1px', background: 'linear-gradient(135deg, var(--text), var(--accent-hover))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>DevBuddy</div>
+                  <p style={{ color: 'var(--text-dim)', fontSize: 15, lineHeight: 1.6 }}>Your AI engineering co-pilot. Build, debug, and ship faster.</p>
+                </div>
+
+                {/* Quick actions grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, maxWidth: 480, width: '100%' }}>
+                  {[
+                    { label: 'Build a REST API', icon: 'zap', desc: 'FastAPI + PostgreSQL' },
+                    { label: 'React Dashboard', icon: 'brain', desc: 'Charts + auth' },
+                    { label: 'CI/CD Pipeline', icon: 'rocket', desc: 'GitHub Actions' },
+                    { label: 'Debug Python', icon: 'wrench', desc: 'Trace + fix' },
+                  ].map(s => (
+                    <button key={s.label} onClick={() => { setInput(s.label); setTimeout(() => send(), 50) }} className="db-btn db-focus" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px', textAlign: 'left', cursor: 'pointer', transition: 'all var(--transition-base)' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.background = 'rgba(99,102,241,0.06)'; e.currentTarget.style.transform = 'translateY(-1px)'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <Icon name={s.icon as any} size={16} style={{ color: 'var(--accent-hover)' }} />
+                        <span style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600 }}>{s.label}</span>
+                      </div>
+                      <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{s.desc}</span>
+                    </button>
                   ))}
+                </div>
+
+                {/* Tips row */}
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-faint)', fontSize: 12 }}>
+                    <Icon name="command" size={12} /> <span>⌘K for commands</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-faint)', fontSize: 12 }}>
+                    <Icon name="send" size={12} /> <span>Enter to send</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-faint)', fontSize: 12 }}>
+                    <Icon name="folder" size={12} /> <span>Drop files anywhere</span>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -835,9 +864,9 @@ export default function Workspace() {
                   {messages.map(msg => (
                     <div key={msg.id} style={{ marginBottom: 24, display: 'flex', gap: 12, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
                       <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, background: msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'rgba(16,185,129,0.15)', color: msg.role === 'user' ? 'var(--accent-hover)' : 'var(--success)', border: `2px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.1)'}` }}>
-                        {msg.role === 'user' ? (user?.picture ? <img src={user.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%' }} /> : <Icon name="user" size={16} />) : <Icon name="bot" size={16} />}
+                        {msg.role === 'user' ? (user?.picture ? <img src={user.picture} alt={`${user?.name || 'User'} avatar`} style={{ width: 32, height: 32, borderRadius: '50%' }} /> : <Icon name="user" size={16} />) : <Icon name="bot" size={16} />}
                       </div>
-                      <div style={{ maxWidth: '80%', background: msg.role === 'user' ? 'rgba(99,102,241,0.1)' : 'var(--bg-card)', border: `1px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)', padding: '14px 18px', animation: 'messageIn 0.3s ease', boxShadow: msg.role === 'user' ? '0 2px 8px rgba(99,102,241,0.08)' : '0 2px 8px rgba(0,0,0,0.1)' }}>
+                      <div className="message-enter" style={{ maxWidth: '80%', background: msg.role === 'user' ? 'rgba(99,102,241,0.1)' : 'var(--bg-card)', border: `1px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)', padding: '14px 18px', boxShadow: msg.role === 'user' ? '0 2px 8px rgba(99,102,241,0.08)' : '0 2px 8px rgba(0,0,0,0.1)' }}>
                         {msg.steps && msg.steps.length > 0 && (
                           <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
                             <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, marginBottom: 6 }}>
