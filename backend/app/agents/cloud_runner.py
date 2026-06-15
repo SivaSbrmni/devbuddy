@@ -956,22 +956,36 @@ async def run_cloud_agent(
         return
 
     # ── 2: Inject workflow file ────────────────────────────────────────
-    yield emit("runner", {"state": "initializing", "message": "Injecting runner workflow..."})
+    # GitHub only recognises workflow_dispatch if the workflow file exists
+    # on the DEFAULT branch. We upsert a stub there first, then write the
+    # full task-specific workflow onto the task branch.
+    yield emit("runner", {"state": "initializing", "message": "Registering runner workflow..."})
     import base64
     workflow_yaml = _build_workflow(job, devbuddy_url)
     workflow_b64 = base64.b64encode(workflow_yaml.encode()).decode()
 
     try:
-        existing_sha = await _get_file_sha(owner, repo, github_token, WORKFLOW_FILE, branch_name)
+        # 2a: upsert on default branch so GitHub registers it as dispatchable
+        default_sha = await _get_file_sha(owner, repo, github_token, WORKFLOW_FILE, job.base_branch)
+        await _put_file(
+            owner, repo, github_token,
+            path=WORKFLOW_FILE,
+            content_b64=workflow_b64,
+            message=f"chore: register DevBuddy runner workflow",
+            branch=job.base_branch,
+            sha=default_sha,
+        )
+        # 2b: also write it onto the task branch so the runner has it
+        task_branch_sha = await _get_file_sha(owner, repo, github_token, WORKFLOW_FILE, branch_name)
         await _put_file(
             owner, repo, github_token,
             path=WORKFLOW_FILE,
             content_b64=workflow_b64,
             message=f"chore: inject DevBuddy runner for task {task_id}",
             branch=branch_name,
-            sha=existing_sha,
+            sha=task_branch_sha,
         )
-        yield emit("timeline", {"step": "init", "status": "done", "message": "Runner workflow injected"})
+        yield emit("timeline", {"step": "init", "status": "done", "message": "Runner workflow registered"})
     except Exception as e:
         yield emit("error", {"message": f"Workflow injection failed: {e}"})
         return
@@ -980,10 +994,11 @@ async def run_cloud_agent(
     yield emit("runner", {"state": "connecting", "message": "Dispatching GitHub Actions job..."})
     dispatch_epoch = int(time.time())
     try:
+        # workflow_dispatch must target the default branch (where the workflow is registered)
         await _dispatch_workflow(
             owner, repo, github_token,
             workflow_id=WORKFLOW_ID,
-            branch=branch_name,
+            branch=job.base_branch,
             inputs={
                 "task_id": task_id,
                 "task": task[:255],
@@ -1001,7 +1016,7 @@ async def run_cloud_agent(
     while time.monotonic() < deadline:
         await asyncio.sleep(POLL_INTERVAL)
         try:
-            runs = await _list_workflow_runs(owner, repo, github_token, WORKFLOW_ID, branch_name, dispatch_epoch)
+            runs = await _list_workflow_runs(owner, repo, github_token, WORKFLOW_ID, job.base_branch, dispatch_epoch)
             if runs:
                 run_id = runs[0]["id"]
                 job.run_id = run_id
