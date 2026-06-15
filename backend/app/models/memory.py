@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,12 +25,7 @@ class ProjectMemory(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     category: Mapped[str] = mapped_column(
-        Enum(
-            "vision", "goals", "requirements", "architecture", "constraints",
-            "decisions", "coding_standards", "security_standards",
-            "deployment_standards", "conversations", "milestones", "lessons_learned",
-            name="memory_category",
-        ),
+        String(50),
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -54,12 +49,7 @@ class KnowledgeEntry(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"))
     category: Mapped[str] = mapped_column(
-        Enum(
-            "successful_fix", "failed_fix", "architectural_pattern",
-            "reusable_component", "deployment_pattern", "debugging_strategy",
-            "engineering_lesson",
-            name="knowledge_category",
-        ),
+        String(50),
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -101,13 +91,13 @@ class DeploymentHistory(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
     provider: Mapped[str] = mapped_column(
-        Enum("railway", "vercel", "docker", name="deploy_provider"),
+        String(50),
         nullable=False,
     )
     environment: Mapped[str] = mapped_column(String(50), default="production")
     version: Mapped[str] = mapped_column(String(100), default="")
     status: Mapped[str] = mapped_column(
-        Enum("pending", "deploying", "success", "failed", "rolled_back", name="deploy_status"),
+        String(50),
         default="pending",
     )
     config: Mapped[dict] = mapped_column(JSONB, default=dict)
