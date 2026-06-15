@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.crypto import crypto
-from app.db.session import get_db
+from app.core.deps import get_db
 from app.models.user_settings import UserSettings
 
 router = APIRouter(prefix="/settings", tags=["settings"])

@@ -6,14 +6,14 @@ import asyncio
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.crypto import crypto
-from app.db.session import get_db
+from app.core.deps import get_db
 from app.models.user_settings import UserSettings
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -81,7 +81,7 @@ async def _fetch_ollama_models(base_url: str, api_key: str) -> list[dict[str, An
 @router.get("")
 async def list_models(
     token: Optional[str] = Query(None),
-    db: AsyncSession = get_db,
+    db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """List available models using the user's configured API keys."""
     email = _get_email_from_token(token)
