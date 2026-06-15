@@ -19,8 +19,8 @@ GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_API_BASE = "https://api.github.com"
 
-# Scopes: repo (full repo access), read:org, read:user, user:email
-GITHUB_SCOPES = "repo read:org read:user user:email"
+# Scopes: repo (full repo access), workflow (write .github/workflows/), read:org, read:user, user:email
+GITHUB_SCOPES = "repo workflow read:org read:user user:email"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

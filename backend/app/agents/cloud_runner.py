@@ -987,7 +987,15 @@ async def run_cloud_agent(
         )
         yield emit("timeline", {"step": "init", "status": "done", "message": "Runner workflow registered"})
     except Exception as e:
-        yield emit("error", {"message": f"Workflow injection failed: {e}"})
+        msg = str(e)
+        if "404" in msg:
+            msg = (
+                "Workflow injection failed (404). Your GitHub token needs the "
+                "'workflow' scope to write to .github/workflows/. "
+                "Re-authorize DevBuddy with the 'workflow' OAuth scope, or use a "
+                "Personal Access Token (classic) with 'repo' + 'workflow' scopes."
+            )
+        yield emit("error", {"message": msg})
         return
 
     # ── 3: Dispatch workflow ───────────────────────────────────────────
