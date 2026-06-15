@@ -1019,18 +1019,14 @@ export default function Workspace() {
           </div>
         </div>
 
-        {/* Context bar — project awareness */}
-        <ContextBar
-          project="devbuddy"
-          branch="main"
-          files={[
-            { path: 'frontend/src/App.tsx', status: 'modified' },
-            { path: 'frontend/src/pages/Workspace.tsx', status: 'modified' },
-            { path: 'frontend/src/components/ContextBar.tsx', status: 'new' },
-            { path: 'backend/app/main.py', status: 'clean' },
-          ]}
-          lastTopic={active?.title && active.title !== 'New conversation' ? active.title : undefined}
-        />
+        {/* Context bar — only shown when a GitHub repo is active */}
+        {activeRepo && (
+          <ContextBar
+            project={activeRepo.name}
+            branch={(activeRepo as any).default_branch || 'main'}
+            lastTopic={active?.title && active.title !== 'New conversation' ? active.title : undefined}
+          />
+        )}
 
         {/* Chat area */}
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
