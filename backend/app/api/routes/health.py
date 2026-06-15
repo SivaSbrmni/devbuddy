@@ -85,3 +85,42 @@ async def health_db_status() -> dict:
             "error": str(exc),
             "traceback": traceback.format_exc(),
         }
+
+
+@router.post("/health/db-init")
+async def health_db_init() -> dict:
+    """Force-create all database tables for emergency recovery."""
+    try:
+        from app.db.session import engine
+        from sqlalchemy import inspect
+        from app.db.base import Base
+        import app.models.project  # noqa: F401
+        import app.models.task  # noqa: F401
+        import app.models.execution  # noqa: F401
+        import app.models.memory  # noqa: F401
+        import app.models.user_settings  # noqa: F401
+
+        async with engine.begin() as conn:
+            def _create_all(sync_conn):
+                inspector = inspect(sync_conn)
+                existing = set(inspector.get_table_names())
+                all_tables = set(Base.metadata.tables.keys())
+                missing = all_tables - existing
+                if not missing:
+                    return {"created": [], "existing": sorted(existing)}
+                Base.metadata.create_all(sync_conn, checkfirst=True)
+                return {"created": sorted(missing), "existing": sorted(existing)}
+
+            result = await conn.run_sync(_create_all)
+
+        return {
+            "status": "success",
+            "message": "Tables created",
+            "tables": result,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "error": str(exc),
+            "traceback": traceback.format_exc(),
+        }
