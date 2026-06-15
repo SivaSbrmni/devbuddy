@@ -85,13 +85,17 @@ function useConversations() {
     return c
   }
 
-  const updateActive = (msgs: Message[] | ((prev: Message[]) => Message[]), title?: string) => {
-    const list = convs.map(c => {
-      if (c.id !== activeId) return c
-      const next = typeof msgs === 'function' ? msgs(c.messages) : msgs
-      return { ...c, messages: next, title: title || c.title, ts: Date.now() }
+  const updateActive = (msgs: Message[] | ((prev: Message[]) => Message[]), title?: string, forceId?: string) => {
+    const targetId = forceId ?? activeId
+    setConvs(prev => {
+      const list = prev.map(c => {
+        if (c.id !== targetId) return c
+        const next = typeof msgs === 'function' ? msgs(c.messages) : msgs
+        return { ...c, messages: next, title: title || c.title, ts: Date.now() }
+      })
+      localStorage.setItem('devbuddy_convs', JSON.stringify(list))
+      return list
     })
-    save(list)
   }
 
   const selectConv = (id: string) => setActiveId(id)
@@ -436,7 +440,7 @@ export default function Workspace() {
     return true
   }, [activeRepo, activeId, active?.title])
 
-  const runCloudAgent = useCallback(async (task: string, msgId: string, conversationAtStart: Message[]) => {
+  const runCloudAgent = useCallback(async (task: string, msgId: string, conversationAtStart: Message[], convId?: string) => {
     if (!activeRepo) return false
     const token = localStorage.getItem('devbuddy_token') || ''
     const owner = (activeRepo as any).owner || activeRepo.full_name?.split('/')[0] || ''
@@ -467,13 +471,13 @@ export default function Workspace() {
     }
 
     const convTitle = conversationAtStart.length === 1 ? task.slice(0, 50) : (active?.title || task.slice(0, 50))
-    updateActive([...conversationAtStart, agentMsg], convTitle)
+    updateActive([...conversationAtStart, agentMsg], convTitle, convId)
 
     const patchCard = (fn: (c: TaskCardData) => TaskCardData) => {
       updateActive(prev => prev.map(m => m.id === cardId && m.taskCard
         ? { ...m, taskCard: fn(m.taskCard) }
         : m
-      ), convTitle)
+      ), convTitle, convId)
     }
 
     const PROGRESS: Record<string, number> = {
@@ -707,17 +711,21 @@ export default function Workspace() {
     const text = input.trim()
     if (!text || loading) return
 
-    // If a GitHub repo is active and agent mode is on → run GitHub autonomous agent (local or cloud)
+    // If a GitHub repo is active and agent mode is on → always cloud
     if (activeRepo && agentMode) {
       setInput('')
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
       let conv = active
-      if (!conv) conv = createNew()
+      let convId = activeId
+      if (!conv) {
+        conv = createNew()
+        convId = conv.id
+      }
       const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text, ts: Date.now() }
       const agentMsgId = crypto.randomUUID()
       const msgsWithUser = [...conv.messages, userMsg]
-      updateActive(msgsWithUser, text.slice(0, 50))
-      await runCloudAgent(text, agentMsgId, msgsWithUser)
+      updateActive(msgsWithUser, text.slice(0, 50), convId)
+      await runCloudAgent(text, agentMsgId, msgsWithUser, convId)
       return
     }
 
