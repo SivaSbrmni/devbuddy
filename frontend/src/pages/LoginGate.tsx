@@ -5,41 +5,41 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0d0f14', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+      <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <div style={{
           width: 40, height: 40,
-          border: '3px solid rgba(99,102,241,0.2)',
-          borderTopColor: '#6366f1',
+          border: '3px solid var(--accent-glow)',
+          borderTopColor: 'var(--accent)',
           borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
+          animation: 'spin 0.8s linear infinite'
         }} />
-        <div style={{ color: '#6b7280', fontSize: 14, fontWeight: 500 }}>Loading DevBuddy...</div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ color: 'var(--text-dim)', fontSize: 14, fontWeight: 500, letterSpacing: '0.3px' }}>Loading DevBuddy...</div>
       </div>
     )
   }
 
   if (!user) {
     return (
-      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #0a0c10 0%, #111318 50%, #0a0c10 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', padding: 20 }}>
-        {/* Ambient glow */}
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, var(--bg) 0%, var(--bg-elevated) 50%, var(--bg) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', padding: 20, position: 'relative', overflow: 'hidden' }}>
+        {/* Ambient glows */}
         <div style={{ position: 'fixed', top: '10%', left: '50%', transform: 'translateX(-50%)', width: 600, height: 600, background: 'radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 60%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'fixed', bottom: '5%', right: '15%', width: 300, height: 300, background: 'radial-gradient(circle, rgba(52,211,153,0.05) 0%, transparent 60%)', pointerEvents: 'none' }} />
 
         {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 48, position: 'relative', zIndex: 1 }}>
+        <div style={{ textAlign: 'center', marginBottom: 40, position: 'relative', zIndex: 1, animation: 'fadeInScale 0.5s ease' }}>
           <div style={{
-            fontSize: 52, fontWeight: 800, letterSpacing: '-2px',
-            background: 'linear-gradient(135deg, #e4e6eb, #818cf8)',
+            fontSize: 48, fontWeight: 800, letterSpacing: '-2px',
+            background: 'linear-gradient(135deg, var(--text), var(--accent-hover))',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             marginBottom: 12
           }}>DevBuddy</div>
-          <p style={{ color: '#6b7280', fontSize: 17, lineHeight: 1.5, maxWidth: 400 }}>
+          <p style={{ color: 'var(--text-dim)', fontSize: 16, lineHeight: 1.6, maxWidth: 400 }}>
             Your autonomous engineering partner. Describe what you want to build, and DevBuddy designs, codes, tests, and deploys it.
           </p>
         </div>
 
         {/* Features */}
-        <div style={{ display: 'flex', gap: 16, marginBottom: 40, flexWrap: 'wrap', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 36, flexWrap: 'wrap', justifyContent: 'center', position: 'relative', zIndex: 1, animation: 'fadeIn 0.6s ease' }}>
           {[
             { icon: '⚡', label: 'Autonomous Agents' },
             { icon: '🧠', label: 'Multi-LLM Routing' },
@@ -47,15 +47,15 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
             { icon: '🚀', label: 'One-Click Deploy' },
           ].map(f => (
             <div key={f.label} style={{
-              background: 'rgba(26,29,39,0.6)',
-              border: '1px solid #2a2d3a',
-              borderRadius: 10,
-              padding: '10px 16px',
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '8px 14px',
               display: 'flex',
               alignItems: 'center',
               gap: 8,
               fontSize: 13,
-              color: '#9ca3af'
+              color: 'var(--text-muted)'
             }}>
               <span>{f.icon}</span>
               {f.label}
@@ -65,30 +65,30 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
 
         {/* Login card */}
         <div style={{
-          background: 'rgba(17,19,24,0.95)',
-          border: '1px solid #2a2d3a',
-          borderRadius: 20,
-          padding: '40px 44px',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-xl)',
+          padding: '36px 40px',
           maxWidth: 400,
           width: '100%',
           backdropFilter: 'blur(16px)',
-          boxShadow: '0 16px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)',
+          boxShadow: 'var(--shadow-xl), inset 0 1px 0 rgba(255,255,255,0.04)',
           textAlign: 'center',
           position: 'relative',
-          zIndex: 1
+          zIndex: 1,
+          animation: 'fadeInScale 0.7s ease',
         }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#e4e6eb', marginBottom: 6 }}>Welcome back</div>
-          <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 28, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>Welcome back</div>
+          <p style={{ color: 'var(--text-dim)', fontSize: 14, marginBottom: 28, lineHeight: 1.5 }}>
             Sign in with Google to access your workspace
           </p>
           <button
             onClick={login}
-            onMouseEnter={e => { (e.target as HTMLButtonElement).style.transform = 'translateY(-1px)'; (e.target as HTMLButtonElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)' }}
-            onMouseLeave={e => { (e.target as HTMLButtonElement).style.transform = 'translateY(0)'; (e.target as HTMLButtonElement).style.boxShadow = 'none' }}
+            className="db-btn"
             style={{
               width: '100%',
               padding: '12px',
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               background: 'white',
               border: 'none',
               cursor: 'pointer',
@@ -98,9 +98,11 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
               gap: 10,
               fontSize: 15,
               fontWeight: 600,
-              color: '#1a1d27',
-              transition: 'all 0.2s ease'
+              color: 'var(--bg)',
+              transition: 'all var(--transition-base)',
             }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = 'var(--shadow-md)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
           >
             <svg width="18" height="18" viewBox="0 0 48 48">
               <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -112,7 +114,7 @@ export default function LoginGate({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        <p style={{ marginTop: 32, color: '#374151', fontSize: 12, position: 'relative', zIndex: 1 }}>
+        <p style={{ marginTop: 32, color: 'var(--text-faint)', fontSize: 12, position: 'relative', zIndex: 1 }}>
           © 2026 DevBuddy · Autonomous Engineering Platform
         </p>
       </div>
