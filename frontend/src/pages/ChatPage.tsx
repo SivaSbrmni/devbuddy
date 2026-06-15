@@ -215,14 +215,16 @@ export default function ChatPage() {
     setSavingKeys(true)
     try {
       const payload: any = {}
-      if (providerKeys.anthropic.key && providerKeys.anthropic.key !== '••••••••') {
-        payload.anthropic = providerKeys.anthropic
-      }
-      if (providerKeys.ollama.key && providerKeys.ollama.key !== '••••••••') {
-        payload.ollama = providerKeys.ollama
-      }
-      if (providerKeys.llama.key && providerKeys.llama.key !== '••••••••') {
-        payload.llama = providerKeys.llama
+      for (const id of ['anthropic', 'ollama', 'llama'] as const) {
+        const { key, base_url } = providerKeys[id]
+        const hasNewKey = key && key !== '••••••••'
+        const hasUrl = base_url.trim() !== ''
+        if (hasNewKey || hasUrl) {
+          payload[id] = {
+            ...(hasNewKey ? { key } : {}),
+            base_url,
+          }
+        }
       }
 
       const resp = await fetch(`${API}/settings?token=${encodeURIComponent(token)}`, {
