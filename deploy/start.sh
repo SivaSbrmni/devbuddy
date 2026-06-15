@@ -43,6 +43,10 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
+# Drop conflicting index if it exists (prevents create_all crash on HF Space restart)
+echo "Checking for conflicting indexes..."
+su postgres -c "psql -d devbuddy -c 'DROP INDEX IF EXISTS ix_user_settings_email;'" > /dev/null 2>&1 || true
+
 # Set production defaults
 export ENVIRONMENT="${ENVIRONMENT:-production}"
 export DEBUG="${DEBUG:-false}"
