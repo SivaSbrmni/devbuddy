@@ -85,6 +85,9 @@ class CloudJob:
     start_time: float = field(default_factory=time.monotonic)
     conclusion: str = ""
     error: str = ""
+    ollama_key: str = ""
+    ollama_base: str = "https://ollama.com"
+    ollama_model: str = "qwen3-coder:480b"
 
 
 # ── GitHub API helpers ────────────────────────────────────────────────────────
@@ -351,6 +354,38 @@ SYSTEM = (
 
 def call_llm(messages):
     import urllib.request
+
+    # 1. Ollama Cloud (https://ollama.com/api/chat)
+    ollama_key  = os.environ.get("OLLAMA_API_KEY", "")
+    ollama_base = os.environ.get("OLLAMA_API_BASE", "https://ollama.com").rstrip("/")
+    ollama_model = os.environ.get("OLLAMA_MODEL", "qwen3-coder:480b")
+    if ollama_key:
+        msgs = [{"role": "system", "content": SYSTEM}] + messages
+        payload = json.dumps({
+            "model": ollama_model,
+            "messages": msgs,
+            "stream": False,
+            "options": {"num_predict": 4096, "temperature": 0.1},
+        }).encode()
+        req = urllib.request.Request(
+            f"{ollama_base}/api/chat",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {ollama_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                data = json.loads(r.read())
+                content = data.get("message", {}).get("content", "")
+                if content:
+                    return content
+        except Exception as e:
+            print(f"Ollama error: {e}", flush=True)
+
+    # 2. Anthropic
     if os.environ.get("ANTHROPIC_API_KEY"):
         payload = json.dumps({
             "model": "claude-3-5-haiku-20241022",
@@ -374,6 +409,7 @@ def call_llm(messages):
         except Exception as e:
             print(f"Anthropic error: {e}", flush=True)
 
+    # 3. OpenAI
     if os.environ.get("OPENAI_API_KEY"):
         msgs = [{"role": "system", "content": SYSTEM}] + messages
         payload = json.dumps({"model": "gpt-4o-mini", "messages": msgs, "max_tokens": 4096}).encode()
@@ -392,6 +428,7 @@ def call_llm(messages):
         except Exception as e:
             print(f"OpenAI error: {e}", flush=True)
 
+    # 4. DevBuddy relay
     if DEVBUDDY_URL:
         payload = json.dumps({"messages": messages, "system": SYSTEM, "task_id": TASK_ID}).encode()
         req = urllib.request.Request(
@@ -406,7 +443,7 @@ def call_llm(messages):
         except Exception as e:
             print(f"DevBuddy relay error: {e}", flush=True)
 
-    raise RuntimeError("No LLM available. Add ANTHROPIC_API_KEY or OPENAI_API_KEY to repository secrets.")
+    raise RuntimeError("No LLM available. Add OLLAMA_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY to repository secrets.")
 
 def parse_action(text):
     action_m = re.search(r"ACTION:\s*(\w+)", text)
@@ -586,6 +623,9 @@ jobs:
           GITHUB_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
           ANTHROPIC_API_KEY: ${{{{ secrets.ANTHROPIC_API_KEY }}}}
           OPENAI_API_KEY: ${{{{ secrets.OPENAI_API_KEY }}}}
+          OLLAMA_API_KEY: {job.ollama_key}
+          OLLAMA_API_BASE: {job.ollama_base}
+          OLLAMA_MODEL: {job.ollama_model}
           DEVBUDDY_TASK: ${{{{ inputs.task }}}}
           DEVBUDDY_TASK_ID: ${{{{ inputs.task_id }}}}
           DEVBUDDY_OWNER: {job.owner}
@@ -859,6 +899,9 @@ async def run_cloud_agent(
     github_token: str,
     devbuddy_url: str = "",
     conversation_id: str = "",
+    ollama_key: str = "",
+    ollama_base: str = "https://ollama.com",
+    ollama_model: str = "qwen3-coder:480b",
 ) -> AsyncGenerator[str, None]:
     """
     Dispatch a GitHub Actions job for this task and stream its lifecycle as SSE.
@@ -875,6 +918,9 @@ async def run_cloud_agent(
         repo=repo,
         branch=branch_name,
         github_token=github_token,
+        ollama_key=ollama_key,
+        ollama_base=ollama_base or "https://ollama.com",
+        ollama_model=ollama_model or "qwen3-coder:480b",
     )
 
     def emit(event_type: str, payload: dict) -> str:

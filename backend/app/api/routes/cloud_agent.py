@@ -54,6 +54,28 @@ async def run_agent(
     base_url = str(request.base_url).rstrip("/")
     devbuddy_url = f"{base_url}/api/v1"
 
+    # Fetch user's Ollama credentials from stored settings
+    user_id = payload.get("sub") or payload.get("user_id") or ""
+    ollama_key = settings.OLLAMA_API_KEY
+    ollama_base = settings.OLLAMA_API_BASE or "https://ollama.com"
+    ollama_model = settings.OLLAMA_MODEL or "qwen3-coder:480b"
+    if user_id:
+        try:
+            from app.db.session import AsyncSessionLocal
+            from app.models.user_settings import UserSettings
+            from app.core.crypto import decrypt_value
+            from sqlalchemy import select
+            async with AsyncSessionLocal() as db:
+                row = await db.scalar(select(UserSettings).where(UserSettings.user_id == user_id))
+                if row and row.api_keys:
+                    cfg = row.api_keys.get("ollama") or {}
+                    if cfg.get("key"):
+                        ollama_key = decrypt_value(cfg["key"])
+                    if cfg.get("base_url"):
+                        ollama_base = cfg["base_url"]
+        except Exception:
+            pass  # fall back to server-level settings
+
     async def event_stream() -> AsyncGenerator[str, None]:
         try:
             async for chunk in run_cloud_agent(
@@ -63,6 +85,9 @@ async def run_agent(
                 github_token=github_token,
                 devbuddy_url=devbuddy_url,
                 conversation_id=body.conversation_id,
+                ollama_key=ollama_key,
+                ollama_base=ollama_base,
+                ollama_model=ollama_model,
             ):
                 yield chunk
         except Exception as e:
