@@ -47,8 +47,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import app.models.memory  # noqa: F401
     import app.models.user_settings  # noqa: F401
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception:
+        import logging
+        logging.getLogger("app.main").warning("DB schema already exists (skipping create_all)", exc_info=True)
 
     # Initialize LLM router
     await model_router.startup()
