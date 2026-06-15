@@ -49,17 +49,18 @@ def _get_email_from_token(token: str | None) -> str | None:
 
 
 async def _fetch_ollama_models(base_url: str, api_key: str) -> list[dict[str, Any]]:
-    """Fetch models from Ollama /api/tags. Fast timeout for non-blocking fallback."""
+    """Fetch models from Ollama Cloud API https://ollama.com/api/tags"""
     try:
         headers = {}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
+        # Always use ollama.com cloud API, never localhost
+        ollama_url = "https://ollama.com/api/tags"
         async with httpx.AsyncClient(
-            base_url=base_url or settings.OLLAMA_API_BASE,
             headers=headers,
-            timeout=2.0,  # Fast timeout - don't block if Ollama not running
+            timeout=10.0,  # Longer timeout for cloud API
         ) as client:
-            resp = await client.get("/api/tags")
+            resp = await client.get(ollama_url)
             resp.raise_for_status()
             data = resp.json()
 
@@ -79,7 +80,8 @@ async def _fetch_ollama_models(base_url: str, api_key: str) -> list[dict[str, An
                 })
             return models
     except Exception as e:
-        # Silently fail - Ollama not running is expected in many deployments
+        # Log error but return empty - will fallback to static list
+        print(f"[ollama] Failed to fetch from ollama.com/api/tags: {e}")
         return []
 
 
@@ -109,12 +111,12 @@ async def list_models(
     if llama_cfg.get("key") or settings.LLAMA_API_KEY:
         models.extend(_KNOWN_MODELS.get("llama", []))
 
-    # Ollama — try live fetch first from user's config or default localhost
+    # Ollama — try live fetch from ollama.com cloud API
     ollama_cfg = user_keys.get("ollama") or {}
     ollama_key = ollama_cfg.get("key") or settings.OLLAMA_API_KEY
     ollama_base = ollama_cfg.get("base_url") or settings.OLLAMA_API_BASE
     
-    # Always try to fetch live Ollama models (fast timeout, non-blocking)
+    # Always try to fetch live Ollama models from cloud API
     cache_key = f"{ollama_base}:{ollama_key[:4] if ollama_key else 'nokey'}"
     now = asyncio.get_event_loop().time()
     cached = _ollama_cache.get(cache_key)
