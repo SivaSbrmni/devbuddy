@@ -97,13 +97,21 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         prompt = arguments["prompt"]
         max_new = arguments.get("max_new_tokens", 128)
         temp = arguments.get("temperature", 0.7)
-        response = infer.text_generation(
-            model=model,
-            prompt=prompt,
-            max_new_tokens=max_new,
-            temperature=temp,
-        )
-        return [TextContent(type="text", text=response)]
+        try:
+            response = infer.text_generation(
+                model=model,
+                prompt=prompt,
+                max_new_tokens=max_new,
+                temperature=temp,
+            )
+            return [TextContent(type="text", text=response)]
+        except (RuntimeError, StopIteration) as e:
+            err = str(e) or "empty response"
+            if "StopIteration" in err or isinstance(e, StopIteration):
+                return [TextContent(type="text", text=f"Inference API returned empty response for model '{model}'. The model may not be available on the free inference API.")]
+            return [TextContent(type="text", text=f"RuntimeError during inference: {e}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Inference failed: {type(e).__name__}: {e}")]
 
     elif name == "hf_download_file":
         repo_id = arguments["repo_id"]

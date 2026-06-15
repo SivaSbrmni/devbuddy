@@ -40,6 +40,7 @@ export type IconName =
   | 'error'
   | 'info'
   | 'search'
+  | 'git'
 
 const ICONS: Record<IconName, (size: number) => React.ReactNode> = {
   send: (s) => (
@@ -205,6 +206,13 @@ const ICONS: Record<IconName, (size: number) => React.ReactNode> = {
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="11" cy="11" r="8" />
       <path d="M21 21l-4.35-4.35" />
+    </svg>
+  ),
+  git: (s) => (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="18" cy="18" r="3" />
+      <circle cx="6" cy="6" r="3" />
+      <path d="M6 21V9a9 9 0 009 9" />
     </svg>
   ),
 }

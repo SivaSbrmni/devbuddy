@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # --- GitHub ---
     GITHUB_TOKEN: str = ""
     GITHUB_DEFAULT_ORG: str = ""
+    GITHUB_CLIENT_ID: str = ""
+    GITHUB_CLIENT_SECRET: str = ""
+    GITHUB_REDIRECT_URI: str = "http://localhost:8000/api/v1/github/callback"
 
     # --- Deployment ---
     RAILWAY_TOKEN: str = ""

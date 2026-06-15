@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { GitHubProvider, useGitHub } from '../context/GitHubContext'
+import GitHubPanel from '../components/GitHubPanel'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import JSZip from 'jszip'
@@ -109,6 +111,10 @@ export default function Workspace() {
   const { user, logout } = useAuth()
   const { convs, active, activeId, createNew, updateActive, selectConv, deleteConv, restoreConv } = useConversations()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [githubPanelOpen, setGithubPanelOpen] = useState(false)
+  const [activeRepo, setActiveRepoLocal] = useState<{ name: string; owner: string; html_url: string } | null>(() => {
+    try { return JSON.parse(localStorage.getItem('devbuddy_active_repo') || 'null') } catch { return null }
+  })
   const [models, setModels] = useState<Model[]>(FALLBACK_MODELS)
   const [modelsLoading, setModelsLoading] = useState(true)
   const [model, setModel] = useState(FALLBACK_MODELS[0].id)
@@ -161,6 +167,18 @@ export default function Workspace() {
 
   useEffect(() => {
     if (!activeId && !loading) createNew()
+  }, [])
+
+  // Handle GitHub OAuth callback — refresh token if github_connected param present
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const newToken = params.get('token')
+    const ghConnected = params.get('github_connected')
+    if (newToken && ghConnected) {
+      localStorage.setItem('devbuddy_token', newToken)
+      window.history.replaceState({}, '', window.location.pathname)
+      window.location.reload()
+    }
   }, [])
 
   // Fetch models and user settings on mount
@@ -929,6 +947,9 @@ export default function Workspace() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* GitHub repo button */}
+            <GitHubRepoButton activeRepo={activeRepo} onClick={() => setGithubPanelOpen(true)} />
+
             {/* Global search / command */}
             <button
               onClick={() => setPaletteOpen(true)}
@@ -1459,6 +1480,14 @@ export default function Workspace() {
         </div>
       </div>
 
+      {/* GitHub Panel */}
+      <GitHubPanelWrapper
+        token={localStorage.getItem('devbuddy_token') || ''}
+        isOpen={githubPanelOpen}
+        onClose={() => setGithubPanelOpen(false)}
+        onSelectRepo={repo => { setActiveRepoLocal(repo); toast(`Working in ${repo.full_name}`, 'success') }}
+      />
+
       {/* Workspace panel */}
       {workspaceOpen && (
         <WorkspacePanel
@@ -1490,5 +1519,43 @@ export default function Workspace() {
 
       <ToastContainer />
     </div>
+  )
+}
+
+// ── GitHub helpers ─────────────────────────────────────────────────────────
+
+function GitHubRepoButton({ activeRepo, onClick }: { activeRepo: { name: string; owner: string; html_url: string } | null; onClick: () => void }) {
+  if (activeRepo) {
+    return (
+      <button
+        onClick={onClick}
+        className="db-btn db-focus"
+        title="Change repository"
+        style={{ background: 'rgba(36,41,46,0.6)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)', fontSize: 12, padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, maxWidth: 180 }}
+      >
+        <Icon name="git" size={12} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeRepo.name}</span>
+      </button>
+    )
+  }
+  return (
+    <button
+      onClick={onClick}
+      className="db-btn db-focus"
+      title="Connect GitHub repository"
+      style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-dim)', fontSize: 12, padding: '4px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-dim)' }}
+    >
+      <Icon name="git" size={12} /> GitHub
+    </button>
+  )
+}
+
+function GitHubPanelWrapper(props: { token: string; isOpen: boolean; onClose: () => void; onSelectRepo: (r: any) => void }) {
+  return (
+    <GitHubProvider token={props.token}>
+      <GitHubPanel {...props} />
+    </GitHubProvider>
   )
 }
