@@ -14,7 +14,7 @@
 import { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import Icon from './Icon'
+import Icon, { IconName } from './Icon'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -80,26 +80,26 @@ interface TaskCardProps {
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const CATEGORY_CONFIG: Record<EventCategory, { icon: string; color: string; label: string }> = {
-  plan:    { icon: '📋', color: '#818cf8', label: 'Planning'         },
-  context: { icon: '📚', color: '#a78bfa', label: 'Repository'       },
-  search:  { icon: '🔎', color: '#60a5fa', label: 'Searching'        },
-  read:    { icon: '📁', color: '#93c5fd', label: 'Reading'          },
-  analyze: { icon: '🏗', color: '#c084fc', label: 'Analyzing'        },
-  execute: { icon: '🔧', color: '#34d399', label: 'Executing'        },
-  test:    { icon: '🧪', color: '#fbbf24', label: 'Testing'          },
-  reflect: { icon: '🔄', color: '#94a3b8', label: 'Reflecting'       },
-  branch:  { icon: '🌿', color: '#4ade80', label: 'Branch'           },
-  commit:  { icon: '💾', color: '#86efac', label: 'Commit'           },
-  push:    { icon: '🚀', color: '#6ee7b7', label: 'Push'             },
-  pr:      { icon: '🔗', color: '#818cf8', label: 'Pull Request'     },
-  tool:    { icon: '⚡', color: '#f9a8d4', label: 'Tool'             },
-  think:   { icon: '🧠', color: '#c4b5fd', label: 'Reasoning'        },
-  observe: { icon: '👁', color: '#7dd3fc', label: 'Observed'         },
-  warn:    { icon: '⚠️', color: '#fbbf24', label: 'Warning'          },
-  error:   { icon: '✗',  color: '#ef4444', label: 'Error'            },
-  done:    { icon: '✅', color: '#34d399', label: 'Complete'         },
-  step:    { icon: '→',  color: '#94a3b8', label: 'Step'             },
+const CATEGORY_CONFIG: Record<EventCategory, { icon: IconName; color: string; label: string }> = {
+  plan:    { icon: 'list',          color: '#818cf8', label: 'Planning'      },
+  context: { icon: 'book',          color: '#a78bfa', label: 'Repository'    },
+  search:  { icon: 'search',        color: '#60a5fa', label: 'Searching'     },
+  read:    { icon: 'file',          color: '#93c5fd', label: 'Reading'       },
+  analyze: { icon: 'cpu',           color: '#c084fc', label: 'Analyzing'     },
+  execute: { icon: 'code',          color: '#34d399', label: 'Executing'     },
+  test:    { icon: 'flask',         color: '#fbbf24', label: 'Testing'       },
+  reflect: { icon: 'refresh',       color: '#94a3b8', label: 'Reflecting'    },
+  branch:  { icon: 'branch',        color: '#4ade80', label: 'Branch'        },
+  commit:  { icon: 'commit',        color: '#86efac', label: 'Commit'        },
+  push:    { icon: 'push',          color: '#6ee7b7', label: 'Push'          },
+  pr:      { icon: 'pr',            color: '#818cf8', label: 'Pull Request'  },
+  tool:    { icon: 'flash',         color: '#f9a8d4', label: 'Tool'          },
+  think:   { icon: 'brain',         color: '#c4b5fd', label: 'Reasoning'     },
+  observe: { icon: 'eye',           color: '#7dd3fc', label: 'Observed'      },
+  warn:    { icon: 'warning',       color: '#fbbf24', label: 'Warning'       },
+  error:   { icon: 'error',         color: '#ef4444', label: 'Error'         },
+  done:    { icon: 'check',         color: '#34d399', label: 'Complete'      },
+  step:    { icon: 'chevron-right', color: '#94a3b8', label: 'Step'          },
 }
 
 function elapsed(ms: number): string {
@@ -136,24 +136,34 @@ function EventRow({ event }: { event: TaskEvent }) {
           transition: 'background 0.15s',
         }}
       >
-        {/* Status dot */}
+        {/* Icon badge */}
         <span style={{
-          width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-          background: isRunning ? '#818cf8' :
-            event.status === 'done' ? cfg.color :
-            event.status === 'error' ? '#ef4444' :
-            event.status === 'warn' ? '#fbbf24' : '#4b5563',
-          animation: isRunning ? 'pulse 1.2s infinite' : 'none',
-          boxShadow: isRunning ? `0 0 6px ${cfg.color}66` : 'none',
-        }} />
-
-        {/* Icon */}
-        <span style={{ fontSize: 12, flexShrink: 0 }}>{cfg.icon}</span>
+          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: isRunning
+            ? `${cfg.color}18`
+            : event.status === 'done' ? `${cfg.color}14`
+            : event.status === 'error' ? 'rgba(239,68,68,0.12)'
+            : event.status === 'warn' ? 'rgba(251,191,36,0.12)'
+            : 'rgba(255,255,255,0.04)',
+          color: isRunning ? cfg.color
+            : event.status === 'error' ? '#ef4444'
+            : event.status === 'warn' ? '#fbbf24'
+            : event.status === 'done' ? cfg.color
+            : '#4b5563',
+          transition: 'all 0.2s',
+        }}>
+          <Icon name={cfg.icon} size={11} />
+        </span>
 
         {/* Title */}
         <span style={{
           fontSize: 12.5,
-          color: isRunning ? '#e2e8f0' : event.status === 'error' ? '#ef4444' : event.status === 'warn' ? '#fbbf24' : '#94a3b8',
+          color: isRunning ? '#e2e8f0'
+            : event.status === 'error' ? '#ef4444'
+            : event.status === 'warn' ? '#fbbf24'
+            : event.status === 'done' ? '#cbd5e1'
+            : '#64748b',
           fontWeight: isRunning ? 500 : 400,
           flex: 1,
           lineHeight: 1.4,
@@ -163,19 +173,28 @@ function EventRow({ event }: { event: TaskEvent }) {
 
         {/* Duration */}
         {event.durationMs !== undefined && (
-          <span style={{ fontSize: 10, color: '#4b5563', fontFamily: 'monospace', flexShrink: 0 }}>
+          <span style={{ fontSize: 10, color: '#374151', fontFamily: 'monospace', flexShrink: 0 }}>
             {elapsed(event.durationMs)}
           </span>
         )}
 
-        {/* Expand arrow */}
+        {/* Expand chevron */}
         {event.expandable && event.children && event.children.length > 0 && (
-          <span style={{ fontSize: 10, color: '#4b5563', transition: 'transform 0.15s', transform: expanded ? 'rotate(90deg)' : 'rotate(0)' }}>▶</span>
+          <Icon
+            name="chevron-right"
+            size={11}
+            style={{ color: '#4b5563', flexShrink: 0, transition: 'transform 0.15s', transform: expanded ? 'rotate(90deg)' : 'rotate(0)' }}
+          />
         )}
 
         {/* Running spinner */}
         {isRunning && (
-          <span style={{ fontSize: 10, color: cfg.color, animation: 'spin 1s linear infinite', flexShrink: 0 }}>◌</span>
+          <Icon name="loader" size={11} style={{ color: cfg.color, flexShrink: 0 }} />
+        )}
+
+        {/* Done check */}
+        {!isRunning && event.status === 'done' && (
+          <Icon name="check" size={11} style={{ color: cfg.color, flexShrink: 0, opacity: 0.7 }} />
         )}
       </div>
 
@@ -266,12 +285,13 @@ export default function TaskCard({ card, userAvatar, userName, isStreaming, onRe
             <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
               {card.repo && (
                 <span style={{ fontSize: 11, color: '#818cf8', background: 'rgba(99,102,241,0.12)', padding: '2px 8px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ fontSize: 10 }}>⎇</span> {card.repo}
+                  <Icon name="git" size={10} style={{ color: '#818cf8' }} /> {card.repo}
                 </span>
               )}
               {card.branch && (
-                <span style={{ fontSize: 11, color: '#4ade80', background: 'rgba(52,211,153,0.1)', padding: '2px 8px', borderRadius: 10, fontFamily: 'monospace' }}>
-                  {card.branch.replace('devbuddy/', '')}
+                <span style={{ fontSize: 11, color: '#4ade80', background: 'rgba(52,211,153,0.1)', padding: '2px 8px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Icon name="branch" size={10} style={{ color: '#4ade80' }} />
+                  <span style={{ fontFamily: 'monospace' }}>{card.branch.replace('devbuddy/', '')}</span>
                 </span>
               )}
             </div>
@@ -352,11 +372,7 @@ export default function TaskCard({ card, userAvatar, userName, isStreaming, onRe
               {/* Typing cursor when running */}
               {isRunning && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', marginTop: 2 }}>
-                  <div style={{ display: 'flex', gap: 3 }}>
-                    {[0, 1, 2].map(i => (
-                      <span key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: '#6366f1', opacity: 0.7, animation: `pulse 1.2s ${i * 0.2}s infinite` }} />
-                    ))}
-                  </div>
+                  <Icon name="loader" size={11} style={{ color: '#6366f1', flexShrink: 0 }} />
                   <span style={{ fontSize: 11, color: '#475569' }}>
                     {card.currentTool || 'Processing…'}
                   </span>
@@ -370,8 +386,8 @@ export default function TaskCard({ card, userAvatar, userName, isStreaming, onRe
               <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(52,211,153,0.1)', background: 'rgba(52,211,153,0.04)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 {card.prUrl && (
                   <a href={card.prUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: 12, fontWeight: 700, color: 'white', background: 'linear-gradient(135deg, #6366f1, #818cf8)', padding: '5px 14px', borderRadius: 8, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5 }}>
-                    🔗 View Pull Request {card.prNumber ? `#${card.prNumber}` : ''}
+                    style={{ fontSize: 12, fontWeight: 700, color: 'white', background: 'linear-gradient(135deg, #6366f1, #818cf8)', padding: '5px 14px', borderRadius: 8, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon name="pr" size={12} style={{ color: 'white' }} /> View Pull Request {card.prNumber ? `#${card.prNumber}` : ''}
                   </a>
                 )}
                 {card.commitHash && (
@@ -546,16 +562,16 @@ export function sseToTaskEvent(type: string, payload: any): TaskEvent | null {
 
 function toolLabel(tool: string): string {
   const map: Record<string, string> = {
-    read_file: '📁 Reading',
-    write_file: '✏️ Writing',
-    edit_file: '🔧 Editing',
-    create_file: '🆕 Creating',
-    list_files: '📂 Listing',
-    search_code: '🔎 Searching',
-    run_command: '⚡ Running',
-    delete_file: '🗑 Deleting',
+    read_file:   'Reading',
+    write_file:  'Writing',
+    edit_file:   'Editing',
+    create_file: 'Creating',
+    list_files:  'Listing',
+    search_code: 'Searching',
+    run_command: 'Running',
+    delete_file: 'Deleting',
   }
-  return map[tool] ?? `⚙ ${tool}`
+  return map[tool] ?? tool.replace('_', ' ')
 }
 
 function firstParam(params: Record<string, string> = {}): string {
