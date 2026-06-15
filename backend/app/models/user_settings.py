@@ -25,7 +25,7 @@ class UserSettings(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     email: Mapped[str] = mapped_column(
-        String(255), nullable=False, unique=True, index=True
+        String(255), nullable=False, unique=True
     )
 
     # Encrypted API keys (stored as JSONB with ciphertext)
