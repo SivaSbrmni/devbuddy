@@ -156,6 +156,15 @@ export default function GitHubPanel({ token, isOpen, onClose, onSelectRepo }: Pr
                 <Icon name="plus" size={12} /> New repo
               </button>
             )}
+            {connected && (
+              <button
+                onClick={connect}
+                title="Re-authorize to grant workflow permissions"
+                style={{ fontSize: 12, color: 'var(--text-muted)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}
+              >
+                <Icon name="refresh" size={12} /> Reconnect
+              </button>
+            )}
             {view !== 'selector' && (
               <button onClick={() => setView('selector')} style={{ fontSize: 12, color: 'var(--text-muted)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '5px 10px', cursor: 'pointer' }}>
                 ← Back
