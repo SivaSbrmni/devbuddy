@@ -129,7 +129,6 @@ export default function Workspace() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [agentMode, setAgentMode] = useState(true)
-  const [cloudMode, setCloudMode] = useState(false)
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
   const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -718,11 +717,7 @@ export default function Workspace() {
       const agentMsgId = crypto.randomUUID()
       const msgsWithUser = [...conv.messages, userMsg]
       updateActive(msgsWithUser, text.slice(0, 50))
-      if (cloudMode) {
-        await runCloudAgent(text, agentMsgId, msgsWithUser)
-      } else {
-        await runGitHubAgent(text, agentMsgId, msgsWithUser)
-      }
+      await runCloudAgent(text, agentMsgId, msgsWithUser)
       return
     }
 
@@ -1655,7 +1650,7 @@ export default function Workspace() {
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={onKeyDown}
-                placeholder={activeRepo && agentMode ? (cloudMode ? `Describe a task for ${activeRepo.name}… (will run in isolated GitHub Actions runner)` : `Describe a task for ${activeRepo.name}… (agent will plan, execute, and open a PR)`) : "Describe what you want to build, or type @ to reference files..."}
+                placeholder={activeRepo && agentMode ? `Describe a task for ${activeRepo.name}… (runs in isolated GitHub Actions runner)` : "Describe what you want to build, or type @ to reference files..."}
                 rows={1}
                 className="db-input"
                 style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 14, lineHeight: 1.5, resize: 'none', maxHeight: 200, fontFamily: 'inherit', overflowY: 'auto', padding: '0 4px' }}
@@ -1750,31 +1745,6 @@ export default function Workspace() {
                     {agentMode ? 'Agent' : 'Chat'}
                   </button>
 
-                  {/* Cloud execution toggle — only visible when repo + agent mode active */}
-                  {activeRepo && agentMode && (
-                    <button
-                      onClick={() => setCloudMode(!cloudMode)}
-                      title={cloudMode ? 'Cloud Mode — GitHub Actions isolated runner (click to switch to local)' : 'Local Mode — runs on DevBuddy server (click to switch to GitHub Actions cloud)'}
-                      className="db-btn db-focus"
-                      style={{
-                        background: cloudMode ? 'rgba(99,102,241,0.12)' : 'transparent',
-                        border: cloudMode ? '1px solid rgba(99,102,241,0.25)' : '1px solid rgba(255,255,255,0.06)',
-                        borderRadius: 'var(--radius-full)',
-                        color: cloudMode ? '#818cf8' : 'var(--text-faint)',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        padding: '4px 10px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        transition: 'all var(--transition-base)',
-                      }}
-                    >
-                      <Icon name={cloudMode ? 'rocket' : 'terminal'} size={12} />
-                      {cloudMode ? 'Cloud' : 'Local'}
-                    </button>
-                  )}
                 </div>
 
                 {/* Right: model selector + send */}
