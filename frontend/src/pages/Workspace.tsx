@@ -1368,6 +1368,8 @@ export default function Workspace() {
           { id: 'agent-mode', label: agentMode ? 'Switch to Chat mode' : 'Switch to Agent mode', shortcut: '', icon: agentMode ? 'chat' : 'agent', action: () => setAgentMode(!agentMode) },
           { id: 'logout', label: 'Sign out', shortcut: '', icon: 'logout', action: () => logout() },
         ]}
+        conversations={convs.map(c => ({ id: c.id, title: c.title, messageCount: c.messages.length }))}
+        onSelectConversation={(id) => { selectConv(id); setPaletteOpen(false) }}
       />
 
       <ToastContainer />
