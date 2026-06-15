@@ -28,6 +28,7 @@ from app.api.routes.skills import router as skills_router
 from app.api.routes.workspace import router as workspace_router
 from app.api.routes.github import router as github_router
 from app.api.routes.github_agent import router as github_agent_router
+from app.api.routes.cloud_agent import router as cloud_agent_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.model_router import model_router
@@ -160,6 +161,7 @@ app.include_router(mcp_router, prefix=settings.API_PREFIX)
 app.include_router(settings_router, prefix=settings.API_PREFIX)
 app.include_router(github_router, prefix=settings.API_PREFIX)
 app.include_router(github_agent_router, prefix=settings.API_PREFIX)
+app.include_router(cloud_agent_router, prefix=settings.API_PREFIX)
 
 # Serve pre-built React frontend as static files
 _static_dir = Path(__file__).resolve().parent.parent / "static"

@@ -129,6 +129,7 @@ export default function Workspace() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [agentMode, setAgentMode] = useState(true)
+  const [cloudMode, setCloudMode] = useState(false)
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
   const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -456,6 +457,140 @@ export default function Workspace() {
     return true
   }, [activeRepo, activeId, active?.title])
 
+  const runCloudAgent = useCallback(async (task: string, msgId: string, conversationAtStart: Message[]) => {
+    if (!activeRepo) return false
+    const token = localStorage.getItem('devbuddy_token') || ''
+    const owner = (activeRepo as any).owner || activeRepo.full_name?.split('/')[0] || ''
+    const repo = activeRepo.name
+
+    const cardId = msgId
+    const initialCard: TaskCardData = {
+      id: cardId,
+      task,
+      repo: `${owner}/${repo}`,
+      branch: '',
+      startedAt: Date.now(),
+      status: 'running',
+      progress: 2,
+      currentTool: 'Dispatching GitHub Actions runner…',
+      events: [],
+      isGitHubTask: true,
+      isCloudJob: true,
+      runnerState: 'queued',
+    }
+
+    const agentMsg: Message = {
+      id: cardId,
+      role: 'assistant',
+      content: '',
+      ts: Date.now(),
+      taskCard: initialCard,
+    }
+
+    const convTitle = conversationAtStart.length === 1 ? task.slice(0, 50) : (active?.title || task.slice(0, 50))
+    updateActive([...conversationAtStart, agentMsg], convTitle)
+
+    const patchCard = (fn: (c: TaskCardData) => TaskCardData) => {
+      updateActive(prev => prev.map(m => m.id === cardId && m.taskCard
+        ? { ...m, taskCard: fn(m.taskCard) }
+        : m
+      ), convTitle)
+    }
+
+    const PROGRESS: Record<string, number> = {
+      queued: 4, provisioning: 12, initializing: 20, connecting: 30,
+      analyzing: 40, executing: 55, validating: 72, reflecting: 80,
+      pushing: 88, creating_pr: 94, uploading: 97, completed: 100,
+    }
+
+    try {
+      const resp = await fetch(`${API}/cloud-agent/run?token=${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task, owner, repo, conversation_id: activeId }),
+      })
+      if (!resp.ok) {
+        const err = await resp.text()
+        patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
+          events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: err.slice(0, 160), status: 'error' } as TaskEvent] }))
+        return true
+      }
+
+      const reader = resp.body!.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const evt = JSON.parse(line.slice(6))
+            const { type, payload } = evt
+            const taskEvt = sseToTaskEvent(type, payload)
+
+            patchCard(c => {
+              const next = { ...c }
+
+              if (type === 'observation') {
+                next.events = next.events.map(e =>
+                  e.category === 'tool' && e.status === 'running' ? { ...e, status: 'done' } : e
+                )
+              }
+
+              if (taskEvt && type !== 'runner') next.events = [...next.events, taskEvt]
+
+              if (type === 'runner') {
+                const state = payload.state
+                next.runnerState = state
+                next.runUrl = payload.run_url || next.runUrl
+                next.runId = payload.run_id || next.runId
+                if (PROGRESS[state]) next.progress = Math.max(next.progress, PROGRESS[state])
+                next.currentTool = payload.message || state
+                const evt2 = sseToTaskEvent(type, payload)
+                if (evt2) next.events = [...next.events, evt2]
+              }
+
+              if (type === 'quality_gates') {
+                next.qualityGates = { ...(next.qualityGates || {}), ...payload.gates }
+              }
+
+              if (type === 'timeline' && PROGRESS[payload.step]) {
+                next.progress = Math.max(next.progress, PROGRESS[payload.step] || 0)
+              }
+
+              if (type === 'branch') next.branch = payload.name || ''
+              if (type === 'pr') { next.prUrl = payload.url || ''; next.prNumber = payload.number || '' }
+              if (type === 'file_change' && payload.path) {
+                const mf = next.modifiedFiles || []
+                if (!mf.includes(payload.path)) next.modifiedFiles = [...mf, payload.path]
+              }
+              if (type === 'done') {
+                next.status = 'done'; next.progress = 100; next.currentTool = undefined
+                next.prUrl = payload.pr_url || next.prUrl
+                next.commitHash = payload.commit_hash || ''
+                next.runUrl = payload.run_url || next.runUrl
+                next.qualityGates = payload.quality_gates ? { ...(next.qualityGates || {}), ...payload.quality_gates } : next.qualityGates
+                if (payload.modified_files?.length) next.modifiedFiles = payload.modified_files
+              }
+              if (type === 'error') { next.status = 'error'; next.currentTool = undefined }
+              return next
+            })
+          } catch (_) {}
+        }
+      }
+    } catch (e: any) {
+      patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
+        events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: e.message, status: 'error' } as TaskEvent] }))
+    }
+    return true
+  }, [activeRepo, activeId, active?.title])
+
   const autoResize = () => {
     const el = textareaRef.current
     if (!el) return
@@ -593,7 +728,7 @@ export default function Workspace() {
     const text = input.trim()
     if (!text || loading) return
 
-    // If a GitHub repo is active and agent mode is on → run GitHub autonomous agent
+    // If a GitHub repo is active and agent mode is on → run GitHub autonomous agent (local or cloud)
     if (activeRepo && agentMode) {
       setInput('')
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
@@ -603,7 +738,11 @@ export default function Workspace() {
       const agentMsgId = crypto.randomUUID()
       const msgsWithUser = [...conv.messages, userMsg]
       updateActive(msgsWithUser, text.slice(0, 50))
-      await runGitHubAgent(text, agentMsgId, msgsWithUser)
+      if (cloudMode) {
+        await runCloudAgent(text, agentMsgId, msgsWithUser)
+      } else {
+        await runGitHubAgent(text, agentMsgId, msgsWithUser)
+      }
       return
     }
 
@@ -1548,7 +1687,7 @@ export default function Workspace() {
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={onKeyDown}
-                placeholder={activeRepo && agentMode ? `Describe a task for ${activeRepo.name}… (agent will plan, execute, and open a PR)` : "Describe what you want to build, or type @ to reference files..."}
+                placeholder={activeRepo && agentMode ? (cloudMode ? `Describe a task for ${activeRepo.name}… (will run in isolated GitHub Actions runner)` : `Describe a task for ${activeRepo.name}… (agent will plan, execute, and open a PR)`) : "Describe what you want to build, or type @ to reference files..."}
                 rows={1}
                 className="db-input"
                 style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 14, lineHeight: 1.5, resize: 'none', maxHeight: 200, fontFamily: 'inherit', overflowY: 'auto', padding: '0 4px' }}
@@ -1642,6 +1781,32 @@ export default function Workspace() {
                     <Icon name={agentMode ? 'agent' : 'chat'} size={12} />
                     {agentMode ? 'Agent' : 'Chat'}
                   </button>
+
+                  {/* Cloud execution toggle — only visible when repo + agent mode active */}
+                  {activeRepo && agentMode && (
+                    <button
+                      onClick={() => setCloudMode(!cloudMode)}
+                      title={cloudMode ? 'Cloud Mode — GitHub Actions isolated runner (click to switch to local)' : 'Local Mode — runs on DevBuddy server (click to switch to GitHub Actions cloud)'}
+                      className="db-btn db-focus"
+                      style={{
+                        background: cloudMode ? 'rgba(99,102,241,0.12)' : 'transparent',
+                        border: cloudMode ? '1px solid rgba(99,102,241,0.25)' : '1px solid rgba(255,255,255,0.06)',
+                        borderRadius: 'var(--radius-full)',
+                        color: cloudMode ? '#818cf8' : 'var(--text-faint)',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: '4px 10px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        transition: 'all var(--transition-base)',
+                      }}
+                    >
+                      <Icon name={cloudMode ? 'rocket' : 'terminal'} size={12} />
+                      {cloudMode ? 'Cloud' : 'Local'}
+                    </button>
+                  )}
                 </div>
 
                 {/* Right: model selector + send */}

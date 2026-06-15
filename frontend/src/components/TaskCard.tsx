@@ -52,6 +52,16 @@ export interface TaskEvent {
   meta?: Record<string, any>
 }
 
+export type RunnerState =
+  | 'queued' | 'provisioning' | 'initializing' | 'connecting'
+  | 'analyzing' | 'executing' | 'validating' | 'reflecting'
+  | 'pushing' | 'creating_pr' | 'uploading' | 'completed' | 'destroyed'
+
+export interface QualityGate {
+  name: string
+  status: 'pass' | 'fail' | 'warn' | 'skip' | 'pending'
+}
+
 export interface TaskCardData {
   id: string
   task: string
@@ -68,6 +78,11 @@ export interface TaskCardData {
   commitHash?: string
   modifiedFiles?: string[]
   isGitHubTask?: boolean
+  isCloudJob?: boolean
+  runnerState?: RunnerState
+  runUrl?: string
+  runId?: number
+  qualityGates?: Record<string, string>
 }
 
 interface TaskCardProps {
@@ -112,6 +127,118 @@ function liveElapsed(startedAt: number): string {
   const ms = Date.now() - startedAt
   if (ms < 60000) return `${Math.floor(ms / 1000)}s`
   return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`
+}
+
+// ── Runner lifecycle config ──────────────────────────────────────────────────
+
+const RUNNER_STATE_ORDER: RunnerState[] = [
+  'queued', 'provisioning', 'initializing', 'connecting',
+  'analyzing', 'executing', 'validating', 'reflecting',
+  'pushing', 'creating_pr', 'uploading', 'completed', 'destroyed',
+]
+
+const RUNNER_STATE_LABELS: Record<RunnerState, string> = {
+  queued:       'Queued',
+  provisioning: 'Provisioning',
+  initializing: 'Initializing',
+  connecting:   'Connecting',
+  analyzing:    'Analyzing',
+  executing:    'Executing',
+  validating:   'Validating',
+  reflecting:   'Reflecting',
+  pushing:      'Pushing',
+  creating_pr:  'Creating PR',
+  uploading:    'Uploading',
+  completed:    'Completed',
+  destroyed:    'Destroyed',
+}
+
+function RunnerLifecycle({ state, runUrl }: { state: RunnerState; runUrl?: string }) {
+  const idx = RUNNER_STATE_ORDER.indexOf(state)
+  const activeStates = RUNNER_STATE_ORDER.slice(0, Math.min(idx + 1, RUNNER_STATE_ORDER.length - 1))
+  const done = state === 'completed' || state === 'destroyed'
+
+  return (
+    <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Runner Lifecycle</span>
+        {runUrl && (
+          <a href={runUrl} target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 10, color: '#818cf8', display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+            <Icon name="flash" size={9} /> View Run
+          </a>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto', paddingBottom: 2 }}>
+        {RUNNER_STATE_ORDER.filter(s => s !== 'destroyed').map((s, i) => {
+          const sIdx = RUNNER_STATE_ORDER.indexOf(s)
+          const isCurrent = s === state
+          const isPast = sIdx < idx
+          const isFuture = sIdx > idx
+          return (
+            <div key={s} style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 52,
+              }}>
+                <div style={{
+                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                  background: isCurrent ? '#818cf8' : isPast ? '#34d399' : 'rgba(255,255,255,0.08)',
+                  border: `1.5px solid ${isCurrent ? '#818cf8' : isPast ? '#34d399' : 'rgba(255,255,255,0.12)'}`,
+                  boxShadow: isCurrent ? '0 0 8px #818cf888' : 'none',
+                  animation: isCurrent ? 'pulse 1.2s infinite' : 'none',
+                }} />
+                <span style={{
+                  fontSize: 9, color: isCurrent ? '#c4b5fd' : isPast ? '#6ee7b7' : '#374151',
+                  fontWeight: isCurrent ? 700 : 400, whiteSpace: 'nowrap',
+                }}>
+                  {RUNNER_STATE_LABELS[s]}
+                </span>
+              </div>
+              {i < RUNNER_STATE_ORDER.filter(s => s !== 'destroyed').length - 1 && (
+                <div style={{
+                  width: 12, height: 1, flexShrink: 0, marginBottom: 10,
+                  background: isPast ? '#34d399' : 'rgba(255,255,255,0.06)',
+                  transition: 'background 0.3s',
+                }} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+const GATE_CONFIG = {
+  build:    { icon: 'terminal' as const, label: 'Build'    },
+  tests:    { icon: 'flask'    as const, label: 'Tests'    },
+  lint:     { icon: 'code'     as const, label: 'Lint'     },
+  security: { icon: 'shield'   as const, label: 'Security' },
+}
+
+function QualityGatesBar({ gates }: { gates: Record<string, string> }) {
+  const entries = Object.entries(gates)
+  if (!entries.length) return null
+  return (
+    <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(255,255,255,0.04)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <span style={{ fontSize: 10, color: '#4b5563', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', marginRight: 2 }}>Gates</span>
+      {entries.map(([name, status]) => {
+        const cfg = GATE_CONFIG[name as keyof typeof GATE_CONFIG] ?? { icon: 'check' as const, label: name }
+        const color = status === 'pass' ? '#34d399' : status === 'fail' ? '#ef4444' : status === 'warn' ? '#fbbf24' : '#4b5563'
+        return (
+          <span key={name} style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 11, fontWeight: 600, color,
+            background: `${color}14`, padding: '2px 8px', borderRadius: 8,
+            border: `1px solid ${color}28`,
+          }}>
+            <Icon name={cfg.icon} size={10} style={{ color }} />
+            {cfg.label}
+          </span>
+        )
+      })}
+    </div>
+  )
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -363,6 +490,11 @@ export default function TaskCard({ card, userAvatar, userName, isStreaming, onRe
               )}
             </div>
 
+            {/* Runner lifecycle track — shown for cloud jobs */}
+            {card.isCloudJob && card.runnerState && (
+              <RunnerLifecycle state={card.runnerState} runUrl={card.runUrl} />
+            )}
+
             {/* Events */}
             <div style={{ padding: '8px 10px', maxHeight: isRunning ? 340 : 280, overflowY: 'auto' }}>
               {card.events.map(evt => (
@@ -380,6 +512,11 @@ export default function TaskCard({ card, userAvatar, userName, isStreaming, onRe
               )}
               <div ref={eventsEndRef} />
             </div>
+
+            {/* Quality gates */}
+            {card.qualityGates && Object.keys(card.qualityGates).length > 0 && (
+              <QualityGatesBar gates={card.qualityGates} />
+            )}
 
             {/* PR / commit result bar */}
             {card.status === 'done' && (card.prUrl || card.commitHash) && (
@@ -536,6 +673,23 @@ export function sseToTaskEvent(type: string, payload: any): TaskEvent | null {
         status: 'done',
         expandable: !!payload.url,
         children: payload.url ? [payload.url] : undefined,
+      }
+    case 'runner':
+      return {
+        id, ts, category: 'step',
+        title: payload.message ?? payload.state ?? 'Runner',
+        status: payload.state === 'completed' || payload.state === 'destroyed' ? 'done'
+          : payload.state === 'queued' ? 'skip' : 'running',
+        detail: payload.run_url,
+      }
+    case 'quality_gates':
+      return null // handled separately on the card data
+    case 'log':
+      return {
+        id, ts, category: 'observe',
+        title: payload.message ?? '',
+        status: 'done',
+        expandable: false,
       }
     case 'step':
       return {
