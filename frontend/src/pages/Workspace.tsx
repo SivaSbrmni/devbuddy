@@ -633,19 +633,19 @@ export default function Workspace() {
         />
       )}
 
-      {/* ── Left dock (2050 OS: minimal, icon-based) ── */}
+      {/* ── Left sidebar with conversation list ── */}
       <div style={{
-        width: 56,
+        width: 220,
         background: 'var(--bg-elevated)',
         borderRight: '1px solid var(--border-subtle)',
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
-        alignItems: 'center',
+        alignItems: 'stretch',
         padding: '12px 0',
         gap: 4,
         position: isMobile ? 'fixed' : 'relative',
-        left: isMobile ? (sidebarOpen ? 0 : -56) : 0,
+        left: isMobile ? (sidebarOpen ? 0 : -220) : 0,
         top: 0,
         bottom: 0,
         zIndex: 50,
@@ -690,14 +690,23 @@ export default function Workspace() {
           <Icon name="plus" size={20} />
         </button>
 
-        {/* Divider */}
-        <div style={{ width: 24, height: 1, background: 'var(--border-subtle)', margin: '8px 0' }} />
+        {/* Section header */}
+        <div style={{ padding: '8px 16px 4px', fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          Conversations
+        </div>
 
         {/* Conversations list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'stretch', flex: 1, overflow: 'hidden', padding: '4px 6px', width: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'stretch', flex: 1, overflow: 'auto', padding: '4px 12px', width: '100%' }}>
+          {convs.length === 0 && (
+            <div style={{ padding: '20px 8px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 12 }}>
+              No conversations yet
+            </div>
+          )}
           {convs.map(c => {
             const hue = c.title.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360
             const isActive = c.id === activeId
+            const firstUserMessage = c.messages.find(m => m.role === 'user')?.content || ''
+            const description = firstUserMessage.substring(0, 40) + (firstUserMessage.length > 40 ? '...' : '') || 'New conversation'
             return (
               <button
                 key={c.id}
@@ -706,16 +715,17 @@ export default function Workspace() {
                 className="db-btn"
                 style={{
                   width: '100%',
-                  padding: '6px 8px',
+                  padding: '10px 12px',
                   borderRadius: 'var(--radius-md)',
                   background: isActive ? `hsl(${hue}, 70%, 55%, 0.15)` : 'transparent',
                   border: isActive ? `1px solid hsl(${hue}, 70%, 55%, 0.3)` : '1px solid transparent',
-                  color: isActive ? `hsl(${hue}, 70%, 65%)` : 'var(--text-muted)',
+                  color: isActive ? `hsl(${hue}, 70%, 65%)` : 'var(--text)',
                   cursor: 'pointer',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 11,
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  gap: 4,
+                  fontSize: 12,
                   fontWeight: isActive ? 600 : 500,
                   transition: 'all var(--transition-fast)',
                   flexShrink: 0,
@@ -725,36 +735,39 @@ export default function Workspace() {
                 onMouseEnter={e => {
                   if (!isActive) {
                     e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-                    e.currentTarget.style.color = 'var(--text)'
                   }
                 }}
                 onMouseLeave={e => {
                   if (!isActive) {
                     e.currentTarget.style.background = 'transparent'
-                    e.currentTarget.style.color = 'var(--text-muted)'
                   }
                 }}
               >
-                <span style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  background: isActive ? `hsl(${hue}, 70%, 55%)` : `hsl(${hue}, 50%, 25%)`,
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 9,
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}>
-                  {c.title.charAt(0).toUpperCase()}
-                </span>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-                  {c.title}
-                </span>
-                <span style={{ fontSize: 9, color: 'var(--text-faint)', flexShrink: 0 }}>
-                  {c.messages.length}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                  <span style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: isActive ? `hsl(${hue}, 70%, 55%)` : `hsl(${hue}, 50%, 30%)`,
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}>
+                    {c.title.charAt(0).toUpperCase()}
+                  </span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, fontSize: 13 }}>
+                    {c.title}
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--text-faint)', flexShrink: 0, background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 'var(--radius-sm)' }}>
+                    {c.messages.length}
+                  </span>
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', paddingLeft: 32 }}>
+                  {description}
                 </span>
               </button>
             )
