@@ -250,30 +250,283 @@ async def _create_pr(
 
 # ── Workflow template ─────────────────────────────────────────────────────────
 
+# ── Embedded agent script (plain string — not an f-string) ───────────────────
+# This script runs inside the GitHub Actions runner.
+# It is base64-encoded into the workflow YAML to avoid all quoting issues.
+
+_AGENT_SCRIPT = r'''
+import os, sys, json, subprocess, time, re, pathlib
+
+TASK         = os.environ.get("DEVBUDDY_TASK", "")
+TASK_ID      = os.environ.get("DEVBUDDY_TASK_ID", "")
+OWNER        = os.environ.get("DEVBUDDY_OWNER", "")
+REPO         = os.environ.get("DEVBUDDY_REPO", "")
+BRANCH       = os.environ.get("DEVBUDDY_BRANCH", "")
+DEVBUDDY_URL = os.environ.get("DEVBUDDY_URL", "")
+WORKSPACE    = pathlib.Path(".")
+MAX_ITER     = 12
+
+def emit(event_type, payload):
+    line = "DEVBUDDY_EVENT:" + json.dumps({"type": event_type, "timestamp": int(time.time()*1000), "payload": payload})
+    print(line, flush=True)
+
+def run_shell(cmd, timeout=60):
+    try:
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout, cwd=str(WORKSPACE))
+        return r.stdout + r.stderr, r.returncode
+    except subprocess.TimeoutExpired:
+        return "Command timed out", -1
+    except Exception as e:
+        return str(e), -1
+
+def read_file(p):
+    fp = WORKSPACE / p["path"]
+    if not fp.exists():
+        return f"Error: {p['path']} not found"
+    try:
+        return fp.read_text(errors="replace")[:8000]
+    except Exception as e:
+        return f"Error reading file: {e}"
+
+def write_file(p):
+    fp = WORKSPACE / p["path"]
+    fp.parent.mkdir(parents=True, exist_ok=True)
+    fp.write_text(p["content"])
+    emit("file_change", {"path": p["path"], "action": "modified"})
+    return f"Written: {p['path']}"
+
+def list_files(p):
+    pat = p.get("pattern", "*")
+    matches = sorted([
+        str(f.relative_to(WORKSPACE))
+        for f in WORKSPACE.rglob(pat)
+        if f.is_file() and ".git" not in str(f)
+    ])[:60]
+    return "\n".join(matches)
+
+def search_code(p):
+    q = p["query"].replace('"', '\\"')
+    out, _ = run_shell(f'grep -r -l "{q}" . 2>/dev/null | head -20')
+    return out or "No matches"
+
+def run_command(p):
+    cmd = p["command"]
+    for blocked in ["rm -rf /", "dd if=", "mkfs", "> /dev/", "curl | bash", "wget | sh", "git push", "git commit"]:
+        if blocked in cmd:
+            return f"Blocked: {cmd}"
+    out, _ = run_shell(cmd)
+    return out[:3000]
+
+TOOLS = {
+    "read_file":    read_file,
+    "write_file":   write_file,
+    "list_files":   list_files,
+    "search_code":  search_code,
+    "run_command":  run_command,
+}
+
+TOOLS_DESC = """- read_file({"path":"..."}): Read file contents
+- write_file({"path":"...","content":"..."}): Write/create a file
+- list_files({"pattern":"*"}): List files matching glob
+- search_code({"query":"..."}): Search codebase for text
+- run_command({"command":"..."}): Run shell command"""
+
+SYSTEM = (
+    "You are DevBuddy, an autonomous software engineer.\n"
+    f"Repository: {OWNER}/{REPO}, Branch: {BRANCH}\n"
+    f"Task: {TASK}\n\n"
+    "Follow the ReAct pattern strictly:\n"
+    "THOUGHT: <reasoning about what to do next>\n"
+    "ACTION: <tool_name>\n"
+    "PARAMS: <json object with tool parameters>\n\n"
+    "After seeing OBSERVATION, continue with next THOUGHT/ACTION.\n"
+    "When the task is fully complete output exactly: DONE: <one line summary>\n\n"
+    f"Available tools:\n{TOOLS_DESC}\n\n"
+    "Rules:\n"
+    "- Always read a file before editing it\n"
+    "- Never use git commands via run_command\n"
+    "- Create complete, working, production-ready code\n"
+    "- Use write_file to create or modify files"
+)
+
+def call_llm(messages):
+    import urllib.request
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        payload = json.dumps({
+            "model": "claude-3-5-haiku-20241022",
+            "max_tokens": 4096,
+            "system": SYSTEM,
+            "messages": messages,
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=payload,
+            headers={
+                "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read())["content"][0]["text"]
+        except Exception as e:
+            print(f"Anthropic error: {e}", flush=True)
+
+    if os.environ.get("OPENAI_API_KEY"):
+        msgs = [{"role": "system", "content": SYSTEM}] + messages
+        payload = json.dumps({"model": "gpt-4o-mini", "messages": msgs, "max_tokens": 4096}).encode()
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read())["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"OpenAI error: {e}", flush=True)
+
+    if DEVBUDDY_URL:
+        payload = json.dumps({"messages": messages, "system": SYSTEM, "task_id": TASK_ID}).encode()
+        req = urllib.request.Request(
+            f"{DEVBUDDY_URL}/llm/complete",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read()).get("content", "")
+        except Exception as e:
+            print(f"DevBuddy relay error: {e}", flush=True)
+
+    raise RuntimeError("No LLM available. Add ANTHROPIC_API_KEY or OPENAI_API_KEY to repository secrets.")
+
+def parse_action(text):
+    action_m = re.search(r"ACTION:\s*(\w+)", text)
+    params_m  = re.search(r"PARAMS:\s*(\{[\s\S]+?\})", text)
+    thought_m = re.search(r"THOUGHT:\s*(.+?)(?=ACTION:|$)", text, re.DOTALL)
+    if not action_m:
+        return None, None, text.strip()
+    tool   = action_m.group(1).strip()
+    params = {}
+    if params_m:
+        try:
+            params = json.loads(params_m.group(1))
+        except Exception:
+            pass
+    thought = thought_m.group(1).strip() if thought_m else ""
+    return tool, params, thought
+
+# ── ReAct loop ────────────────────────────────────────────────────────────────
+emit("runner",   {"state": "analyzing",  "message": "Agent online — starting ReAct loop"})
+emit("timeline", {"step": "execution",   "status": "running", "message": "ReAct loop started"})
+
+messages      = [{"role": "user", "content": f"Task: {TASK}\n\nBegin by listing project files."}]
+done_summary  = ""
+modified_files = []
+
+for iteration in range(MAX_ITER):
+    emit("timeline", {"step": "execution", "status": "running",
+                       "message": f"Iteration {iteration+1}/{MAX_ITER}"})
+    try:
+        response = call_llm(messages)
+    except Exception as e:
+        emit("error", {"message": str(e)})
+        sys.exit(1)
+
+    print(f"\n--- Iteration {iteration+1} ---\n{response[:600]}", flush=True)
+
+    done_m = re.search(r"DONE:\s*(.+)", response)
+    if done_m:
+        done_summary = done_m.group(1).strip()
+        emit("timeline", {"step": "execution", "status": "done", "message": "Task complete"})
+        break
+
+    tool, params, thought = parse_action(response)
+    if thought:
+        emit("think", {"message": thought[:200]})
+
+    if not tool:
+        messages.append({"role": "assistant", "content": response})
+        messages.append({"role": "user",      "content": "Continue. What is your next ACTION?"})
+        continue
+
+    emit("tool_call", {"tool": tool, "params": params})
+
+    if tool not in TOOLS:
+        obs = f"Unknown tool: {tool}. Use one of: {', '.join(TOOLS.keys())}"
+    else:
+        try:
+            obs = str(TOOLS[tool](params))
+            if tool == "write_file" and params.get("path"):
+                f = params["path"]
+                if f not in modified_files:
+                    modified_files.append(f)
+        except Exception as e:
+            obs = f"Tool error: {e}"
+
+    emit("observe", {"tool": tool, "output": obs[:300]})
+    print(f"OBSERVATION: {obs[:300]}", flush=True)
+    messages.append({"role": "assistant", "content": response})
+    messages.append({"role": "user",      "content": f"OBSERVATION: {obs}\n\nContinue."})
+
+# ── Commit & push ─────────────────────────────────────────────────────────────
+emit("runner", {"state": "pushing", "message": "Committing changes..."})
+run_shell("git add -A")
+commit_msg = (done_summary or f"devbuddy: {TASK}")[:72]
+out, code  = run_shell(f'git commit -m "{commit_msg}"')
+
+if code == 0:
+    sha, _ = run_shell("git rev-parse --short HEAD")
+    emit("timeline", {"step": "commit", "status": "done", "message": f"Committed {sha.strip()}"})
+    push_out, push_code = run_shell(f"git push origin {BRANCH}", timeout=120)
+    if push_code == 0:
+        emit("timeline", {"step": "push", "status": "done", "message": f"Pushed to {BRANCH}"})
+        for f in modified_files:
+            emit("file_change", {"path": f, "action": "modified"})
+    else:
+        emit("timeline", {"step": "push", "status": "error", "message": push_out[:120]})
+else:
+    emit("timeline", {"step": "commit", "status": "warn", "message": "Nothing to commit"})
+
+print(f"DONE: {done_summary or 'Task completed'}", flush=True)
+'''
+
+
 def _build_workflow(job: CloudJob, devbuddy_url: str) -> str:
-    """Generate the GitHub Actions workflow YAML for this task."""
-    return f"""# DevBuddy Autonomous Engineering Runner
-# Auto-generated — do not edit manually
+    """Generate GitHub Actions workflow YAML with embedded LangGraph agent."""
+    import base64 as _b64
+    # base64-encode the agent script so there are zero quoting/heredoc issues
+    agent_b64 = _b64.b64encode(_AGENT_SCRIPT.encode()).decode()
+    return f"""# DevBuddy Cloud Execution Engine
+# Auto-generated — do not edit
 # Task: {job.task_id}
 
-name: DevBuddy Task Runner
+name: DevBuddy Agent Runner
 
 on:
   workflow_dispatch:
     inputs:
       task_id:
-        description: 'DevBuddy Task ID'
+        description: 'Task ID'
         required: true
       task:
-        description: 'Engineering task'
+        description: 'Engineering task description'
         required: true
       devbuddy_url:
-        description: 'DevBuddy callback URL'
+        description: 'DevBuddy server URL for LLM relay'
         required: false
 
 jobs:
-  devbuddy-agent:
-    name: 'DevBuddy Engineering Agent'
+  agent:
+    name: 'DevBuddy LangGraph Agent'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -281,98 +534,99 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: {job.branch}
           fetch-depth: 0
           token: ${{{{ secrets.GITHUB_TOKEN }}}}
 
-      - name: Setup Python
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
-      - name: Install DevBuddy runtime
+      - name: Install agent runtime
         run: |
-          pip install --quiet httpx pydantic anthropic openai structlog 2>/dev/null || true
-          echo "DevBuddy runtime ready"
+          pip install --quiet httpx anthropic openai 2>/dev/null || true
+          echo "::group::Runtime ready"
+          python --version
+          echo "::endgroup::"
 
-      - name: Detect project stack
+      - name: Detect stack
         id: stack
         run: |
           if [ -f "package.json" ]; then echo "stack=node" >> $GITHUB_OUTPUT
           elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then echo "stack=python" >> $GITHUB_OUTPUT
-          elif [ -f "pom.xml" ]; then echo "stack=java" >> $GITHUB_OUTPUT
           elif [ -f "go.mod" ]; then echo "stack=go" >> $GITHUB_OUTPUT
           elif [ -f "Cargo.toml" ]; then echo "stack=rust" >> $GITHUB_OUTPUT
           else echo "stack=unknown" >> $GITHUB_OUTPUT
           fi
-          echo "Stack: $(cat $GITHUB_OUTPUT | grep stack)"
 
-      - name: Setup Node.js (if needed)
+      - name: Setup Node.js
         if: steps.stack.outputs.stack == 'node'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install project dependencies
         run: |
-          if [ -f "package.json" ]; then
-            npm ci --prefer-offline 2>/dev/null || npm install --prefer-offline 2>/dev/null || true
-          elif [ -f "requirements.txt" ]; then
-            pip install -r requirements.txt --quiet 2>/dev/null || true
-          elif [ -f "pyproject.toml" ]; then
-            pip install -e . --quiet 2>/dev/null || true
+          if [ -f "package.json" ]; then npm ci --prefer-offline 2>/dev/null || npm install 2>/dev/null || true
+          elif [ -f "requirements.txt" ]; then pip install -r requirements.txt --quiet 2>/dev/null || true
+          elif [ -f "pyproject.toml" ]; then pip install -e . --quiet 2>/dev/null || true
           fi
-          echo "Dependencies ready"
 
-      - name: Configure git identity
+      - name: Configure git
         run: |
           git config user.email "devbuddy-runner@devbuddy.org"
-          git config user.name "DevBuddy Runner"
+          git config user.name "DevBuddy Agent"
 
-      - name: Stream agent context back
-        if: always()
+      - name: Decode and run DevBuddy agent
         env:
-          DEVBUDDY_URL: ${{{{ inputs.devbuddy_url }}}}
-          TASK_ID: ${{{{ inputs.task_id }}}}
           GITHUB_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+          ANTHROPIC_API_KEY: ${{{{ secrets.ANTHROPIC_API_KEY }}}}
+          OPENAI_API_KEY: ${{{{ secrets.OPENAI_API_KEY }}}}
+          DEVBUDDY_TASK: ${{{{ inputs.task }}}}
+          DEVBUDDY_TASK_ID: ${{{{ inputs.task_id }}}}
+          DEVBUDDY_OWNER: {job.owner}
+          DEVBUDDY_REPO: {job.repo}
+          DEVBUDDY_BRANCH: {job.branch}
+          DEVBUDDY_URL: ${{{{ inputs.devbuddy_url }}}}
+          AGENT_B64: {agent_b64}
         run: |
-          echo "DEVBUDDY_RUNNER_ONLINE=true" >> $GITHUB_ENV
-          echo "Runner online for task: $TASK_ID"
-          echo "::group::DevBuddy Agent Context"
-          echo "Repository: {job.owner}/{job.repo}"
-          echo "Branch: {job.branch}"
-          echo "Base: {job.base_branch}"
-          echo "Task ID: {job.task_id}"
+          echo "::group::DevBuddy Agent Boot"
+          echo "$AGENT_B64" | base64 -d > /tmp/devbuddy_agent.py
+          echo "Agent script decoded ($(wc -l < /tmp/devbuddy_agent.py) lines)"
+          echo "Task: $DEVBUDDY_TASK"
+          echo "Branch: $DEVBUDDY_BRANCH"
+          echo "::endgroup::"
+          echo "::group::DevBuddy ReAct Execution"
+          python /tmp/devbuddy_agent.py
           echo "::endgroup::"
 
-      - name: Upload execution report
+      - name: Run build verification
+        if: always()
+        run: |
+          echo "::group::Build Verification"
+          if [ -f "package.json" ]; then
+            npm run build 2>&1 | tail -20 || echo "Build check: no build script or errors"
+            npm test 2>&1 | tail -20 || echo "Tests: no test script or errors"
+          elif [ -f "requirements.txt" ] || [ -f "pyproject.toml" ]; then
+            python -m pytest --tb=short -q 2>&1 | tail -20 || echo "Tests: not found or errors"
+          fi
+          echo "::endgroup::"
+
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: devbuddy-execution-report-{job.task_id}
+          name: devbuddy-run-{job.task_id}
           path: |
             devbuddy-report.md
-            devbuddy-timeline.json
-          if-no-files-found: ignore
-          retention-days: 30
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: devbuddy-test-results-{job.task_id}
-          path: |
             coverage/
             test-results/
-            playwright-report/
-            *.xml
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 7
 """
 
 
