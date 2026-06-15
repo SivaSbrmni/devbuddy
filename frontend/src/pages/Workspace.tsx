@@ -119,6 +119,8 @@ export default function Workspace() {
   const [mentionOpen, setMentionOpen] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
+  const [aiThinking, setAiThinking] = useState(false)
+  const [aiReasoning, setAiReasoning] = useState<string | null>(null)
   const [providerKeys, setProviderKeys] = useState({
     anthropic: { key: '', base_url: '' },
     ollama: { key: '', base_url: '' },
@@ -416,6 +418,8 @@ export default function Workspace() {
     updateActive(newMsgs, title)
     setInput('')
     setLoading(true)
+    setAiThinking(true)
+    setAiReasoning(agentMode ? 'Planning autonomous pipeline...' : 'Analyzing your question...')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     abortControllerRef.current = new AbortController()
@@ -435,6 +439,8 @@ export default function Workspace() {
       updateActive([...newMsgs, { ...assistantMsg, content: errorMsg }], title)
     } finally {
       setLoading(false)
+      setAiThinking(false)
+      setAiReasoning(null)
       abortControllerRef.current = null
       if (active && active.messages.length > 2) {
         try {
@@ -459,6 +465,8 @@ export default function Workspace() {
       abortControllerRef.current = null
     }
     setLoading(false)
+    setAiThinking(false)
+    setAiReasoning(null)
     toast('Request cancelled', 'info')
   }
 
@@ -825,6 +833,19 @@ export default function Workspace() {
               <Icon name={agentMode ? 'agent' : 'chat'} size={10} />
               <span style={{ fontSize: 10, color: agentMode ? 'var(--success)' : 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{agentMode ? 'Agent' : 'Chat'}</span>
             </div>
+
+            {/* AI Thinking indicator */}
+            {aiThinking && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                animation: 'fadeIn 0.3s ease',
+              }}>
+                <span className="pulse" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
+                <span style={{ fontSize: 11, color: 'var(--accent-hover)', fontWeight: 500 }}>{aiReasoning}</span>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
