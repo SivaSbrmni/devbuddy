@@ -236,3 +236,20 @@ input:focus, textarea:focus, select:focus {
     font-size: 16px; /* prevent zoom on iOS */
   }
 }
+
+/* ── Premium Animations ──────────────────────────────── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Hover-reveal delete on conversation items */
+div[role="button"]:hover .conv-delete,
+div[role="button"]:focus-within .conv-delete {
+  opacity: 1 !important;
+}

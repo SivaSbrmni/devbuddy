@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Icon from '../components/Icon'
 
 export default function LandingPage() {
   const [email, setEmail] = useState('')
@@ -79,20 +80,26 @@ export default function LandingPage() {
 
       {/* Feature pills */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', justifyContent: 'center', marginBottom: 'var(--space-8)', animation: 'fadeIn 0.7s ease' }}>
-        {['⚡ AI Code Review', '🔍 Smart Debugging', '📊 Dev Metrics', '🧠 Knowledge Base', '🚀 Project Insights'].map(f => (
+        {[
+          { label: 'AI Code Review', icon: 'zap' },
+          { label: 'Smart Debugging', icon: 'wrench' },
+          { label: 'Dev Metrics', icon: 'info' },
+          { label: 'Knowledge Base', icon: 'brain' },
+          { label: 'Project Insights', icon: 'rocket' },
+        ].map(f => (
           <span
-            key={f}
-            onMouseEnter={() => setHoveredPill(f)}
+            key={f.label}
+            onMouseEnter={() => setHoveredPill(f.label)}
             onMouseLeave={() => setHoveredPill(null)}
             style={{
-              background: hoveredPill === f ? 'rgba(99,102,241,0.1)' : 'var(--bg-card)',
-              border: hoveredPill === f ? '1px solid rgba(99,102,241,0.3)' : '1px solid var(--border)',
+              background: hoveredPill === f.label ? 'rgba(99,102,241,0.1)' : 'var(--bg-card)',
+              border: hoveredPill === f.label ? '1px solid rgba(99,102,241,0.3)' : '1px solid var(--border)',
               borderRadius: 'var(--radius-md)', padding: '7px 16px', fontSize: '13px', color: 'var(--text-muted)',
               cursor: 'default',
               transition: 'all var(--transition-base)',
-              transform: hoveredPill === f ? 'translateY(-1px)' : 'translateY(0)',
+              transform: hoveredPill === f.label ? 'translateY(-1px)' : 'translateY(0)',
             }}
-          >{f}</span>
+          ><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Icon name={f.icon as any} size={14} /> {f.label}</span></span>
         ))}
       </div>
 
@@ -106,7 +113,7 @@ export default function LandingPage() {
       }}>
         {submitted ? (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '44px', marginBottom: 'var(--space-4)' }}>🎉</div>
+            <div style={{ fontSize: '44px', marginBottom: 'var(--space-4)' }}><Icon name="sparkles" size={40} style={{ color: 'var(--accent-hover)' }} /></div>
             <div style={{ fontSize: '19px', fontWeight: 700, color: 'var(--text)', marginBottom: 'var(--space-2)' }}>You're on the list!</div>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.6 }}>
               We'll reach out to <strong style={{ color: 'var(--accent-hover)' }}>{email}</strong> when your invite is ready.

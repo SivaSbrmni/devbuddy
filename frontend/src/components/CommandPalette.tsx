@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import Icon from './Icon'
 
 interface Command {
   id: string
@@ -83,8 +84,8 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
         style={{
           width: '100%',
           maxWidth: 520,
-          background: '#111318',
-          border: '1px solid #2a2d3a',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
           borderRadius: 'var(--radius-xl)',
           boxShadow: '0 24px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)',
           overflow: 'hidden',
@@ -92,8 +93,8 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
         }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #1e2130', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ color: '#4b4f63', fontSize: 16 }}>⌘</span>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Icon name="command" size={16} style={{ color: 'var(--text-faint)' }} />
           <input
             ref={inputRef}
             value={query}
@@ -105,16 +106,16 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
               background: 'none',
               border: 'none',
               outline: 'none',
-              color: '#e4e6eb',
+              color: 'var(--text)',
               fontSize: 15,
               fontFamily: 'inherit',
             }}
           />
-          <span style={{ fontSize: 11, color: '#4b4f63', background: '#1a1d27', padding: '2px 8px', borderRadius: 4 }}>ESC</span>
+          <span style={{ fontSize: 11, color: 'var(--text-faint)', background: 'var(--bg-card)', padding: '2px 8px', borderRadius: 'var(--radius-sm)' }}>ESC</span>
         </div>
         <div style={{ maxHeight: 320, overflowY: 'auto', padding: '6px' }}>
           {filtered.length === 0 && (
-            <div style={{ padding: '20px', textAlign: 'center', color: '#4b4f63', fontSize: 13 }}>No commands found</div>
+            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>No commands found</div>
           )}
           {filtered.map((cmd, i) => (
             <div
@@ -133,10 +134,10 @@ export default function CommandPalette({ isOpen, onClose, commands }: CommandPal
                 transition: 'all 0.1s ease',
               }}
             >
-              <span style={{ fontSize: 16, width: 24, textAlign: 'center' }}>{cmd.icon}</span>
-              <span style={{ flex: 1, fontSize: 14, color: '#e4e6eb' }}>{cmd.label}</span>
+              <Icon name={cmd.icon as any} size={18} style={{ color: i === selectedIndex ? 'var(--accent-hover)' : 'var(--text-dim)' }} />
+              <span style={{ flex: 1, fontSize: 14, color: 'var(--text)' }}>{cmd.label}</span>
               {cmd.shortcut && (
-                <span style={{ fontSize: 11, color: '#4b4f63', background: '#1a1d27', padding: '2px 8px', borderRadius: 4, fontFamily: 'monospace' }}>{cmd.shortcut}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-faint)', background: 'var(--bg-card)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'monospace' }}>{cmd.shortcut}</span>
               )}
             </div>
           ))}

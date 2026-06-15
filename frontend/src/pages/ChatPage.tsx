@@ -7,6 +7,8 @@ import ToastContainer, { toast } from '../components/Toast'
 import Skeleton, { MessageSkeleton, TypingIndicator } from '../components/Skeleton'
 import CommandPalette from '../components/CommandPalette'
 import WorkspacePanel from '../components/WorkspacePanel'
+import Icon from '../components/Icon'
+import Dropdown from '../components/Dropdown'
 
 const BACKEND = import.meta.env.VITE_API_URL || ''
 const API = `${BACKEND}/api/v1`
@@ -506,7 +508,7 @@ export default function ChatPage() {
         {/* New chat button */}
         <div style={{ padding: '10px 12px' }}>
           <button onClick={createNew} className="db-btn db-focus" style={{ width: '100%', padding: '8px 12px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 'var(--radius-md)', color: 'var(--accent-hover)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all var(--transition-base)' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.2)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)' }} onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.12)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)' }}>
-            <span style={{ fontSize: 16 }}>+</span> New conversation
+            <Icon name="plus" size={14} /> New conversation
           </button>
         </div>
 
@@ -524,9 +526,9 @@ export default function ChatPage() {
             >
               <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, color: c.id === activeId ? 'var(--accent-hover)' : 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: c.id === activeId ? 600 : 400 }}>{c.title}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>{c.messages.length} messages</div>
+                <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>{c.messages.length > 0 ? `${c.messages.length} message${c.messages.length > 1 ? 's' : ''}` : 'Empty'}</div>
               </div>
-              <button onClick={e => { e.stopPropagation(); deleteConv(c.id) }} className="db-btn" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 14, padding: '2px 6px', flexShrink: 0, borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--error)'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent' }} title="Delete conversation">×</button>
+              <button onClick={e => { e.stopPropagation(); deleteConv(c.id) }} className="db-btn conv-delete" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 14, padding: '2px 6px', flexShrink: 0, borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)', opacity: 0 }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--error)'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'transparent' }} title="Delete conversation"><Icon name="trash" size={14} /></button>
             </div>
           ))}
         </div>
@@ -538,7 +540,7 @@ export default function ChatPage() {
             <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || 'User'}</div>
             <div style={{ fontSize: 11, color: 'var(--text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.email}</div>
           </div>
-          <button onClick={logout} title="Sign out" className="db-btn" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 16, padding: '4px 6px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--error)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)' }}>⏻</button>
+          <button onClick={logout} title="Sign out" className="db-btn" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 16, padding: '4px 6px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--error)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)' }}><Icon name="logout" size={16} /></button>
         </div>
 
         {/* Close button for mobile */}
@@ -581,7 +583,7 @@ export default function ChatPage() {
                 fontSize: 20
               }}
             >
-              ☰
+              <Icon name="menu" size={20} />
             </button>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {active?.title || 'New conversation'}
@@ -614,7 +616,7 @@ export default function ChatPage() {
               onMouseEnter={e => { if (!workspaceOpen) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text-muted)'; } }}
               onMouseLeave={e => { if (!workspaceOpen) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-dim)'; } }}
             >
-              <span style={{ fontSize: 13 }}>📁</span>
+              <Icon name="folder" size={14} />
               {workspaceFiles.length > 0 && <span style={{ fontSize: 10, background: 'var(--accent)', color: 'white', padding: '1px 5px', borderRadius: 'var(--radius-full)', fontWeight: 700 }}>{workspaceFiles.length}</span>}
             </button>
             {/* Command palette trigger */}
@@ -662,7 +664,7 @@ export default function ChatPage() {
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--text-faint)'; e.currentTarget.style.color = 'var(--accent-hover)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
             >
-              <span style={{ fontSize: 13 }}>⚙️</span>
+              <Icon name="settings" size={14} />
             </button>
             {/* Logout */}
             <button
@@ -705,13 +707,13 @@ export default function ChatPage() {
                   {messages.map(msg => (
                     <div key={msg.id} style={{ marginBottom: 24, display: 'flex', gap: 12, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
                       <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, background: msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'rgba(16,185,129,0.15)', color: msg.role === 'user' ? 'var(--accent-hover)' : 'var(--success)', border: `2px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.1)'}` }}>
-                        {msg.role === 'user' ? (user?.picture ? <img src={user.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%' }} /> : 'U') : '🤖'}
+                        {msg.role === 'user' ? (user?.picture ? <img src={user.picture} alt="" style={{ width: 32, height: 32, borderRadius: '50%' }} /> : <Icon name="user" size={16} />) : <Icon name="bot" size={16} />}
                       </div>
                       <div style={{ maxWidth: '80%', background: msg.role === 'user' ? 'rgba(99,102,241,0.1)' : 'var(--bg-card)', border: `1px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)', padding: '14px 18px', animation: 'messageIn 0.3s ease', boxShadow: msg.role === 'user' ? '0 2px 8px rgba(99,102,241,0.08)' : '0 2px 8px rgba(0,0,0,0.1)' }}>
                         {msg.steps && msg.steps.length > 0 && (
                           <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
                             <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, marginBottom: 6 }}>
-                              {msg.agentEvents && msg.agentEvents.length > 0 ? '⚡ Agent pipeline' : '🔄 Working...'}
+                              {msg.agentEvents && msg.agentEvents.length > 0 ? <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="agent" size={12} /> Agent pipeline</span> : <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="loader" size={12} /> Working...</span>}
                             </div>
                             {msg.steps.filter(s => s).map((step, i) => (
                               <div key={i} style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -722,7 +724,7 @@ export default function ChatPage() {
                               <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 'var(--radius-sm)' }}>
                                 {msg.agentEvents.filter(e => e.type === 'test').map((e, i) => (
                                   <div key={i} style={{ fontSize: 11, color: 'var(--success)' }}>
-                                    ✓ {e.payload?.summary || 'Tests passed'}
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="check" size={10} /> {e.payload?.summary || 'Tests passed'}</span>
                                   </div>
                                 ))}
                               </div>
@@ -731,7 +733,7 @@ export default function ChatPage() {
                               <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 'var(--radius-sm)' }}>
                                 {msg.agentEvents.filter(e => e.type === 'review').map((e, i) => (
                                   <div key={i} style={{ fontSize: 11, color: 'var(--accent-hover)' }}>
-                                    🔍 {e.payload?.summary || 'Code reviewed'}
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="info" size={10} /> {e.payload?.summary || 'Code reviewed'}</span>
                                   </div>
                                 ))}
                               </div>
@@ -776,7 +778,7 @@ export default function ChatPage() {
                                 gap: 6
                               }}
                             >
-                              📦 Download {msg.files.length} file{msg.files.length > 1 ? 's' : ''} as ZIP
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="download" size={12} /> Download {msg.files.length} file{msg.files.length > 1 ? 's' : ''} as ZIP</span>
                             </button>
                             <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-faint)' }}>
                               {msg.files.map(f => f.name).join(', ')}
@@ -831,13 +833,13 @@ export default function ChatPage() {
               </p>
 
               {[
-                { id: 'anthropic', name: 'Anthropic', icon: '🅰️', placeholder: 'sk-ant-api03-...', defaultUrl: 'https://api.anthropic.com' },
-                { id: 'ollama', name: 'Ollama', icon: '🦙', placeholder: 'Optional — leave empty for local', defaultUrl: 'http://localhost:11434' },
-                { id: 'llama', name: 'Llama API', icon: '🔥', placeholder: 'Bearer token...', defaultUrl: 'https://api.llama.com/v1' },
+                { id: 'anthropic', name: 'Anthropic', icon: 'brain', placeholder: 'sk-ant-api03-...', defaultUrl: 'https://api.anthropic.com' },
+                { id: 'ollama', name: 'Ollama', icon: 'bot', placeholder: 'Optional — leave empty for local', defaultUrl: 'http://localhost:11434' },
+                { id: 'llama', name: 'Llama API', icon: 'zap', placeholder: 'Bearer token...', defaultUrl: 'https://api.llama.com/v1' },
               ].map(provider => (
                 <div key={provider.id} style={{ marginBottom: 20, padding: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <span style={{ fontSize: 16 }}>{provider.icon}</span>
+                    <Icon name={provider.icon as any} size={18} style={{ color: 'var(--accent-hover)' }} />
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent-hover)' }}>{provider.name}</span>
                     {providerKeys[provider.id as keyof typeof providerKeys].key === '••••••••' && (
                       <span style={{ fontSize: 11, color: 'var(--success)', background: 'rgba(16,185,129,0.1)', padding: '2px 8px', borderRadius: 'var(--radius-sm)' }}>Configured</span>
@@ -940,7 +942,23 @@ export default function ChatPage() {
         <div style={{ padding: '16px 20px 20px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
             {/* Main input container */}
-            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.2)', transition: 'border-color var(--transition-base), box-shadow var(--transition-base)' }} className="db-input-container" id="chat-input-container">
+            <div
+              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.2)', transition: 'border-color var(--transition-base), box-shadow var(--transition-base)' }}
+              className="db-input-container"
+              id="chat-input-container"
+              onDragOver={e => { e.preventDefault(); const el = document.getElementById('chat-input-container'); if (el) el.style.borderColor = 'var(--accent)'; }}
+              onDragLeave={e => { e.preventDefault(); const el = document.getElementById('chat-input-container'); if (el) el.style.borderColor = 'var(--border)'; }}
+              onDrop={e => {
+                e.preventDefault()
+                const el = document.getElementById('chat-input-container')
+                if (el) el.style.borderColor = 'var(--border)'
+                const files = Array.from(e.dataTransfer.files)
+                if (files.length > 0) {
+                  const fileNames = files.map(f => f.name).join(', ')
+                  setInput(prev => prev + (prev ? '\n\n' : '') + `[Attached: ${fileNames}]`)
+                }
+              }}
+            >
               {/* Textarea */}
               <textarea
                 ref={textareaRef}
@@ -978,16 +996,19 @@ export default function ChatPage() {
                       transition: 'all var(--transition-base)'
                     }}
                   >
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: agentMode ? 'var(--success)' : 'var(--text-dim)' }} />
+                    <Icon name={agentMode ? 'agent' : 'chat'} size={12} />
                     {agentMode ? 'Agent' : 'Chat'}
                   </button>
                 </div>
 
                 {/* Right: model selector + send */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <select value={model} onChange={e => setModel(e.target.value)} disabled={modelsLoading} className="db-focus" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)', fontSize: 11, padding: '5px 8px', cursor: modelsLoading ? 'not-allowed' : 'pointer', outline: 'none', opacity: modelsLoading ? 0.5 : 1, transition: 'all var(--transition-base)' }}>
-                    {models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-                  </select>
+                  <Dropdown
+                    value={model}
+                    options={models.map(m => ({ value: m.id, label: m.label, description: m.provider }))}
+                    onChange={setModel}
+                    disabled={modelsLoading}
+                  />
 
                   <button
                     onClick={loading ? cancelRequest : send}
@@ -1014,7 +1035,7 @@ export default function ChatPage() {
                     onMouseEnter={e => { if (input.trim() && !loading) { e.currentTarget.style.boxShadow = '0 4px 16px rgba(99,102,241,0.4)'; e.currentTarget.style.transform = 'translateY(-1px) scale(1.05)' }}}
                     onMouseLeave={e => { if (input.trim() && !loading) { e.currentTarget.style.boxShadow = '0 2px 12px rgba(99,102,241,0.3)'; e.currentTarget.style.transform = 'translateY(0) scale(1)' }}}
                   >
-                    {loading ? '✕' : '↑'}
+                    {loading ? <Icon name="close" size={14} /> : <Icon name="send" size={14} />}
                   </button>
                 </div>
               </div>
@@ -1047,11 +1068,11 @@ export default function ChatPage() {
         isOpen={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         commands={[
-          { id: 'new-chat', label: 'New conversation', shortcut: 'Ctrl+N', icon: '✨', action: () => { createNew(); setWorkspaceOpen(false) } },
-          { id: 'workspace', label: 'Toggle workspace panel', shortcut: 'Ctrl+Shift+F', icon: '📁', action: () => setWorkspaceOpen(!workspaceOpen) },
-          { id: 'settings', label: 'Open settings', shortcut: '', icon: '⚙️', action: () => setSettingsOpen(true) },
-          { id: 'agent-mode', label: agentMode ? 'Switch to Chat mode' : 'Switch to Agent mode', shortcut: '', icon: agentMode ? '💬' : '⚡', action: () => setAgentMode(!agentMode) },
-          { id: 'logout', label: 'Sign out', shortcut: '', icon: '⏻', action: () => logout() },
+          { id: 'new-chat', label: 'New conversation', shortcut: 'Ctrl+N', icon: 'sparkles', action: () => { createNew(); setWorkspaceOpen(false) } },
+          { id: 'workspace', label: 'Toggle workspace panel', shortcut: 'Ctrl+Shift+F', icon: 'folder', action: () => setWorkspaceOpen(!workspaceOpen) },
+          { id: 'settings', label: 'Open settings', shortcut: '', icon: 'settings', action: () => setSettingsOpen(true) },
+          { id: 'agent-mode', label: agentMode ? 'Switch to Chat mode' : 'Switch to Agent mode', shortcut: '', icon: agentMode ? 'chat' : 'agent', action: () => setAgentMode(!agentMode) },
+          { id: 'logout', label: 'Sign out', shortcut: '', icon: 'logout', action: () => logout() },
         ]}
       />
 
