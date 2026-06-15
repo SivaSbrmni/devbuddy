@@ -61,15 +61,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             
             if missing:
                 print(f"[db init] Missing tables: {missing}")
-                # Drop conflicting indexes that might exist from partial prior runs
-                sync_conn.execute(text("DROP INDEX IF EXISTS ix_user_settings_email"))
-                sync_conn.execute(text("DROP INDEX IF EXISTS ix_pm_project_category"))
-                sync_conn.execute(text("DROP INDEX IF EXISTS ix_ke_category"))
-                sync_conn.execute(text("DROP INDEX IF EXISTS ix_skills_category"))
-                sync_conn.execute(text("DROP INDEX IF EXISTS ix_mu_provider"))
-                sync_conn.execute(text("DROP INDEX IF EXISTS ix_audit_actor"))
-                sync_conn.execute(text("DROP INDEX IF EXISTS ix_audit_action"))
-                sync_conn.execute(text("DROP INDEX IF EXISTS ix_audit_created"))
+                # Drop ALL existing indexes to avoid conflicts from partial prior runs
+                idx_result = sync_conn.execute(text("SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename != 'pg_stat_statements'"))
+                for row in idx_result:
+                    idx_name = row[0]
+                    if not idx_name.endswith('_pkey') and not idx_name.endswith('_idx'):
+                        sync_conn.execute(text(f"DROP INDEX IF EXISTS {idx_name}"))
+                        print(f"[db init] Dropped index: {idx_name}")
                 
                 # Create tables in dependency order using SQLAlchemy's create_all
                 # which handles FK ordering. Catch index errors and continue.
