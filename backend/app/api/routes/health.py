@@ -47,3 +47,41 @@ async def health_llm() -> dict:
         "ollama_base": settings.OLLAMA_API_BASE,
         "ollama_model": settings.OLLAMA_MODEL,
     }
+
+
+@router.get("/health/db-status")
+async def health_db_status() -> dict:
+    """Show database table status for diagnostics."""
+    try:
+        from app.db.session import engine
+        from sqlalchemy import inspect
+        from app.db.base import Base
+        import app.models.project  # noqa: F401
+        import app.models.task  # noqa: F401
+        import app.models.execution  # noqa: F401
+        import app.models.memory  # noqa: F401
+        import app.models.user_settings  # noqa: F401
+
+        async with engine.connect() as conn:
+            def _get_tables(sync_conn):
+                inspector = inspect(sync_conn)
+                return inspector.get_table_names()
+
+            result = await conn.run_sync(_get_tables)
+            existing = set(result)
+            expected = set(Base.metadata.tables.keys())
+            missing = expected - existing
+
+            return {
+                "status": "healthy",
+                "existing_tables": sorted(existing),
+                "expected_tables": sorted(expected),
+                "missing_tables": sorted(missing),
+                "all_exist": len(missing) == 0,
+            }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "error": str(exc),
+            "traceback": traceback.format_exc(),
+        }
