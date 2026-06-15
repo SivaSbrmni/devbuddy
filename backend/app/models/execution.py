@@ -61,7 +61,7 @@ class WorkflowRun(Base):
     github_run_id: Mapped[int | None] = mapped_column(Integer)
     workflow_name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(
-        Enum("queued", "in_progress", "completed", "failed", "cancelled", name="workflow_status"),
+        String(20),
         default="queued",
     )
     conclusion: Mapped[str | None] = mapped_column(String(50))
@@ -80,11 +80,7 @@ class Artifact(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("runs.id"), nullable=False)
     artifact_type: Mapped[str] = mapped_column(
-        Enum(
-            "log", "coverage", "build_output", "test_result", "screenshot",
-            "deployment_output", "error_trace", "patch",
-            name="artifact_type",
-        ),
+        String(30),
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -106,7 +102,7 @@ class DebugExperiment(Base):
     evidence: Mapped[dict] = mapped_column(JSONB, default=dict)
     fix_applied: Mapped[str] = mapped_column(Text, default="")
     outcome: Mapped[str] = mapped_column(
-        Enum("pending", "validated", "invalidated", "partial", name="experiment_outcome"),
+        String(20),
         default="pending",
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

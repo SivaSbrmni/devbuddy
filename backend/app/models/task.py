@@ -84,7 +84,7 @@ class AgentStep(Base):
     input_data: Mapped[dict] = mapped_column(JSONB, default=dict)
     output_data: Mapped[dict] = mapped_column(JSONB, default=dict)
     status: Mapped[str] = mapped_column(
-        Enum("running", "completed", "failed", "skipped", name="step_status"),
+        String(20),
         default="running",
     )
     duration_ms: Mapped[int | None] = mapped_column(Integer)
