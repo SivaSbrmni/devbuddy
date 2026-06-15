@@ -26,6 +26,11 @@ _KNOWN_MODELS = {
     "llama": [
         {"id": "llama-4-scout-17b-16e-instruct", "label": "Llama 4 Scout", "provider": "llama", "family": "llama"},
     ],
+    "ollama": [
+        {"id": "qwen3-coder:480b", "label": "Qwen 3 Coder", "provider": "ollama", "family": "ollama"},
+        {"id": "llama3.3:latest", "label": "Llama 3.3", "provider": "ollama", "family": "ollama"},
+        {"id": "deepseek-coder:latest", "label": "DeepSeek Coder", "provider": "ollama", "family": "ollama"},
+    ],
 }
 
 # Cache for Ollama models (60s TTL)
@@ -104,12 +109,17 @@ async def list_models(
     if llama_cfg.get("key") or settings.LLAMA_API_KEY:
         models.extend(_KNOWN_MODELS.get("llama", []))
 
-    # Ollama — fetch live list
+    # Ollama — always include known defaults, try live fetch if configured
     ollama_cfg = user_keys.get("ollama") or {}
     ollama_key = ollama_cfg.get("key") or settings.OLLAMA_API_KEY
     ollama_base = ollama_cfg.get("base_url") or settings.OLLAMA_API_BASE
-    if ollama_key:
-        cache_key = f"{ollama_base}:{ollama_key[:4]}"
+    # Show known Ollama models by default
+    models.extend(_KNOWN_MODELS.get("ollama", []))
+    # Try live fetch if user has configured a base URL or API key
+    user_configured_base = bool(ollama_cfg.get("base_url"))
+    has_key = bool(ollama_key)
+    if user_configured_base or has_key:
+        cache_key = f"{ollama_base}:{ollama_key[:4] if ollama_key else 'nokey'}"
         now = asyncio.get_event_loop().time()
         cached = _ollama_cache.get(cache_key)
         if cached and now - cached[0] < _CACHE_TTL:

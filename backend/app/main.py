@@ -47,19 +47,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import app.models.memory  # noqa: F401
     import app.models.user_settings  # noqa: F401
 
-    # Ensure database tables exist — only create on truly fresh DBs
-    # to avoid duplicate index errors when /data/pgdata persists across restarts
+    # Ensure database tables exist — only create on TRULY fresh DBs.
+    # HF Spaces mounts /data/pgdata across restarts, so partial schemas
+    # with existing indexes will crash create_all. Skip entirely if any
+    # tables already exist — migrations must be run manually for schema changes.
     from sqlalchemy import inspect
 
     async with engine.begin() as conn:
-        def _needs_create(sync_conn):
-            inspector = inspect(sync_conn)
-            existing = set(inspector.get_table_names())
-            required = set(Base.metadata.tables.keys())
-            return bool(required - existing)
+        def _has_tables(sync_conn):
+            return len(inspect(sync_conn).get_table_names()) > 0
 
-        should_create = await conn.run_sync(_needs_create)
-        if should_create:
+        has_tables = await conn.run_sync(_has_tables)
+        if not has_tables:
             await conn.run_sync(Base.metadata.create_all)
 
     # Initialize LLM router
