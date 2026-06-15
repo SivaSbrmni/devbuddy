@@ -108,6 +108,7 @@ function useConversations() {
 export default function Workspace() {
   const { user, logout } = useAuth()
   const { convs, active, activeId, createNew, updateActive, selectConv, deleteConv, restoreConv } = useConversations()
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [models, setModels] = useState<Model[]>(FALLBACK_MODELS)
   const [modelsLoading, setModelsLoading] = useState(true)
   const [model, setModel] = useState(FALLBACK_MODELS[0].id)
@@ -615,7 +616,12 @@ export default function Workspace() {
     <div style={{ display: 'flex', height: '100vh', background: 'var(--bg)', color: 'var(--text)', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
 
       {/* ── Mobile overlay ── */}
-      {sidebarOpen && (
+      {/* Close user menu on outside click */}
+      {userMenuOpen && (
+        <div onClick={() => setUserMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+      )}
+
+      {sidebarOpen && isMobile && (
         <div 
           onClick={() => setSidebarOpen(false)}
           style={{
@@ -627,7 +633,6 @@ export default function Workspace() {
             background: 'rgba(0,0,0,0.6)',
             backdropFilter: 'blur(4px)',
             zIndex: 40,
-            display: isMobile ? 'block' : 'none',
             animation: 'fadeIn 0.2s ease',
           }}
         />
@@ -635,7 +640,7 @@ export default function Workspace() {
 
       {/* ── Left sidebar with conversation list ── */}
       <div style={{
-        width: 220,
+        width: 240,
         background: 'var(--bg-elevated)',
         borderRight: '1px solid var(--border-subtle)',
         display: 'flex',
@@ -645,54 +650,52 @@ export default function Workspace() {
         padding: '12px 0',
         gap: 4,
         position: isMobile ? 'fixed' : 'relative',
-        left: isMobile ? (sidebarOpen ? 0 : -220) : 0,
+        left: isMobile ? (sidebarOpen ? 0 : -240) : 0,
         top: 0,
         bottom: 0,
         zIndex: 50,
         transition: 'left 0.3s ease',
       }}>
-        {/* App icon */}
-        <div style={{
-          width: 32,
-          height: 32,
-          borderRadius: 'var(--radius-md)',
-          background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 16,
-          boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
-        }}>
-          <Icon name="sparkles" size={18} style={{ color: 'white' }} />
-        </div>
-
-        {/* New conversation */}
-        <button
-          onClick={createNew}
-          title="New conversation (Ctrl+N)"
-          className="db-btn"
-          style={{
-            width: 40,
-            height: 40,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 'var(--radius-md)',
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-muted)',
-            cursor: 'pointer',
-            transition: 'all var(--transition-fast)',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.1)'; e.currentTarget.style.color = 'var(--accent-hover)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}
-        >
-          <Icon name="plus" size={20} />
-        </button>
-
-        {/* Section header */}
-        <div style={{ padding: '8px 16px 4px', fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          Conversations
+        {/* App logo + new chat */}
+        <div style={{ padding: '4px 12px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(99,102,241,0.35)',
+            }}>
+              <Icon name="sparkles" size={14} style={{ color: 'white' }} />
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.2px' }}>DevBuddy</span>
+          </div>
+          <button
+            onClick={createNew}
+            title="New conversation (Ctrl+N)"
+            className="db-btn"
+            style={{
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 'var(--radius-md)',
+              background: 'transparent',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-dim)',
+              cursor: 'pointer',
+              transition: 'all var(--transition-fast)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.1)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,0.3)'; e.currentTarget.style.color = 'var(--accent-hover)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-dim)' }}
+          >
+            <Icon name="plus" size={14} />
+          </button>
         </div>
 
         {/* Conversations list */}
@@ -821,67 +824,46 @@ export default function Workspace() {
           </div>
         )}
 
-        {/* Bottom actions */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', marginTop: 'auto' }}>
-          <button
-            onClick={() => setPaletteOpen(true)}
-            title="Command palette (Cmd+K)"
+        {/* Bottom: user menu */}
+        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-subtle)', position: 'relative' }}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setUserMenuOpen(v => !v)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setUserMenuOpen(v => !v) }}
             className="db-btn"
-            style={{
-              width: 40,
-              height: 40,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 'var(--radius-md)',
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              transition: 'all var(--transition-fast)',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 'var(--radius-md)', cursor: 'pointer', transition: 'background var(--transition-fast)', width: '100%' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
-            <Icon name="command" size={18} />
-          </button>
-
-          {user?.picture ? (
-            <img
-              src={user.picture}
-              alt={`${user?.name || 'User'} avatar`}
-              onClick={logout}
-              title="Sign out"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                objectFit: 'cover',
-                border: '2px solid var(--border)',
-                cursor: 'pointer',
-                transition: 'all var(--transition-fast)',
-              }}
-            />
-          ) : (
-            <button
-              onClick={logout}
-              title="Sign out"
-              className="db-btn"
-              style={{
-                width: 32,
-                height: 32,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '50%',
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-muted)',
-                cursor: 'pointer',
-              }}
+            {user?.picture ? (
+              <img src={user.picture} alt={user?.name || 'User'} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)', flexShrink: 0 }} />
+            ) : (
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--bg-card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name="user" size={14} style={{ color: 'var(--text-dim)' }} />
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || 'User'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.email}</div>
+            </div>
+            <Icon name="command" size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+          </div>
+          {userMenuOpen && (
+            <div
+              style={{ position: 'absolute', bottom: '100%', left: 12, right: 12, marginBottom: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', overflow: 'hidden', animation: 'fadeIn 0.12s ease', zIndex: 100 }}
             >
-              <Icon name="logout" size={14} />
-            </button>
+              <button onClick={() => { setPaletteOpen(true); setUserMenuOpen(false) }} className="db-btn" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}>
+                <Icon name="command" size={14} /> Commands
+                <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-faint)', background: 'var(--bg-card)', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace' }}>⌘K</span>
+              </button>
+              <button onClick={() => { setSettingsOpen(true); setUserMenuOpen(false) }} className="db-btn" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}>
+                <Icon name="settings" size={14} /> API Keys
+              </button>
+              <button onClick={() => { logout(); setUserMenuOpen(false) }} className="db-btn" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--error)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.06)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
+                <Icon name="logout" size={14} /> Sign out
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -955,15 +937,15 @@ export default function Workspace() {
                 fontSize: 12,
                 padding: '4px 10px',
                 cursor: 'pointer',
-                display: 'flex',
+                display: isMobile ? 'none' : 'flex',
                 alignItems: 'center',
                 gap: 6,
-                minWidth: 160,
+                minWidth: 140,
                 justifyContent: 'flex-start',
               }}
             >
               <Icon name="command" size={12} />
-              <span style={{ fontSize: 12 }}>Search or command...</span>
+              <span style={{ fontSize: 12 }}>Search...</span>
               <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-faint)', background: 'var(--bg-card)', padding: '1px 5px', borderRadius: 'var(--radius-sm)' }}>⌘K</span>
             </button>
 
@@ -1044,7 +1026,7 @@ export default function Workspace() {
                     { label: 'CI/CD Pipeline', icon: 'rocket', desc: 'GitHub Actions' },
                     { label: 'Debug Python', icon: 'wrench', desc: 'Trace + fix' },
                   ].map(s => (
-                    <button key={s.label} onClick={() => { setInput(s.label); setTimeout(() => send(), 50) }} className="db-btn db-focus" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px', textAlign: 'left', cursor: 'pointer', transition: 'all var(--transition-base)' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.background = 'rgba(99,102,241,0.06)'; e.currentTarget.style.transform = 'translateY(-1px)'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+                    <button key={s.label} onClick={() => setInput(s.label)} className="db-btn db-focus" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px', textAlign: 'left', cursor: 'pointer', transition: 'all var(--transition-base)' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.background = 'rgba(99,102,241,0.06)'; e.currentTarget.style.transform = 'translateY(-1px)'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                         <Icon name={s.icon as any} size={16} style={{ color: 'var(--accent-hover)' }} />
                         <span style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600 }}>{s.label}</span>
@@ -1163,27 +1145,34 @@ export default function Workspace() {
             </div>
         </div>
 
-        {/* Settings panel — right side, no modal */}
+        {/* Settings modal — centered overlay */}
         {settingsOpen && (
-          <div style={{
-            width: 340,
+          <div
+            onClick={() => setSettingsOpen(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'fadeIn 0.15s ease' }}
+          >
+          <div onClick={e => e.stopPropagation()} style={{
+            width: '100%',
+            maxWidth: 440,
+            maxHeight: '85vh',
             background: 'var(--bg-elevated)',
-            borderLeft: '1px solid var(--border-subtle)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-xl)',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)',
             display: 'flex',
             flexDirection: 'column',
-            flexShrink: 0,
             overflow: 'hidden',
-            animation: 'slideInRight 0.2s ease',
+            animation: 'modalContent 0.2s ease',
           }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <h2 style={{ margin: 0, fontSize: 15, color: 'var(--text)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="settings" size={16} /> API Keys
               </h2>
-              <button onClick={() => setSettingsOpen(false)} className="db-btn" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', fontSize: 18, padding: '2px 6px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)' }}><Icon name="close" size={16} /></button>
+              <button onClick={() => setSettingsOpen(false)} className="db-btn" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: '4px 6px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'none' }}><Icon name="close" size={16} /></button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
               <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                Add your API keys to unlock LLM providers. Keys are encrypted at rest. You can also override the default API base URL for each provider.
+                Add your API keys to unlock LLM providers. Keys are encrypted at rest.
               </p>
 
               {[
@@ -1246,7 +1235,7 @@ export default function Workspace() {
                 </div>
               ))}
 
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8, paddingTop: 4 }}>
                 <button
                   onClick={() => setSettingsOpen(false)}
                   className="db-btn db-focus"
@@ -1289,6 +1278,7 @@ export default function Workspace() {
                 </button>
               </div>
             </div>
+          </div>
           </div>
         )}
 
@@ -1455,10 +1445,12 @@ export default function Workspace() {
               </div>
             </div>
 
-            {/* Hint text */}
-            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 11, color: 'var(--text-faint)' }}>
-              <span>Enter to send · Shift+Enter for new line · {navigator.platform.includes('Mac') ? 'Cmd' : 'Ctrl'}+K for commands</span>
-            </div>
+            {/* Hint text — only on desktop */}
+            {!isMobile && (
+              <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 11, color: 'var(--text-faint)', opacity: 0.7 }}>
+                <span>↵ send · ⇧↵ newline · {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}K commands</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
