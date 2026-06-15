@@ -7,6 +7,7 @@ import ToastContainer, { toast } from '../components/Toast'
 import Skeleton, { MessageSkeleton, TypingIndicator } from '../components/Skeleton'
 import CommandPalette from '../components/CommandPalette'
 import WorkspacePanel from '../components/WorkspacePanel'
+import ContextBar from '../components/ContextBar'
 import Icon from '../components/Icon'
 import Dropdown from '../components/Dropdown'
 
@@ -115,6 +116,9 @@ export default function Workspace() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
   const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [mentionOpen, setMentionOpen] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionIndex, setMentionIndex] = useState(0)
   const [providerKeys, setProviderKeys] = useState({
     anthropic: { key: '', base_url: '' },
     ollama: { key: '', base_url: '' },
@@ -458,8 +462,79 @@ export default function Workspace() {
     toast('Request cancelled', 'info')
   }
 
+  // Mock project files for @ references
+  const projectFiles = [
+    'frontend/src/App.tsx',
+    'frontend/src/pages/Workspace.tsx',
+    'frontend/src/components/ContextBar.tsx',
+    'frontend/src/components/Icon.tsx',
+    'backend/app/main.py',
+    'backend/app/api/routes/agent.py',
+    'README.md',
+    'package.json',
+  ]
+
+  const filteredMentions = mentionQuery
+    ? projectFiles.filter(f => f.toLowerCase().includes(mentionQuery.toLowerCase()))
+    : projectFiles
+
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (mentionOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setMentionIndex(i => Math.min(i + 1, filteredMentions.length - 1))
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setMentionIndex(i => Math.max(i - 1, 0))
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        const file = filteredMentions[mentionIndex]
+        if (file) {
+          const lastAt = input.lastIndexOf('@')
+          if (lastAt >= 0) {
+            const before = input.slice(0, lastAt)
+            const after = input.slice(lastAt + 1 + mentionQuery.length)
+            setInput(before + '@' + file + ' ' + after)
+            setMentionOpen(false)
+            setMentionQuery('')
+          }
+        }
+        return
+      }
+      if (e.key === 'Escape') {
+        setMentionOpen(false)
+        setMentionQuery('')
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value
+    setInput(val)
+    autoResize()
+
+    // Detect @mention
+    const lastAt = val.lastIndexOf('@')
+    if (lastAt >= 0) {
+      const afterAt = val.slice(lastAt + 1)
+      const endIdx = afterAt.search(/[\s\n]/)
+      const query = endIdx >= 0 ? afterAt.slice(0, endIdx) : afterAt
+      if (!afterAt.includes(' ') && !afterAt.includes('\n')) {
+        setMentionQuery(query)
+        setMentionOpen(true)
+        setMentionIndex(0)
+      } else {
+        setMentionOpen(false)
+      }
+    } else {
+      setMentionOpen(false)
+    }
   }
 
   const downloadFiles = async (files: { name: string; content: string }[]) => {
@@ -817,6 +892,19 @@ export default function Workspace() {
           </div>
         </div>
 
+        {/* Context bar — project awareness */}
+        <ContextBar
+          project="devbuddy"
+          branch="main"
+          files={[
+            { path: 'frontend/src/App.tsx', status: 'modified' },
+            { path: 'frontend/src/pages/Workspace.tsx', status: 'modified' },
+            { path: 'frontend/src/components/ContextBar.tsx', status: 'new' },
+            { path: 'backend/app/main.py', status: 'clean' },
+          ]}
+          lastTopic={active?.title && active.title !== 'New conversation' ? active.title : undefined}
+        />
+
         {/* Chat area */}
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '24px 0' }}>
@@ -1089,7 +1177,7 @@ export default function Workspace() {
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
             {/* Main input container */}
             <div
-              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.2)', transition: 'border-color var(--transition-base), box-shadow var(--transition-base)' }}
+              style={{ position: 'relative', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.2)', transition: 'border-color var(--transition-base), box-shadow var(--transition-base)' }}
               className="db-input-container"
               id="chat-input-container"
               onDragOver={e => { e.preventDefault(); const el = document.getElementById('chat-input-container'); if (el) el.style.borderColor = 'var(--accent)'; }}
@@ -1109,15 +1197,75 @@ export default function Workspace() {
               <textarea
                 ref={textareaRef}
                 value={input}
-                onChange={e => { setInput(e.target.value); autoResize() }}
+                onChange={handleInputChange}
                 onKeyDown={onKeyDown}
-                placeholder="Describe what you want to build..."
+                placeholder="Describe what you want to build, or type @ to reference files..."
                 rows={1}
                 className="db-input"
                 style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 14, lineHeight: 1.5, resize: 'none', maxHeight: 200, fontFamily: 'inherit', overflowY: 'auto', padding: '0 4px' }}
                 onFocus={e => { const container = document.getElementById('chat-input-container'); if (container) { container.style.borderColor = 'rgba(99,102,241,0.4)'; container.style.boxShadow = '0 4px 24px rgba(0,0,0,0.2), 0 0 0 3px rgba(99,102,241,0.1)'; } }}
-                onBlur={e => { const container = document.getElementById('chat-input-container'); if (container) { container.style.borderColor = 'var(--border)'; container.style.boxShadow = '0 4px 24px rgba(0,0,0,0.2)'; } }}
+                onBlur={e => { setTimeout(() => setMentionOpen(false), 200); const container = document.getElementById('chat-input-container'); if (container) { container.style.borderColor = 'var(--border)'; container.style.boxShadow = '0 4px 24px rgba(0,0,0,0.2)'; } }}
               />
+
+              {/* @mention dropdown */}
+              {mentionOpen && filteredMentions.length > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: 0,
+                  right: 0,
+                  marginBottom: 8,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-lg)',
+                  boxShadow: 'var(--shadow-lg), 0 0 0 1px rgba(99,102,241,0.1)',
+                  maxHeight: 200,
+                  overflowY: 'auto',
+                  zIndex: 50,
+                  animation: 'dropdownIn 0.15s ease',
+                }}>
+                  <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid var(--border-subtle)' }}>
+                    <Icon name="folder" size={10} /> Project Files
+                  </div>
+                  {filteredMentions.map((f, i) => (
+                    <button
+                      key={f}
+                      onMouseDown={e => {
+                        e.preventDefault()
+                        const lastAt = input.lastIndexOf('@')
+                        if (lastAt >= 0) {
+                          const before = input.slice(0, lastAt)
+                          const after = input.slice(lastAt + 1 + mentionQuery.length)
+                          setInput(before + '@' + f + ' ' + after)
+                          setMentionOpen(false)
+                          setMentionQuery('')
+                        }
+                      }}
+                      className="db-btn"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        textAlign: 'left',
+                        background: i === mentionIndex ? 'rgba(99,102,241,0.1)' : 'transparent',
+                        border: 'none',
+                        borderBottom: '1px solid var(--border-subtle)',
+                        color: i === mentionIndex ? 'var(--accent-hover)' : 'var(--text-muted)',
+                        fontSize: 13,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        transition: 'all var(--transition-fast)',
+                      }}
+                      onMouseEnter={e => { setMentionIndex(i); e.currentTarget.style.background = 'rgba(99,102,241,0.1)'; e.currentTarget.style.color = 'var(--accent-hover)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = i === mentionIndex ? 'rgba(99,102,241,0.1)' : 'transparent'; e.currentTarget.style.color = i === mentionIndex ? 'var(--accent-hover)' : 'var(--text-muted)' }}
+                    >
+                      <Icon name="file" size={14} style={{ color: 'var(--text-faint)' }} />
+                      <span>{f}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Bottom toolbar */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
