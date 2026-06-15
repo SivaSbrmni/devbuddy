@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { GitHubProvider, useGitHub } from '../context/GitHubContext'
 import GitHubPanel from '../components/GitHubPanel'
 import AgentTimeline, { AgentRun, TimelineStep } from '../components/AgentTimeline'
+import TaskCard, { TaskCardData, TaskEvent, sseToTaskEvent } from '../components/TaskCard'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import JSZip from 'jszip'
@@ -40,6 +41,7 @@ interface Message {
   steps?: string[]
   files?: { name: string; content: string }[]
   agentEvents?: AgentEvent[]
+  taskCard?: TaskCardData
 }
 
 interface AgentEvent {
@@ -83,12 +85,12 @@ function useConversations() {
     return c
   }
 
-  const updateActive = (msgs: Message[], title?: string) => {
-    const list = convs.map(c =>
-      c.id === activeId
-        ? { ...c, messages: msgs, title: title || c.title, ts: Date.now() }
-        : c
-    )
+  const updateActive = (msgs: Message[] | ((prev: Message[]) => Message[]), title?: string) => {
+    const list = convs.map(c => {
+      if (c.id !== activeId) return c
+      const next = typeof msgs === 'function' ? msgs(c.messages) : msgs
+      return { ...c, messages: next, title: title || c.title, ts: Date.now() }
+    })
     save(list)
   }
 
@@ -285,32 +287,60 @@ export default function Workspace() {
     }
   }
 
-  const runGitHubAgent = useCallback(async (task: string) => {
+  const runGitHubAgent = useCallback(async (task: string, msgId: string, conversationAtStart: Message[]) => {
     if (!activeRepo) return false
     const token = localStorage.getItem('devbuddy_token') || ''
-    const owner = activeRepo.owner || activeRepo.full_name?.split('/')[0] || ''
+    const owner = (activeRepo as any).owner || activeRepo.full_name?.split('/')[0] || ''
     const repo = activeRepo.name
 
-    const run: AgentRun = {
-      taskId: Math.random().toString(36).slice(2, 10),
+    const cardId = msgId
+    const initialCard: TaskCardData = {
+      id: cardId,
+      task,
       repo: `${owner}/${repo}`,
       branch: '',
-      task,
+      startedAt: Date.now(),
       status: 'running',
-      timeline: [],
-      plan: [],
-      modifiedFiles: [],
-      thinking: [],
-      toolCalls: [],
-      observations: [],
-      prUrl: '',
-      prNumber: '',
-      commitHash: '',
-      durationSeconds: 0,
-      error: '',
+      progress: 2,
+      currentTool: 'Connecting to repository…',
+      events: [],
+      isGitHubTask: true,
+    }
+
+    // Inject a synthetic assistant message that holds the TaskCard
+    const agentMsg: Message = {
+      id: cardId,
+      role: 'assistant',
+      content: '',
+      ts: Date.now(),
+      taskCard: initialCard,
+    }
+
+    const convTitle = conversationAtStart.length === 1 ? task.slice(0, 50) : (active?.title || task.slice(0, 50))
+    updateActive([...conversationAtStart, agentMsg], convTitle)
+
+    // Helper: patch the taskCard of the agent message in-place
+    const patchCard = (fn: (c: TaskCardData) => TaskCardData) => {
+      updateActive(prev => prev.map(m => m.id === cardId && m.taskCard
+        ? { ...m, taskCard: fn(m.taskCard) }
+        : m
+      ), convTitle)
+    }
+
+    // Progress map by timeline step
+    const PROGRESS: Record<string, number> = {
+      init: 8, workspace: 18, branch: 28, analysis: 38,
+      planning: 48, execution: 62, commit: 82, push: 90, pr: 96,
+    }
+
+    // Also update AgentRun for top-bar indicator
+    const run: AgentRun = {
+      taskId: cardId, repo: `${owner}/${repo}`, branch: '', task,
+      status: 'running', timeline: [], plan: [], modifiedFiles: [],
+      thinking: [], toolCalls: [], observations: [],
+      prUrl: '', prNumber: '', commitHash: '', durationSeconds: 0, error: '',
     }
     setAgentRun(run)
-    setAgentTimelineOpen(true)
 
     try {
       const resp = await fetch(`${API}/github-agent/run?token=${encodeURIComponent(token)}`, {
@@ -320,6 +350,8 @@ export default function Workspace() {
       })
       if (!resp.ok) {
         const err = await resp.text()
+        patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
+          events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: err.slice(0, 120), status: 'error' } as TaskEvent] }))
         setAgentRun(r => r ? { ...r, status: 'error', error: err } : r)
         return true
       }
@@ -339,50 +371,90 @@ export default function Workspace() {
           if (!line.startsWith('data: ')) continue
           try {
             const evt = JSON.parse(line.slice(6))
-            const type: string = evt.type
-            const payload = evt.payload
+            const { type, payload } = evt
 
-            setAgentRun(r => {
-              if (!r) return r
-              const next = { ...r }
-              if (type === 'timeline') {
-                const idx = next.timeline.findIndex(s => s.step === payload.step)
-                const step: TimelineStep = { step: payload.step, status: payload.status, message: payload.message }
-                if (idx >= 0) { next.timeline = [...next.timeline]; next.timeline[idx] = step }
-                else next.timeline = [...next.timeline, step]
-              } else if (type === 'plan') {
-                next.plan = payload.steps || []
-              } else if (type === 'branch') {
-                next.branch = payload.name || ''
-              } else if (type === 'thinking') {
-                if (payload.thought) next.thinking = [...next.thinking, { iteration: payload.iteration, thought: payload.thought }]
-              } else if (type === 'tool_call') {
-                next.toolCalls = [...next.toolCalls, { tool: payload.tool, params: payload.params || {}, iteration: payload.iteration }]
-              } else if (type === 'observation') {
-                next.observations = [...next.observations, { iteration: payload.iteration, tool: payload.tool, output: payload.output }]
-              } else if (type === 'file_change') {
-                if (payload.path && !next.modifiedFiles.includes(payload.path)) next.modifiedFiles = [...next.modifiedFiles, payload.path]
-              } else if (type === 'pr') {
-                next.prUrl = payload.url || ''; next.prNumber = payload.number || ''
-              } else if (type === 'done') {
+            // Convert to TaskEvent
+            const taskEvt = sseToTaskEvent(type, payload)
+
+            patchCard(c => {
+              const next = { ...c }
+
+              // Complete the last 'running' tool_call when observation arrives
+              if (type === 'observation') {
+                next.events = next.events.map(e =>
+                  e.category === 'tool' && e.status === 'running' ? { ...e, status: 'done' } : e
+                )
+              }
+
+              // Patch running timeline events to done
+              if (type === 'timeline' && payload.status === 'done') {
+                next.events = next.events.map(e =>
+                  e.category === (payload.step as any) && e.status === 'running' ? { ...e, status: 'done', title: payload.message } : e
+                )
+              }
+
+              if (taskEvt) next.events = [...next.events, taskEvt]
+
+              // Update progress
+              if (type === 'timeline' && PROGRESS[payload.step]) {
+                next.progress = Math.max(next.progress, PROGRESS[payload.step])
+              }
+
+              // Update current tool label
+              if (type === 'tool_call') next.currentTool = `${payload.tool.replace('_', ' ')} ${Object.values(payload.params || {})[0]?.toString().slice(0, 30) ?? ''}`
+              if (type === 'timeline' && payload.status === 'running') next.currentTool = payload.message
+
+              // Branch
+              if (type === 'branch') next.branch = payload.name || ''
+
+              // PR
+              if (type === 'pr') { next.prUrl = payload.url || ''; next.prNumber = payload.number || '' }
+
+              // File
+              if (type === 'file_change' && payload.path) {
+                const mf = next.modifiedFiles || []
+                if (!mf.includes(payload.path)) next.modifiedFiles = [...mf, payload.path]
+              }
+
+              // Done
+              if (type === 'done') {
                 next.status = 'done'
+                next.progress = 100
+                next.currentTool = undefined
                 next.prUrl = payload.pr_url || next.prUrl
                 next.commitHash = payload.commit_hash || ''
-                next.durationSeconds = payload.duration_seconds || 0
-                next.modifiedFiles = payload.modified_files?.length ? payload.modified_files : next.modifiedFiles
-              } else if (type === 'error') {
-                next.status = 'error'; next.error = payload.message || 'Unknown error'
+                if (payload.modified_files?.length) next.modifiedFiles = payload.modified_files
               }
+
+              // Error
+              if (type === 'error') {
+                next.status = 'error'
+                next.currentTool = undefined
+              }
+
               return next
             })
+
+            // Sync AgentRun for top-bar
+            setAgentRun(r => {
+              if (!r) return r
+              if (type === 'pr') return { ...r, prUrl: payload.url || r.prUrl, prNumber: payload.number || r.prNumber }
+              if (type === 'done') return { ...r, status: 'done', commitHash: payload.commit_hash || '', modifiedFiles: payload.modified_files || r.modifiedFiles }
+              if (type === 'error') return { ...r, status: 'error', error: payload.message }
+              if (type === 'branch') return { ...r, branch: payload.name || '' }
+              return r
+            })
+
           } catch (_) {}
         }
       }
     } catch (e: any) {
+      patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
+        events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: e.message, status: 'error' } as TaskEvent] }))
       setAgentRun(r => r ? { ...r, status: 'error', error: e.message } : r)
     }
     return true
-  }, [activeRepo, activeId])
+  }, [activeRepo, activeId, active?.title])
 
   const autoResize = () => {
     const el = textareaRef.current
@@ -525,13 +597,13 @@ export default function Workspace() {
     if (activeRepo && agentMode) {
       setInput('')
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
-      // Also add the message to chat for context
       let conv = active
       if (!conv) conv = createNew()
       const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text, ts: Date.now() }
-      const title = conv.messages.length === 0 ? text.slice(0, 50) : conv.title
-      updateActive([...conv.messages, userMsg], title)
-      await runGitHubAgent(text)
+      const agentMsgId = crypto.randomUUID()
+      const msgsWithUser = [...conv.messages, userMsg]
+      updateActive(msgsWithUser, text.slice(0, 50))
+      await runGitHubAgent(text, agentMsgId, msgsWithUser)
       return
     }
 
@@ -1199,96 +1271,114 @@ export default function Workspace() {
                 </div>
               </div>
             ) : (
-              <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 20px' }}>
-                  {messages.map(msg => (
-                    <div key={msg.id} style={{ marginBottom: 24, display: 'flex', gap: 12, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row' }}>
-                      <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, background: msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'rgba(16,185,129,0.15)', color: msg.role === 'user' ? 'var(--accent-hover)' : 'var(--success)', border: `2px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.1)'}` }}>
-                        {msg.role === 'user' ? (user?.picture ? <img src={user.picture} alt={`${user?.name || 'User'} avatar`} style={{ width: 32, height: 32, borderRadius: '50%' }} /> : <Icon name="user" size={16} />) : <Icon name="bot" size={16} />}
-                      </div>
-                      <div className="message-enter" style={{ maxWidth: '80%', background: msg.role === 'user' ? 'rgba(99,102,241,0.1)' : 'var(--bg-card)', border: `1px solid ${msg.role === 'user' ? 'rgba(99,102,241,0.2)' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)', padding: '14px 18px', boxShadow: msg.role === 'user' ? '0 2px 8px rgba(99,102,241,0.08)' : '0 2px 8px rgba(0,0,0,0.1)' }}>
-                        {msg.steps && msg.steps.length > 0 && (
-                          <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
-                            <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600, marginBottom: 6 }}>
-                              {msg.agentEvents && msg.agentEvents.length > 0 ? <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="agent" size={12} /> Agent pipeline</span> : <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="loader" size={12} /> Working...</span>}
+              <div style={{ maxWidth: 780, margin: '0 auto', padding: '0 20px' }}>
+                {(() => {
+                  // Group messages: user + its agent response into pairs for TaskCard rendering
+                  const pairs: Array<{ user: Message; agent: Message | null }> = []
+                  let i = 0
+                  const msgs = messages
+                  while (i < msgs.length) {
+                    const m = msgs[i]
+                    if (m.role === 'user') {
+                      const next = msgs[i + 1]
+                      if (next && next.role === 'assistant' && next.taskCard) {
+                        // GitHub agent pair → render as one TaskCard
+                        pairs.push({ user: m, agent: next })
+                        i += 2
+                      } else if (next && next.role === 'assistant' && !next.taskCard) {
+                        // Regular chat pair
+                        pairs.push({ user: m, agent: next })
+                        i += 2
+                      } else {
+                        pairs.push({ user: m, agent: null })
+                        i += 1
+                      }
+                    } else {
+                      // Orphan assistant message
+                      pairs.push({ user: { id: '_', role: 'user', content: '', ts: 0 }, agent: m })
+                      i += 1
+                    }
+                  }
+
+                  return pairs.map(({ user: uMsg, agent: aMsg }) => {
+                    // ── TaskCard (GitHub agent) ──
+                    if (aMsg?.taskCard) {
+                      return (
+                        <TaskCard
+                          key={aMsg.id}
+                          card={aMsg.taskCard}
+                          userAvatar={user?.picture}
+                          userName={user?.name}
+                          isStreaming={aMsg.taskCard.status === 'running'}
+                        />
+                      )
+                    }
+
+                    // ── Regular chat bubble pair ──
+                    return (
+                      <div key={uMsg.id + (aMsg?.id ?? '')} style={{ marginBottom: 24 }}>
+                        {/* User bubble */}
+                        {uMsg.content && (
+                          <div style={{ display: 'flex', gap: 12, flexDirection: 'row-reverse', marginBottom: 12 }}>
+                            <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(99,102,241,0.2)', border: '2px solid rgba(99,102,241,0.15)', overflow: 'hidden' }}>
+                              {user?.picture ? <img src={user.picture} alt={user.name || 'User'} style={{ width: 32, height: 32, borderRadius: '50%' }} /> : <Icon name="user" size={16} style={{ color: '#818cf8' }} />}
                             </div>
-                            {msg.steps.filter(s => s).map((step, i) => (
-                              <div key={i} style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ color: 'var(--accent)' }}>→</span> {step}
-                              </div>
-                            ))}
-                            {msg.agentEvents && msg.agentEvents.some(e => e.type === 'test') && (
-                              <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 'var(--radius-sm)' }}>
-                                {msg.agentEvents.filter(e => e.type === 'test').map((e, i) => (
-                                  <div key={i} style={{ fontSize: 11, color: 'var(--success)' }}>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="check" size={10} /> {e.payload?.summary || 'Tests passed'}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {msg.agentEvents && msg.agentEvents.some(e => e.type === 'review') && (
-                              <div style={{ marginTop: 8, padding: '6px 10px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 'var(--radius-sm)' }}>
-                                {msg.agentEvents.filter(e => e.type === 'review').map((e, i) => (
-                                  <div key={i} style={{ fontSize: 11, color: 'var(--accent-hover)' }}>
-                                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="info" size={10} /> {e.payload?.summary || 'Code reviewed'}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {msg.role === 'assistant' ? (
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              code: CodeBlock,
-                              pre: ({ children }) => <>{children}</>,
-                              p: ({ children }) => <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)', marginBottom: 8 }}>{children}</p>,
-                              ul: ({ children }) => <ul style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)', paddingLeft: 20, marginBottom: 8 }}>{children}</ul>,
-                              ol: ({ children }) => <ol style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)', paddingLeft: 20, marginBottom: 8 }}>{children}</ol>,
-                              li: ({ children }) => <li style={{ marginBottom: 4 }}>{children}</li>,
-                              strong: ({ children }) => <strong style={{ color: 'var(--accent-hover)', fontWeight: 600 }}>{children}</strong>,
-                              em: ({ children }) => <em style={{ color: 'var(--accent-hover)' }}>{children}</em>,
-                              a: ({ children, href }) => <a href={href} style={{ color: 'var(--accent-hover)', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer">{children}</a>,
-                            }}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
-                        ) : (
-                          <div style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{msg.content}</div>
-                        )}
-                        {msg.files && msg.files.length > 0 && (
-                          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-                            <button
-                              onClick={() => downloadFiles(msg.files!)}
-                              style={{
-                                background: 'rgba(99,102,241,0.12)',
-                                border: '1px solid rgba(99,102,241,0.3)',
-                                borderRadius: 'var(--radius-sm)',
-                                color: 'var(--accent-hover)',
-                                fontSize: 12,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                padding: '6px 12px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 6
-                              }}
-                            >
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="download" size={12} /> Download {msg.files.length} file{msg.files.length > 1 ? 's' : ''} as ZIP</span>
-                            </button>
-                            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-faint)' }}>
-                              {msg.files.map(f => f.name).join(', ')}
+                            <div className="message-enter" style={{ maxWidth: '78%', background: 'rgba(99,102,241,0.09)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: '16px 16px 4px 16px', padding: '12px 16px' }}>
+                              <div style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{uMsg.content}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 4, textAlign: 'right' }}>{new Date(uMsg.ts).toLocaleTimeString()}</div>
                             </div>
                           </div>
                         )}
-                        <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 6 }}>{new Date(msg.ts).toLocaleTimeString()}</div>
+
+                        {/* Assistant bubble */}
+                        {aMsg && (
+                          <div style={{ display: 'flex', gap: 12 }}>
+                            <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(52,211,153,0.15)', border: '2px solid rgba(52,211,153,0.2)' }}>
+                              <Icon name="bot" size={15} style={{ color: '#34d399' }} />
+                            </div>
+                            <div className="message-enter" style={{ maxWidth: '78%', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '4px 16px 16px 16px', padding: '14px 18px', boxShadow: '0 2px 12px rgba(0,0,0,0.1)' }}>
+                              {aMsg.steps && aMsg.steps.length > 0 && (
+                                <div style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid var(--border-subtle)' }}>
+                                  {aMsg.steps.filter(Boolean).map((step, si) => (
+                                    <div key={si} style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <span style={{ color: 'var(--accent)' }}>→</span> {step}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={{
+                                  code: CodeBlock,
+                                  pre: ({ children }) => <>{children}</>,
+                                  p: ({ children }) => <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--text)', marginBottom: 8, marginTop: 0 }}>{children}</p>,
+                                  ul: ({ children }) => <ul style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--text)', paddingLeft: 20, marginBottom: 8 }}>{children}</ul>,
+                                  ol: ({ children }) => <ol style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--text)', paddingLeft: 20, marginBottom: 8 }}>{children}</ol>,
+                                  li: ({ children }) => <li style={{ marginBottom: 4 }}>{children}</li>,
+                                  strong: ({ children }) => <strong style={{ color: 'var(--accent-hover)', fontWeight: 600 }}>{children}</strong>,
+                                  em: ({ children }) => <em style={{ color: 'var(--accent-hover)' }}>{children}</em>,
+                                  a: ({ children, href }) => <a href={href} style={{ color: 'var(--accent-hover)', textDecoration: 'underline' }} target="_blank" rel="noopener noreferrer">{children}</a>,
+                                }}
+                              >
+                                {aMsg.content}
+                              </ReactMarkdown>
+                              {aMsg.files && aMsg.files.length > 0 && (
+                                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                                  <button onClick={() => downloadFiles(aMsg.files!)} style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 'var(--radius-sm)', color: 'var(--accent-hover)', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Icon name="download" size={12} /> Download {aMsg.files.length} file{aMsg.files.length > 1 ? 's' : ''} as ZIP
+                                  </button>
+                                </div>
+                              )}
+                              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 6 }}>{new Date(aMsg.ts).toLocaleTimeString()}</div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
-                  {loading && (
-                    <TypingIndicator />
-                  )}
-                  <div ref={bottomRef} />
+                    )
+                  })
+                })()}
+                {loading && <TypingIndicator />}
+                <div ref={bottomRef} />
                 </div>
               )}
             </div>
@@ -1458,7 +1548,7 @@ export default function Workspace() {
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={onKeyDown}
-                placeholder="Describe what you want to build, or type @ to reference files..."
+                placeholder={activeRepo && agentMode ? `Describe a task for ${activeRepo.name}… (agent will plan, execute, and open a PR)` : "Describe what you want to build, or type @ to reference files..."}
                 rows={1}
                 className="db-input"
                 style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 14, lineHeight: 1.5, resize: 'none', maxHeight: 200, fontFamily: 'inherit', overflowY: 'auto', padding: '0 4px' }}
