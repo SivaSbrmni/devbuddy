@@ -148,7 +148,7 @@ export default function CommandPalette({ isOpen, onClose, commands, conversation
                 const isSelected = globalIndex === selectedIndex
                 return (
                   <div key={conv.id} data-selected={isSelected} onClick={() => { onSelectConversation?.(conv.id); onClose() }} onMouseEnter={() => setSelectedIndex(globalIndex)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: isSelected ? 'rgba(99,102,241,0.12)' : 'transparent', border: isSelected ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent', transition: 'all 0.08s ease' }}>
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: isSelected ? 'var(--accent)' : 'var(--bg-card)', border: isSelected ? 'none' : '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: isSelected ? 'white' : 'var(--text-muted)', flexShrink: 0 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: isSelected ? `hsl(${conv.title.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0) % 360}, 70%, 55%)` : `hsl(${conv.title.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0) % 360}, 50%, 20%)`, border: isSelected ? 'none' : '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white', flexShrink: 0 }}>
                       {conv.title.charAt(0).toUpperCase()}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>

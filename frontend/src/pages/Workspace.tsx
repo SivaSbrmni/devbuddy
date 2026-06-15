@@ -681,34 +681,39 @@ export default function Workspace() {
         {/* Divider */}
         <div style={{ width: 24, height: 1, background: 'var(--border-subtle)', margin: '8px 0' }} />
 
-        {/* Conversation dots */}
+        {/* Conversation dots — color-coded for visual memory */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', flex: 1, overflow: 'hidden', padding: '4px 0' }}>
-          {convs.slice(0, 6).map(c => (
-            <button
-              key={c.id}
-              onClick={() => selectConv(c.id)}
-              title={c.title}
-              className="db-btn"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                background: c.id === activeId ? 'var(--accent)' : 'var(--bg-card)',
-                border: c.id === activeId ? 'none' : '1px solid var(--border)',
-                color: c.id === activeId ? 'white' : 'var(--text-muted)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 11,
-                fontWeight: 700,
-                transition: 'all var(--transition-fast)',
-                flexShrink: 0,
-              }}
-            >
-              {c.title.charAt(0).toUpperCase()}
-            </button>
-          ))}
+          {convs.slice(0, 6).map(c => {
+            const hue = c.title.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360
+            const isActive = c.id === activeId
+            return (
+              <button
+                key={c.id}
+                onClick={() => selectConv(c.id)}
+                title={c.title}
+                className="db-btn"
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  background: isActive ? `hsl(${hue}, 70%, 55%)` : `hsl(${hue}, 50%, 20%)`,
+                  border: isActive ? `2px solid hsl(${hue}, 70%, 65%)` : '1px solid var(--border)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  transition: 'all var(--transition-fast)',
+                  flexShrink: 0,
+                  boxShadow: isActive ? `0 0 0 2px hsl(${hue}, 70%, 55%, 0.3)` : 'none',
+                }}
+              >
+                {c.title.charAt(0).toUpperCase()}
+              </button>
+            )
+          })}
           {convs.length > 6 && (
             <span style={{ fontSize: 10, color: 'var(--text-faint)' }}>+{convs.length - 6}</span>
           )}
