@@ -259,6 +259,16 @@ export default function Workspace() {
   const [activeRepo, setActiveRepoLocal] = useState<{ name: string; owner: string; full_name: string; html_url: string; default_branch?: string } | null>(() => {
     try { return JSON.parse(localStorage.getItem('devbuddy_active_repo') || 'null') } catch { return null }
   })
+
+  // Persist activeRepo to localStorage whenever it changes
+  useEffect(() => {
+    if (activeRepo) {
+      localStorage.setItem('devbuddy_active_repo', JSON.stringify(activeRepo))
+    } else {
+      localStorage.removeItem('devbuddy_active_repo')
+    }
+  }, [activeRepo])
+
   const [agentRun, setAgentRun] = useState<AgentRun | null>(null)
   const [agentTimelineOpen, setAgentTimelineOpen] = useState(false)
   const [engineeringTasks, setEngineeringTasks] = useState<EngineeringTask[]>([])
@@ -758,13 +768,17 @@ export default function Workspace() {
         }
       }
     } catch (e: any) {
+      const isNetworkError = e.name === 'AbortError' || e.message?.includes('network') || e.message?.includes('fetch') || e.message?.includes('Failed')
+      const errorTitle = isNetworkError
+        ? 'Connection lost — the task may still be running on the server. Check your repository for updates.'
+        : e.message || 'Task failed'
       patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
-        events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: e.message, status: 'error' } as TaskEvent] }))
+        events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: errorTitle, status: 'error' } as TaskEvent] }))
     }
     return true
   }, [activeRepo, activeId, active?.title])
 
-  const runCloudAgent = useCallback(async (task: string, msgId: string, conversationAtStart: Message[], convId?: string) => {
+  const runCloudAgent = useCallback(async (task: string, msgId: string, conversationAtStart: Message[], convId?: string, signal?: AbortSignal) => {
     if (!activeRepo) return false
     const token = localStorage.getItem('devbuddy_token') || ''
     const owner = (activeRepo as any).owner || activeRepo.full_name?.split('/')[0] || ''
@@ -815,6 +829,7 @@ export default function Workspace() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ task, owner, repo, conversation_id: activeId }),
+        signal,
       })
       if (!resp.ok) {
         const err = await resp.text()
@@ -892,8 +907,12 @@ export default function Workspace() {
         }
       }
     } catch (e: any) {
+      const isNetworkError = e.name === 'AbortError' || e.message?.includes('network') || e.message?.includes('fetch') || e.message?.includes('Failed')
+      const errorTitle = isNetworkError
+        ? 'Connection lost — the task may still be running on the server. Check your repository for updates.'
+        : e.message || 'Task failed'
       patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
-        events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: e.message, status: 'error' } as TaskEvent] }))
+        events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: errorTitle, status: 'error' } as TaskEvent] }))
     }
     return true
   }, [activeRepo, activeId, active?.title])
@@ -1035,6 +1054,24 @@ export default function Workspace() {
     const text = input.trim()
     if (!text || loading) return
 
+    // Set up abort controller and timeout for ALL request paths
+    abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
+    const timeoutId = setTimeout(() => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+        toast('Request timed out — please try again', 'error')
+      }
+    }, 120000) // 2 minute timeout
+
+    const cleanup = () => {
+      clearTimeout(timeoutId)
+      abortControllerRef.current = null
+      setLoading(false)
+      setAiThinking(false)
+      setAiReasoning(null)
+    }
+
     // If a GitHub repo is active and agent mode is on → always cloud
     if (activeRepo && agentMode) {
       setInput('')
@@ -1049,7 +1086,16 @@ export default function Workspace() {
       const agentMsgId = crypto.randomUUID()
       const msgsWithUser = [...conv.messages, userMsg]
       updateActive(msgsWithUser, capitalizeFirst(text.slice(0, 50)), convId)
-      await runCloudAgent(text, agentMsgId, msgsWithUser, convId)
+      try {
+        await runCloudAgent(text, agentMsgId, msgsWithUser, convId, signal)
+      } catch (e: any) {
+        const errorMsg = e?.name === 'AbortError'
+          ? 'Request cancelled'
+          : `Error: ${e?.message || 'Connection failed. The task may still be running on the server.'}`
+        updateActive([...msgsWithUser, { id: crypto.randomUUID(), role: 'assistant', content: errorMsg, ts: Date.now() }], conv.title, convId)
+      } finally {
+        cleanup()
+      }
       return
     }
 
@@ -1081,7 +1127,6 @@ export default function Workspace() {
     setAiReasoning(agentMode ? 'Planning autonomous pipeline...' : 'Analyzing your question...')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
-    abortControllerRef.current = new AbortController()
     const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', ts: Date.now(), steps: [], files: [], agentEvents: [] }
     updateActive([...newMsgs, assistantMsg], title)
 
@@ -1097,10 +1142,7 @@ export default function Workspace() {
         : `Error: ${e instanceof Error ? e.message : 'Failed to connect'}`
       updateActive([...newMsgs, { ...assistantMsg, content: errorMsg }], title)
     } finally {
-      setLoading(false)
-      setAiThinking(false)
-      setAiReasoning(null)
-      abortControllerRef.current = null
+      cleanup()
       if (active && active.messages.length > 2) {
         try {
           await fetch(`${API}/knowledge/extract`, {
@@ -2272,7 +2314,14 @@ export default function Workspace() {
         token={localStorage.getItem('devbuddy_token') || ''}
         isOpen={githubPanelOpen}
         onClose={() => setGithubPanelOpen(false)}
-        onSelectRepo={repo => { setActiveRepoLocal(repo); toast(`Working in ${repo.full_name}`, 'success') }}
+        onSelectRepo={repo => {
+          if (activeRepo && activeRepo.full_name !== repo.full_name && messages.length > 0) {
+            toast(`Switched to ${repo.full_name}. New conversations will use this repository.`, 'info')
+          } else {
+            toast(`Working in ${repo.full_name}`, 'success')
+          }
+          setActiveRepoLocal(repo)
+        }}
       />
 
       {/* Workspace panel */}
