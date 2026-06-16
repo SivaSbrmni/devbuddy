@@ -1358,8 +1358,10 @@ export default function Workspace() {
         {/* Conversations list */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'stretch', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 12px', width: '100%' }}>
           {convs.length === 0 && (
-            <div style={{ padding: '20px 8px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 12 }}>
-              No conversations yet
+            <div role="status" aria-live="polite" style={{ padding: '32px 12px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
+              <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.5 }}>💬</div>
+              <div style={{ fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4 }}>No conversations yet</div>
+              <div style={{ fontSize: 12 }}>Click + to start your first chat</div>
             </div>
           )}
           {convs.map(c => {
@@ -2077,7 +2079,11 @@ export default function Workspace() {
               }}
             >
               {/* Textarea */}
+              <label htmlFor="chat-textarea" style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }}>
+                Message
+              </label>
               <textarea
+                id="chat-textarea"
                 ref={textareaRef}
                 value={input}
                 onChange={handleInputChange}
@@ -2085,6 +2091,7 @@ export default function Workspace() {
                 placeholder={activeRepo && agentMode ? `Describe a task for ${activeRepo.name}… (runs in isolated GitHub Actions runner)` : "Describe what you want to build, or type @ to reference files..."}
                 rows={1}
                 className="db-input"
+                aria-label={activeRepo && agentMode ? `Describe a task for ${activeRepo.name}` : "Describe what you want to build"}
                 style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 14, lineHeight: 1.5, resize: 'none', maxHeight: 200, fontFamily: 'inherit', overflowY: 'auto', padding: '0 4px' }}
                 onFocus={e => { const container = document.getElementById('chat-input-container'); if (container) { container.style.borderColor = 'rgba(99,102,241,0.4)'; container.style.boxShadow = '0 4px 24px rgba(0,0,0,0.2), 0 0 0 3px rgba(99,102,241,0.1)'; } }}
                 onBlur={e => { setTimeout(() => setMentionOpen(false), 200); const container = document.getElementById('chat-input-container'); if (container) { container.style.borderColor = 'var(--border)'; container.style.boxShadow = '0 4px 24px rgba(0,0,0,0.2)'; } }}
@@ -2092,7 +2099,7 @@ export default function Workspace() {
 
               {/* @mention dropdown */}
               {mentionOpen && filteredMentions.length > 0 && (
-                <div style={{
+                <div role="listbox" aria-label="Project files" style={{
                   position: 'absolute',
                   bottom: '100%',
                   left: 0,
@@ -2113,6 +2120,8 @@ export default function Workspace() {
                   {filteredMentions.map((f, i) => (
                     <button
                       key={f}
+                      role="option"
+                      aria-selected={i === mentionIndex}
                       onMouseDown={e => {
                         e.preventDefault()
                         const lastAt = input.lastIndexOf('@')
@@ -2124,7 +2133,7 @@ export default function Workspace() {
                           setMentionQuery('')
                         }
                       }}
-                      className="db-btn"
+                      className="db-btn db-focus"
                       style={{
                         width: '100%',
                         padding: '8px 12px',
