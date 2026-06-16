@@ -111,7 +111,7 @@ export default function LoginGate({ children }: { children?: React.ReactNode }) 
       {/* Feature grid */}
       <div role="list" aria-label="Features" style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(2, 1fr)',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
         gap: 12,
         maxWidth: 480,
         width: '100%',
