@@ -1345,7 +1345,20 @@ export default function Workspace() {
 
         {/* Conversations list */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'stretch', flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 12px', width: '100%' }}>
-          {convs.length === 0 && (
+          {conversationsLoading && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 12px' }}>
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px' }}>
+                  <div className="db-skeleton" style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0 }} />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div className="db-skeleton" style={{ width: '70%', height: 12, borderRadius: 4 }} />
+                    <div className="db-skeleton" style={{ width: '50%', height: 10, borderRadius: 4 }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {!conversationsLoading && convs.length === 0 && (
             <div role="status" aria-live="polite" style={{ padding: '32px 12px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
               <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.5 }}>💬</div>
               <div style={{ fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4 }}>No conversations yet</div>
