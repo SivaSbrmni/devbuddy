@@ -1,4 +1,7 @@
 // @ts-nocheck
+// TODO: This file requires component splitting and full type-checking.
+// The LocalConversation/Message types conflict with server types.
+// Extract: Sidebar, ChatArea, InputBar, Modals into separate components.
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { GitHubProvider, useGitHub } from '../context/GitHubContext'
@@ -295,6 +298,7 @@ export default function Workspace() {
     ollama: { key: '', base_url: '' },
     llama: { key: '', base_url: '' },
   })
+  const [showKey, setShowKey] = useState<Record<string, boolean>>({})
   const [savingKeys, setSavingKeys] = useState(false)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
   const [modKey] = useState(() => navigator.platform?.includes('Mac') ? '⌘' : 'Ctrl')
@@ -323,6 +327,22 @@ export default function Workspace() {
       return () => clearTimeout(timer)
     }
   }, [workspaceFiles.length])
+
+  // Close modals on Escape key
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (settingsOpen) setSettingsOpen(false)
+        if (llmProviderSettingsOpen) setLlmProviderSettingsOpen(false)
+        if (paletteOpen) setPaletteOpen(false)
+        if (githubPanelOpen) setGithubPanelOpen(false)
+        if (agentTimelineOpen) setAgentTimelineOpen(false)
+        if (sidebarOpen && isMobile) setSidebarOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [settingsOpen, llmProviderSettingsOpen, paletteOpen, githubPanelOpen, agentTimelineOpen, sidebarOpen, isMobile])
 
   useEffect(() => {
     if (!activeId && !loading) createNew()
@@ -1772,7 +1792,13 @@ export default function Workspace() {
                   ].map(s => (
                     <button
                       key={s.label}
-                      onClick={() => setInput(s.label)}
+                      onClick={() => {
+                        setInput(s.label)
+                        // Use setTimeout to let React update input state before sending
+                        setTimeout(() => {
+                          if (!loading) send()
+                        }, 0)
+                      }}
                       className="db-btn db-focus"
                       style={{
                         background: 'var(--bg-card)',
@@ -2019,24 +2045,46 @@ export default function Workspace() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div>
                       <label style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 4, display: 'block' }}>API Key</label>
-                      <input
-                        type="password"
-                        value={providerKeys[provider.id as keyof typeof providerKeys].key}
-                        onChange={e => setProviderKeys(prev => ({ ...prev, [provider.id]: { ...prev[provider.id as keyof typeof prev], key: e.target.value } }))}
-                        placeholder={provider.placeholder}
-                        className="db-input"
-                        style={{
-                          width: '100%',
-                          background: 'var(--bg-elevated)',
-                          border: '1px solid var(--border)',
-                          borderRadius: 'var(--radius-md)',
-                          padding: '8px 12px',
-                          color: 'var(--text)',
-                          fontSize: 13,
-                          outline: 'none',
-                          fontFamily: 'monospace'
-                        }}
-                      />
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type={showKey[provider.id] ? 'text' : 'password'}
+                          value={providerKeys[provider.id as keyof typeof providerKeys].key}
+                          onChange={e => setProviderKeys(prev => ({ ...prev, [provider.id]: { ...prev[provider.id as keyof typeof prev], key: e.target.value } }))}
+                          placeholder={provider.placeholder}
+                          className="db-input"
+                          style={{
+                            width: '100%',
+                            background: 'var(--bg-elevated)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius-md)',
+                            padding: '8px 36px 8px 12px',
+                            color: 'var(--text)',
+                            fontSize: 13,
+                            outline: 'none',
+                            fontFamily: 'monospace'
+                          }}
+                        />
+                        <button
+                          onClick={() => setShowKey(prev => ({ ...prev, [provider.id]: !prev[provider.id] }))}
+                          type="button"
+                          className="db-btn"
+                          aria-label={showKey[provider.id] ? 'Hide API key' : 'Show API key'}
+                          style={{
+                            position: 'absolute',
+                            right: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-faint)',
+                            cursor: 'pointer',
+                            padding: 4,
+                            fontSize: 12,
+                          }}
+                        >
+                          {showKey[provider.id] ? 'Hide' : 'Show'}
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 4, display: 'block' }}>Base URL (optional)</label>
