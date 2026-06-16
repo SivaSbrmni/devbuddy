@@ -1244,7 +1244,7 @@ export default function Workspace() {
           padding: '6px 12px',
         }}>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{language}</div>
-          <button onClick={copyCode} className="db-btn" style={{ background: 'none', border: 'none', color: copied ? 'var(--success)' : 'var(--text-dim)', fontSize: 11, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)', display: 'flex', alignItems: 'center', gap: 4 }} onMouseEnter={e => { if (!copied) e.currentTarget.style.color = 'var(--accent-hover)' }} onMouseLeave={e => { if (!copied) e.currentTarget.style.color = 'var(--text-dim)' }}>
+          <button onClick={copyCode} className="db-btn db-focus" style={{ background: 'none', border: 'none', color: copied ? 'var(--success)' : 'var(--text-dim)', fontSize: 11, cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)', display: 'flex', alignItems: 'center', gap: 4 }} onMouseEnter={e => { if (!copied) e.currentTarget.style.color = 'var(--accent-hover)' }} onMouseLeave={e => { if (!copied) e.currentTarget.style.color = 'var(--text-dim)' }}>
             {copied ? '✓ Copied' : '⎘ Copy'}
           </button>
         </div>
@@ -1334,7 +1334,7 @@ export default function Workspace() {
           <button
             onClick={createNew}
             title="New conversation (Ctrl+N)"
-            className="db-btn"
+            className="db-btn db-focus"
             style={{
               width: 28,
               height: 28,
@@ -1375,7 +1375,7 @@ export default function Workspace() {
                 onClick={() => selectConv(c.id)}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectConv(c.id) } }}
                 title={c.title}
-                className="db-btn conv-item"
+                className="db-btn db-focus conv-item"
                 style={{
                   width: '100%',
                   padding: '8px 10px',
@@ -1433,7 +1433,7 @@ export default function Workspace() {
                     </span>
                   )}
                   <button
-                    className="conv-del-btn"
+                    className="conv-del-btn db-focus"
                     onClick={e => {
                       e.stopPropagation()
                       setLastDeleted(c)
@@ -1510,14 +1510,14 @@ export default function Workspace() {
             <div
               style={{ position: 'absolute', bottom: '100%', left: 12, right: 12, marginBottom: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', overflow: 'hidden', animation: 'fadeIn 0.12s ease', zIndex: 100 }}
             >
-              <button onClick={() => { setPaletteOpen(true); setUserMenuOpen(false) }} className="db-btn" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}>
+              <button onClick={() => { setPaletteOpen(true); setUserMenuOpen(false) }} className="db-btn db-focus" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}>
                 <Icon name="command" size={14} /> Commands
                 <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-faint)', background: 'var(--bg-card)', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace' }}>⌘K</span>
               </button>
-              <button onClick={() => { setSettingsOpen(true); setUserMenuOpen(false) }} className="db-btn" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}>
+              <button onClick={() => { setSettingsOpen(true); setUserMenuOpen(false) }} className="db-btn db-focus" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}>
                 <Icon name="settings" size={14} /> API Keys
               </button>
-              <button onClick={() => { logout(); setUserMenuOpen(false) }} className="db-btn" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--error)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.06)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
+              <button onClick={() => { logout(); setUserMenuOpen(false) }} className="db-btn db-focus" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--error)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.06)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
                 <Icon name="logout" size={14} /> Sign out
               </button>
             </div>
@@ -1905,7 +1905,7 @@ export default function Workspace() {
               <h2 style={{ margin: 0, fontSize: 15, color: 'var(--text)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="settings" size={16} /> API Keys
               </h2>
-              <button onClick={() => setSettingsOpen(false)} className="db-btn" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: '4px 6px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'none' }}><Icon name="close" size={16} /></button>
+              <button onClick={() => setSettingsOpen(false)} className="db-btn db-focus" aria-label="Close settings" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: '4px 6px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'none' }}><Icon name="close" size={16} /></button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
               <div style={{ marginBottom: 20, padding: 16, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 'var(--radius-lg)' }}>

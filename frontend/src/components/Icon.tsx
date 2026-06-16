@@ -428,7 +428,7 @@ export default function Icon({ name, size = 16, className = '', style, color }: 
   const render = ICONS[name]
   if (!render) return null
   return (
-    <span className={className} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color, ...style }}>
+    <span aria-hidden="true" className={className} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color, ...style }}>
       {render(size)}
     </span>
   )

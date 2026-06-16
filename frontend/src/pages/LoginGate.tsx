@@ -124,6 +124,7 @@ export default function LoginGate({ children }: { children?: React.ReactNode }) 
             role="listitem"
             tabIndex={0}
             key={f.label}
+            className="db-focus"
             onMouseEnter={() => setHoveredFeature(f.label)}
             onMouseLeave={() => setHoveredFeature(null)}
             onFocus={() => setHoveredFeature(f.label)}
