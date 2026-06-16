@@ -36,14 +36,36 @@ export default function LandingPage() {
       position: 'relative',
       overflow: 'hidden',
     }}>
+      {/* Skip link for keyboard users */}
+      <a href="#main-content" style={{
+        position: 'absolute',
+        top: '-40px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        background: 'var(--accent)',
+        color: 'white',
+        padding: '8px 16px',
+        borderRadius: 'var(--radius-md)',
+        fontSize: '14px',
+        fontWeight: 600,
+        textDecoration: 'none',
+        zIndex: 100,
+        transition: 'top 0.2s ease',
+      }}
+      onFocus={e => { e.currentTarget.style.top = '12px' }}
+      onBlur={e => { e.currentTarget.style.top = '-40px' }}
+      >
+        Skip to content
+      </a>
+
       {/* Background glow */}
-      <div style={{
+      <div aria-hidden="true" style={{
         position: 'absolute', top: '15%', left: '50%', transform: 'translateX(-50%)',
         width: '700px', height: '700px',
         background: 'radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 65%)',
         pointerEvents: 'none',
       }} />
-      <div style={{
+      <div aria-hidden="true" style={{
         position: 'absolute', bottom: '10%', right: '20%',
         width: '400px', height: '400px',
         background: 'radial-gradient(circle, rgba(52,211,153,0.06) 0%, transparent 60%)',
@@ -59,27 +81,29 @@ export default function LandingPage() {
         backdropFilter: 'blur(8px)',
         animation: 'fadeInScale 0.5s ease',
       }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', boxShadow: '0 0 6px var(--accent)' }} />
+        <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', boxShadow: '0 0 6px var(--accent)' }} />
         Invite Only — Private Beta
       </div>
 
       {/* Logo + Title */}
-      <div style={{ textAlign: 'center', marginBottom: 'var(--space-5)', animation: 'fadeIn 0.6s ease' }}>
-        <div style={{
+      <header style={{ textAlign: 'center', marginBottom: 'var(--space-5)', animation: 'fadeIn 0.6s ease' }}>
+        <h1 style={{
           fontSize: '56px', fontWeight: 800, letterSpacing: '-2.5px',
           background: 'linear-gradient(135deg, var(--text) 0%, var(--accent-hover) 100%)',
           WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
           marginBottom: 'var(--space-2)',
+          marginTop: 0,
+          lineHeight: 1.1,
         }}>
           DevBuddy
-        </div>
-        <p style={{ fontSize: '20px', color: 'var(--text-muted)', fontWeight: 400, maxWidth: '520px', lineHeight: 1.6 }}>
+        </h1>
+        <p style={{ fontSize: '20px', color: 'var(--text-muted)', fontWeight: 400, maxWidth: '520px', lineHeight: 1.6, margin: 0 }}>
           Your AI-powered engineering co-pilot. Ship faster, debug smarter, stay in flow.
         </p>
-      </div>
+      </header>
 
       {/* Feature pills */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', justifyContent: 'center', marginBottom: 'var(--space-8)', animation: 'fadeIn 0.7s ease' }}>
+      <div role="list" aria-label="Features" style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-2)', justifyContent: 'center', marginBottom: 'var(--space-8)', animation: 'fadeIn 0.7s ease' }}>
         {[
           { label: 'AI Code Review', icon: 'zap' },
           { label: 'Smart Debugging', icon: 'wrench' },
@@ -88,6 +112,7 @@ export default function LandingPage() {
           { label: 'Project Insights', icon: 'rocket' },
         ].map(f => (
           <span
+            role="listitem"
             key={f.label}
             onMouseEnter={() => setHoveredPill(f.label)}
             onMouseLeave={() => setHoveredPill(null)}
@@ -99,12 +124,12 @@ export default function LandingPage() {
               transition: 'all var(--transition-base)',
               transform: hoveredPill === f.label ? 'translateY(-1px)' : 'translateY(0)',
             }}
-          ><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Icon name={f.icon as any} size={14} /> {f.label}</span></span>
+          ><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Icon name={f.icon as any} size={14} aria-hidden="true" /> {f.label}</span></span>
         ))}
       </div>
 
       {/* Card */}
-      <div style={{
+      <main id="main-content" style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
         borderRadius: 'var(--radius-xl)', padding: 'var(--space-8) var(--space-8)', maxWidth: '440px', width: '100%',
         backdropFilter: 'blur(12px)',
@@ -112,9 +137,9 @@ export default function LandingPage() {
         animation: 'fadeInScale 0.8s ease',
       }}>
         {submitted ? (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '44px', marginBottom: 'var(--space-4)' }}><Icon name="sparkles" size={40} style={{ color: 'var(--accent-hover)' }} /></div>
-            <div style={{ fontSize: '19px', fontWeight: 700, color: 'var(--text)', marginBottom: 'var(--space-2)' }}>You're on the list!</div>
+          <div style={{ textAlign: 'center' }} role="status" aria-live="polite">
+            <div style={{ fontSize: '44px', marginBottom: 'var(--space-4)' }}><Icon name="sparkles" size={40} style={{ color: 'var(--accent-hover)' }} aria-hidden="true" /></div>
+            <h2 style={{ fontSize: '19px', fontWeight: 700, color: 'var(--text)', marginBottom: 'var(--space-2)', marginTop: 0 }}>You're on the list!</h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.6 }}>
               We'll reach out to <strong style={{ color: 'var(--accent-hover)' }}>{email}</strong> when your invite is ready.
             </p>
@@ -122,18 +147,25 @@ export default function LandingPage() {
         ) : (
           <>
             <div style={{ marginBottom: 'var(--space-5)' }}>
-              <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)', marginBottom: '6px' }}>Request early access</div>
-              <p style={{ color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.6 }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)', marginBottom: '6px', marginTop: 0 }}>Request early access</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1.6, margin: 0 }}>
                 DevBuddy is currently invite-only. Drop your email and we'll let you in when a spot opens.
               </p>
             </div>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
+              <label htmlFor="email-input" style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }}>
+                Email address
+              </label>
               <input
+                id="email-input"
                 type="email"
                 placeholder="you@company.com"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
+                autoComplete="email"
+                aria-label="Email address"
+                aria-required="true"
                 className="db-input"
                 style={{
                   width: '100%', padding: '12px 16px', borderRadius: 'var(--radius-md)',
@@ -145,6 +177,7 @@ export default function LandingPage() {
                 type="submit"
                 disabled={loading}
                 className="db-btn"
+                aria-label={loading ? 'Sending request' : 'Request invite'}
                 style={{
                   width: '100%', padding: '12px', borderRadius: 'var(--radius-md)',
                   background: loading ? 'var(--text-faint)' : 'linear-gradient(135deg, var(--accent), var(--accent-hover))',
@@ -157,12 +190,12 @@ export default function LandingPage() {
             </form>
           </>
         )}
-      </div>
+      </main>
 
       {/* Footer */}
-      <p style={{ marginTop: 'var(--space-8)', color: 'var(--text-faint)', fontSize: '13px', animation: 'fadeIn 1s ease' }}>
-        © 2026 DevBuddy · Invite-only private beta
-      </p>
+      <footer style={{ marginTop: 'var(--space-8)', color: 'var(--text-faint)', fontSize: '13px', animation: 'fadeIn 1s ease' }}>
+        <p style={{ margin: 0 }}>© 2026 DevBuddy · Invite-only private beta</p>
+      </footer>
     </div>
   )
 }
