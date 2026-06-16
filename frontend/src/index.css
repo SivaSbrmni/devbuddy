@@ -344,3 +344,66 @@ div[role="button"]:focus-within .conv-delete {
   from { opacity: 0; transform: scale(0.97) translateY(6px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
+
+/* Engineering Timeline Animations */
+@keyframes shimmer {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+
+.shimmer {
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes expandIn {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+    transform: translateY(0);
+  }
+}
+
+.expand-animation {
+  animation: expandIn 250ms ease-out forwards;
+  overflow: hidden;
+}
+
+@keyframes progressFill {
+  from { width: 0%; }
+}
+
+.progress-animate {
+  animation: progressFill 300ms ease-out forwards;
+}
+
+/* Engineering Timeline Phase Stepper */
+.phase-step {
+  transition: all 200ms ease-in-out;
+}
+
+.phase-step:hover {
+  transform: translateY(-2px);
+}
+
+.phase-step.active {
+  transform: scale(1.05);
+}
+
+/* Smooth expand/collapse */
+.details-expand {
+  transition: all 250ms ease-in-out;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.details-expand.open {
+  max-height: 600px;
+  opacity: 1;
+}

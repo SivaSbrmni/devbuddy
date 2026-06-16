@@ -118,13 +118,15 @@ async def create_task_with_context(
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
     
+    # Import semantic branch naming
+    from app.services.semantic_branch import generate_semantic_branch_name
+    
     # If forced new task, skip detection
     if req.force_new_task:
         # Create new task without follow-up logic
         from app.models.conversation import ConversationTask
-        import re
         
-        branch = f"devbuddy/{_slugify(req.message[:30])}-{uuid.uuid4().hex[:8]}"
+        branch = generate_semantic_branch_name(req.message)
         
         async with async_session_factory() as db:
             task = ConversationTask(
@@ -234,8 +236,8 @@ async def continue_on_branch(
         prev_task = recent_result.scalar_one_or_none()
         
         if not prev_task:
-            # No previous task, create new
-            branch = f"devbuddy/{_slugify(req.message[:30])}-{uuid.uuid4().hex[:8]}"
+            # No previous task, create new with semantic branch name
+            branch = generate_semantic_branch_name(req.message)
             task = ConversationTask(
                 conversation_id=uuid.UUID(req.conversation_id),
                 title=req.message[:100],
@@ -313,9 +315,3 @@ Build upon these changes."""
         )
 
 
-def _slugify(text: str) -> str:
-    """Convert text to URL-friendly slug."""
-    import re
-    text = re.sub(r'[^\w\s-]', '', text)
-    text = re.sub(r'\s+', '-', text)
-    return text.lower()[:30]

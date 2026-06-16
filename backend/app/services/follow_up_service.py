@@ -19,6 +19,7 @@ import structlog
 from sqlalchemy import select
 
 from app.db.session import async_session_factory
+from app.services.semantic_branch import generate_semantic_branch_name
 
 log = structlog.get_logger()
 
@@ -202,10 +203,10 @@ class FollowUpService:
                         branch = prev_task.branch
                     elif analysis.suggested_action == 'new_branch':
                         # Create next branch (devbuddy/next-xyz)
-                        branch = self._generate_next_branch(prev_task.branch)
+                        branch = self._generate_next_branch(prev_task.branch, message)
                     else:
                         # Fallback to new task branch
-                        branch = f"devbuddy/{self._slugify(message[:30])}-{uuid.uuid4().hex[:8]}"
+                        branch = generate_semantic_branch_name(message)
                     
                     # Create the new task with parent link
                     task = ConversationTask(
@@ -252,8 +253,8 @@ class FollowUpService:
                         'confidence': analysis.confidence,
                     }
             
-            # Not a follow-up - create new task
-            branch = f"devbuddy/{self._slugify(message[:30])}-{uuid.uuid4().hex[:8]}"
+            # Not a follow-up - create new task with semantic branch name
+            branch = generate_semantic_branch_name(message)
             
             task = ConversationTask(
                 conversation_id=conversation_id,
@@ -382,20 +383,28 @@ class FollowUpService:
             context_inheritance={},
         )
     
-    def _generate_next_branch(self, previous_branch: str) -> str:
-        """Generate a next-* branch name from previous branch."""
-        # Extract base name
-        if previous_branch.startswith('devbuddy/'):
-            base = previous_branch[9:]  # Remove 'devbuddy/'
+    def _generate_next_branch(self, previous_branch: str, message: str) -> str:
+        """Generate a next-* branch name from previous branch and new message."""
+        # Generate semantic name from new message
+        new_semantic = generate_semantic_branch_name(message)
+        
+        # Extract category from new semantic name
+        if new_semantic.startswith('devbuddy/'):
+            parts = new_semantic[9:].split('/', 1)  # Remove devbuddy/ prefix
+            if len(parts) == 2:
+                category, name = parts
+            else:
+                category = 'feature'
+                name = parts[0]
         else:
-            base = previous_branch
+            category = 'feature'
+            name = new_semantic
         
-        # Remove any existing -next-N suffix
-        base = re.sub(r'-next-\d+$', '', base)
-        base = re.sub(r'-[a-f0-9]{8}$', '', base)  # Remove uuid suffix
+        # Create follow-up branch name: devbuddy/category/name-follow-up-2
+        base = re.sub(r'-[a-f0-9]{8}$', '', name)  # Remove any hash suffix
+        base = re.sub(r'-follow-up-\d+$', '', base)  # Remove existing follow-up suffix
         
-        # Generate new branch name
-        return f"devbuddy/{base}-next-{uuid.uuid4().hex[:6]}"
+        return f"devbuddy/{category}/{base}-follow-up"
     
     def _slugify(self, text: str) -> str:
         """Convert text to URL-friendly slug."""
