@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { GitHubProvider, useGitHub } from '../context/GitHubContext'
 import { useServerConversations } from '../hooks/useServerConversations'
@@ -132,21 +132,21 @@ export default function Workspace() {
   } = useServerConversations({ autoSync: true, syncInterval: 30000 })
   
   // Compatibility layer - adapt server API to existing component expectations
-  const convs = conversations.map(c => ({
+  const convs = useMemo(() => conversations.map(c => ({
     ...c,
     messages: c.id === activeConversation?.id ? serverMessages : [],
     ts: new Date(c.created_at).getTime(),
-  })) as LocalConversation[]
-  
-  const active = activeConversation ? {
+  })) as LocalConversation[], [conversations, activeConversation?.id, serverMessages])
+
+  const active = useMemo(() => activeConversation ? {
     ...activeConversation,
     messages: serverMessages,
     ts: new Date(activeConversation.created_at).getTime(),
-  } as LocalConversation : null
-  
+  } as LocalConversation : null, [activeConversation, serverMessages])
+
   const activeId = activeConversation?.id || ''
-  
-  const createNew = () => {
+
+  const createNew = useCallback(() => {
     // Create optimistic conversation immediately for UI responsiveness
     const tempId = crypto.randomUUID()
     const optimisticConv: LocalConversation = {
@@ -189,8 +189,8 @@ export default function Workspace() {
     })
     
     return optimisticConv
-  }
-  
+  }, [user?.id, activeRepo, createConversation, setActiveConversation])
+
   // Sync status indicator component
   const SyncIndicator = () => {
     if (!syncStatus || syncStatus === 'idle') return null
@@ -219,7 +219,7 @@ export default function Workspace() {
     )
   }
   
-  const updateActive = (msgs: Message[] | ((prev: Message[]) => Message[]), title?: string, forceId?: string) => {
+  const updateActive = useCallback((msgs: Message[] | ((prev: Message[]) => Message[]), title?: string, forceId?: string) => {
     const targetId = forceId || activeId
     if (!targetId) return
     
@@ -241,20 +241,19 @@ export default function Workspace() {
     if (title && targetId) {
       updateConversation(targetId, { title })
     }
-  }
-  
-  const selectConv = (id: string) => {
+  }, [activeId, serverMessages, setMessages, createMessage, updateConversation])
+
+  const selectConv = useCallback((id: string) => {
     setActiveConversation(id)
-  }
-  
-  const deleteConv = async (id: string) => {
+  }, [setActiveConversation])
+
+  const deleteConv = useCallback(async (id: string) => {
     await deleteConversation(id)
-  }
-  
-  const restoreConv = (conv: LocalConversation) => {
-    // Server already has it, just select it
+  }, [deleteConversation])
+
+  const restoreConv = useCallback((conv: LocalConversation) => {
     setActiveConversation(conv.id)
-  }
+  }, [setActiveConversation])
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [githubPanelOpen, setGithubPanelOpen] = useState(false)
   const [activeRepo, setActiveRepoLocal] = useState<{ name: string; owner: string; full_name: string; html_url: string; default_branch?: string } | null>(() => {
