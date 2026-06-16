@@ -1,14 +1,15 @@
 /**
- * TaskCard — the core UI unit of DevBuddy's engineering console.
+ * TaskCard — Engineering progress, not CI logs.
  *
- * Each user message becomes a TaskCard. The card streams child events
- * in real time: planning → reading → executing → testing → git → PR.
+ * Each user message becomes a TaskCard. Events are grouped into
+ * human-readable phases so the user feels like they're supervising
+ * a senior engineer, not debugging a pipeline.
  *
  * Design principles:
- *  - Every second must increase user confidence
- *  - Show meaningful work, never "Loading…"
- *  - Events are expandable, indented, and timestamped
- *  - Progress bar animates live during execution
+ *  - Group raw events into 4 meaningful phases
+ *  - Show only what's happening now + what's done
+ *  - One color for active (accent), one for done (muted), one for error (red)
+ *  - No durations, no expand chevrons, no technical jargon
  */
 
 import { useState, useRef, useEffect } from 'react'
@@ -93,34 +94,75 @@ interface TaskCardProps {
   onRetry?: () => void
 }
 
-// ── Config ───────────────────────────────────────────────────────────────────
+// ── Phase grouping: raw events → human-readable phases ──────────────────────
 
-const CATEGORY_CONFIG: Record<EventCategory, { icon: IconName; color: string; label: string }> = {
-  plan:    { icon: 'list',          color: '#818cf8', label: 'Planning'      },
-  context: { icon: 'book',          color: '#a78bfa', label: 'Repository'    },
-  search:  { icon: 'search',        color: '#60a5fa', label: 'Searching'     },
-  read:    { icon: 'file',          color: '#93c5fd', label: 'Reading'       },
-  analyze: { icon: 'cpu',           color: '#c084fc', label: 'Analyzing'     },
-  execute: { icon: 'code',          color: '#34d399', label: 'Executing'     },
-  test:    { icon: 'flask',         color: '#fbbf24', label: 'Testing'       },
-  reflect: { icon: 'refresh',       color: '#94a3b8', label: 'Reflecting'    },
-  branch:  { icon: 'branch',        color: '#4ade80', label: 'Branch'        },
-  commit:  { icon: 'commit',        color: '#86efac', label: 'Commit'        },
-  push:    { icon: 'push',          color: '#6ee7b7', label: 'Push'          },
-  pr:      { icon: 'pr',            color: '#818cf8', label: 'Pull Request'  },
-  tool:    { icon: 'flash',         color: '#f9a8d4', label: 'Tool'          },
-  think:   { icon: 'brain',         color: '#c4b5fd', label: 'Reasoning'     },
-  observe: { icon: 'eye',           color: '#7dd3fc', label: 'Observed'      },
-  warn:    { icon: 'warning',       color: '#fbbf24', label: 'Warning'       },
-  error:   { icon: 'error',         color: '#ef4444', label: 'Error'         },
-  done:    { icon: 'check',         color: '#34d399', label: 'Complete'      },
-  step:    { icon: 'chevron-right', color: '#94a3b8', label: 'Step'          },
+type PhaseType = 'plan' | 'read' | 'execute' | 'deliver'
+
+interface PhaseGroup {
+  type: PhaseType
+  label: string
+  icon: IconName
+  events: TaskEvent[]
+  status: 'pending' | 'active' | 'done' | 'error'
 }
 
-function elapsed(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`
+const PHASE_ORDER: PhaseType[] = ['plan', 'read', 'execute', 'deliver']
+
+const PHASE_META: Record<PhaseType, { label: string; icon: IconName }> = {
+  plan:    { label: 'Planning',      icon: 'brain'     },
+  read:    { label: 'Understanding', icon: 'book'     },
+  execute: { label: 'Implementing',  icon: 'code'     },
+  deliver: { label: 'Delivering',    icon: 'git-pull' },
+}
+
+/** Map event categories to their phase */
+function eventPhase(category: EventCategory): PhaseType {
+  switch (category) {
+    case 'plan':
+    case 'think':
+    case 'analyze':
+      return 'plan'
+    case 'context':
+    case 'search':
+    case 'read':
+    case 'observe':
+      return 'read'
+    case 'execute':
+    case 'tool':
+    case 'test':
+    case 'reflect':
+      return 'execute'
+    case 'branch':
+    case 'commit':
+    case 'push':
+    case 'pr':
+    case 'done':
+      return 'deliver'
+    case 'warn':
+    case 'error':
+    case 'step':
+    default:
+      return 'execute'
+  }
+}
+
+/** Group flat events into phases */
+function groupEvents(events: TaskEvent[]): PhaseGroup[] {
+  const groups = new Map<PhaseType, TaskEvent[]>()
+  for (const evt of events) {
+    const phase = eventPhase(evt.category)
+    if (!groups.has(phase)) groups.set(phase, [])
+    groups.get(phase)!.push(evt)
+  }
+
+  return PHASE_ORDER.map(type => {
+    const evts = groups.get(type) ?? []
+    const hasError = evts.some(e => e.status === 'error')
+    const hasRunning = evts.some(e => e.status === 'running')
+    const hasDone = evts.some(e => e.status === 'done')
+    const status: PhaseGroup['status'] = hasError ? 'error' : hasRunning ? 'active' : hasDone ? 'done' : 'pending'
+    return { type, ...PHASE_META[type], events: evts, status }
+  }).filter(g => g.events.length > 0)
 }
 
 function liveElapsed(startedAt: number): string {
@@ -129,221 +171,71 @@ function liveElapsed(startedAt: number): string {
   return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`
 }
 
-// ── Runner lifecycle config ──────────────────────────────────────────────────
+// ── Phase row: one row per phase, not per event ─────────────────────────────
 
-const RUNNER_STATE_ORDER: RunnerState[] = [
-  'queued', 'provisioning', 'initializing', 'connecting',
-  'analyzing', 'executing', 'validating', 'reflecting',
-  'pushing', 'creating_pr', 'uploading', 'completed', 'destroyed',
-]
+function PhaseRow({ group, isLast }: { group: PhaseGroup; isLast: boolean }) {
+  const { label, icon, status, events } = group
+  const isActive = status === 'active'
+  const isDone = status === 'done'
+  const isError = status === 'error'
 
-const RUNNER_STATE_LABELS: Record<RunnerState, string> = {
-  queued:       'Queued',
-  provisioning: 'Provisioning',
-  initializing: 'Initializing',
-  connecting:   'Connecting',
-  analyzing:    'Analyzing',
-  executing:    'Executing',
-  validating:   'Validating',
-  reflecting:   'Reflecting',
-  pushing:      'Pushing',
-  creating_pr:  'Creating PR',
-  uploading:    'Uploading',
-  completed:    'Completed',
-  destroyed:    'Destroyed',
-}
-
-function RunnerLifecycle({ state, runUrl }: { state: RunnerState; runUrl?: string }) {
-  const idx = RUNNER_STATE_ORDER.indexOf(state)
-  const activeStates = RUNNER_STATE_ORDER.slice(0, Math.min(idx + 1, RUNNER_STATE_ORDER.length - 1))
-  const done = state === 'completed' || state === 'destroyed'
+  // Build a human summary from the events
+  const latestEvent = events[events.length - 1]
+  const summary = isActive && latestEvent
+    ? latestEvent.title
+    : isDone
+      ? `${events.length} steps completed`
+      : isError
+        ? 'Issue encountered'
+        : 'Waiting...'
 
   return (
-    <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Runner Lifecycle</span>
-        {runUrl && (
-          <a href={runUrl} target="_blank" rel="noopener noreferrer"
-            style={{ fontSize: 10, color: '#818cf8', display: 'flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
-            <Icon name="flash" size={9} /> View Run
-          </a>
-        )}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto', paddingBottom: 2 }}>
-        {RUNNER_STATE_ORDER.filter(s => s !== 'destroyed').map((s, i) => {
-          const sIdx = RUNNER_STATE_ORDER.indexOf(s)
-          const isCurrent = s === state
-          const isPast = sIdx < idx
-          const isFuture = sIdx > idx
-          return (
-            <div key={s} style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 52,
-              }}>
-                <div style={{
-                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                  background: isCurrent ? '#818cf8' : isPast ? '#34d399' : 'rgba(255,255,255,0.08)',
-                  border: `1.5px solid ${isCurrent ? '#818cf8' : isPast ? '#34d399' : 'rgba(255,255,255,0.12)'}`,
-                  boxShadow: isCurrent ? '0 0 8px #818cf888' : 'none',
-                  animation: isCurrent ? 'pulse 1.2s infinite' : 'none',
-                }} />
-                <span style={{
-                  fontSize: 9, color: isCurrent ? '#c4b5fd' : isPast ? '#6ee7b7' : '#374151',
-                  fontWeight: isCurrent ? 700 : 400, whiteSpace: 'nowrap',
-                }}>
-                  {RUNNER_STATE_LABELS[s]}
-                </span>
-              </div>
-              {i < RUNNER_STATE_ORDER.filter(s => s !== 'destroyed').length - 1 && (
-                <div style={{
-                  width: 12, height: 1, flexShrink: 0, marginBottom: 10,
-                  background: isPast ? '#34d399' : 'rgba(255,255,255,0.06)',
-                  transition: 'background 0.3s',
-                }} />
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      padding: '6px 0',
+      opacity: status === 'pending' ? 0.5 : 1,
+      transition: 'opacity 0.3s ease',
+    }}>
+      {/* Status dot */}
+      <div style={{
+        width: 8,
+        height: 8,
+        borderRadius: '50%',
+        flexShrink: 0,
+        background: isError ? '#ef4444' : isActive ? '#6366f1' : isDone ? '#22c55e' : 'var(--border)',
+        boxShadow: isActive ? '0 0 8px rgba(99,102,241,0.5)' : 'none',
+        animation: isActive ? 'pulse 2s ease-in-out infinite' : 'none',
+      }} />
 
-const GATE_CONFIG = {
-  build:    { icon: 'terminal' as const, label: 'Build'    },
-  tests:    { icon: 'flask'    as const, label: 'Tests'    },
-  lint:     { icon: 'code'     as const, label: 'Lint'     },
-  security: { icon: 'shield'   as const, label: 'Security' },
-}
-
-function QualityGatesBar({ gates }: { gates: Record<string, string> }) {
-  const entries = Object.entries(gates)
-  if (!entries.length) return null
-  return (
-    <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(255,255,255,0.04)', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-      <span style={{ fontSize: 10, color: '#4b5563', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', marginRight: 2 }}>Gates</span>
-      {entries.map(([name, status]) => {
-        const cfg = GATE_CONFIG[name as keyof typeof GATE_CONFIG] ?? { icon: 'check' as const, label: name }
-        const color = status === 'pass' ? '#34d399' : status === 'fail' ? '#ef4444' : status === 'warn' ? '#fbbf24' : '#4b5563'
-        return (
-          <span key={name} style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: 11, fontWeight: 600, color,
-            background: `${color}14`, padding: '2px 8px', borderRadius: 8,
-            border: `1px solid ${color}28`,
-          }}>
-            <Icon name={cfg.icon} size={10} style={{ color }} />
-            {cfg.label}
-          </span>
-        )
-      })}
-    </div>
-  )
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function EventRow({ event }: { event: TaskEvent }) {
-  const [expanded, setExpanded] = useState(false)
-  const cfg = CATEGORY_CONFIG[event.category] ?? CATEGORY_CONFIG.step
-  const isRunning = event.status === 'running'
-
-  return (
-    <div style={{ marginBottom: 2, animation: 'taskEventIn 0.18s ease' }}>
-      <div
-        onClick={() => event.expandable && setExpanded(x => !x)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '4px 8px',
-          borderRadius: 6,
-          cursor: event.expandable ? 'pointer' : 'default',
-          background: isRunning ? 'rgba(99,102,241,0.05)' : 'transparent',
-          transition: 'background 0.15s',
-        }}
-      >
-        {/* Icon badge */}
-        <span style={{
-          width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: isRunning
-            ? `${cfg.color}18`
-            : event.status === 'done' ? `${cfg.color}14`
-            : event.status === 'error' ? 'rgba(239,68,68,0.12)'
-            : event.status === 'warn' ? 'rgba(251,191,36,0.12)'
-            : 'rgba(255,255,255,0.04)',
-          color: isRunning ? cfg.color
-            : event.status === 'error' ? '#ef4444'
-            : event.status === 'warn' ? '#fbbf24'
-            : event.status === 'done' ? cfg.color
-            : '#4b5563',
-          transition: 'all 0.2s',
-        }}>
-          <Icon name={cfg.icon} size={11} />
-        </span>
-
-        {/* Title */}
-        <span style={{
+      {/* Phase label + summary */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
           fontSize: 12.5,
-          color: isRunning ? '#e2e8f0'
-            : event.status === 'error' ? '#ef4444'
-            : event.status === 'warn' ? '#fbbf24'
-            : event.status === 'done' ? '#cbd5e1'
-            : '#64748b',
-          fontWeight: isRunning ? 500 : 400,
-          flex: 1,
+          fontWeight: isActive ? 500 : 400,
+          color: isError ? '#ef4444' : isActive ? 'var(--text)' : isDone ? 'var(--text-muted)' : 'var(--text-faint)',
           lineHeight: 1.4,
         }}>
-          {event.title}
-        </span>
-
-        {/* Duration */}
-        {event.durationMs !== undefined && (
-          <span style={{ fontSize: 10, color: '#374151', fontFamily: 'monospace', flexShrink: 0 }}>
-            {elapsed(event.durationMs)}
+          {label}
+          <span style={{
+            color: isActive ? 'var(--text-dim)' : 'var(--text-faint)',
+            fontWeight: 400,
+            marginLeft: 6,
+          }}>
+            — {summary}
           </span>
-        )}
-
-        {/* Expand chevron */}
-        {event.expandable && event.children && event.children.length > 0 && (
-          <Icon
-            name="chevron-right"
-            size={11}
-            style={{ color: '#4b5563', flexShrink: 0, transition: 'transform 0.15s', transform: expanded ? 'rotate(90deg)' : 'rotate(0)' }}
-          />
-        )}
-
-        {/* Running spinner */}
-        {isRunning && (
-          <Icon name="loader" size={11} style={{ color: cfg.color, flexShrink: 0 }} />
-        )}
-
-        {/* Done check */}
-        {!isRunning && event.status === 'done' && (
-          <Icon name="check" size={11} style={{ color: cfg.color, flexShrink: 0, opacity: 0.7 }} />
-        )}
+        </div>
       </div>
 
-      {/* Expanded children */}
-      {expanded && event.children && event.children.length > 0 && (
-        <div style={{ marginLeft: 28, marginTop: 2, marginBottom: 4, padding: '6px 10px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6 }}>
-          {event.children.map((c, i) => (
-            <div key={i} style={{ fontSize: 11.5, color: '#64748b', padding: '2px 0', fontFamily: event.category === 'read' || event.category === 'search' ? 'monospace' : 'inherit' }}>
-              {c}
-            </div>
-          ))}
-          {event.meta?.durationMs && (
-            <div style={{ fontSize: 10, color: '#374151', marginTop: 4 }}>
-              Execution time: {elapsed(event.meta.durationMs)}
-            </div>
-          )}
-        </div>
+      {/* Running spinner */}
+      {isActive && (
+        <Icon name="loader" size={11} style={{ color: '#6366f1', flexShrink: 0 }} />
       )}
 
-      {/* Inline detail (no expand needed) */}
-      {!event.expandable && event.detail && (
-        <div style={{ marginLeft: 28, fontSize: 11, color: '#4b5563', padding: '1px 0' }}>{event.detail}</div>
+      {/* Done check */}
+      {isDone && (
+        <Icon name="check" size={11} style={{ color: '#22c55e', flexShrink: 0, opacity: 0.7 }} />
       )}
     </div>
   )
@@ -351,14 +243,13 @@ function EventRow({ event }: { event: TaskEvent }) {
 
 function ProgressBar({ progress, status }: { progress: number; status: string }) {
   return (
-    <div style={{ height: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1, overflow: 'hidden', marginBottom: 12 }}>
+    <div style={{ height: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 1, overflow: 'hidden' }}>
       <div style={{
         height: '100%',
         width: `${Math.max(2, progress)}%`,
-        background: status === 'error' ? '#ef4444' : status === 'done' ? '#34d399' : 'linear-gradient(90deg, #6366f1, #818cf8)',
+        background: status === 'error' ? '#ef4444' : status === 'done' ? '#22c55e' : '#6366f1',
         transition: 'width 0.4s ease',
         borderRadius: 1,
-        boxShadow: status !== 'error' && status !== 'done' ? '0 0 8px #6366f188' : 'none',
       }} />
     </div>
   )
@@ -460,91 +351,65 @@ export default function TaskCard({ card, userAvatar, userName, isStreaming, onRe
           }}>
 
             {/* Card header */}
-            <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', flexShrink: 0 }}>
-                    {isRunning ? 'Working' : card.status === 'error' ? 'Failed' : 'Complete'}
-                  </span>
-                  {isRunning && card.currentTool && (
-                    <span style={{ fontSize: 11, color: '#818cf8', background: 'rgba(99,102,241,0.1)', padding: '1px 8px', borderRadius: 8, fontWeight: 500 }}>
-                      {card.currentTool}
-                    </span>
-                  )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                  {card.status === 'running' && (
-                    <span style={{ fontSize: 11, color: '#475569', fontFamily: 'monospace' }}>{elapsed2}</span>
-                  )}
-                  {card.status === 'done' && card.modifiedFiles && card.modifiedFiles.length > 0 && (
-                    <span style={{ fontSize: 11, color: '#34d399' }}>{card.modifiedFiles.length} file{card.modifiedFiles.length !== 1 ? 's' : ''}</span>
-                  )}
-                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: isRunning ? 'var(--accent-light)' : card.status === 'error' ? 'var(--error)' : 'var(--success)', flexShrink: 0 }}>
+                  {isRunning ? 'Working' : card.status === 'error' ? 'Failed' : 'Complete'}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+                  {isRunning ? elapsed2 : card.modifiedFiles && card.modifiedFiles.length > 0 ? `${card.modifiedFiles.length} file${card.modifiedFiles.length !== 1 ? 's' : ''}` : ''}
+                </span>
               </div>
 
               {/* Progress bar */}
               {(isRunning || card.status === 'done' || card.status === 'error') && (
-                <div style={{ marginTop: 8 }}>
+                <div style={{ marginTop: 10 }}>
                   <ProgressBar progress={card.progress} status={card.status} />
                 </div>
               )}
             </div>
 
-            {/* Runner lifecycle track — shown for cloud jobs */}
-            {card.isCloudJob && card.runnerState && (
-              <RunnerLifecycle state={card.runnerState} runUrl={card.runUrl} />
-            )}
-
-            {/* Events */}
-            <div style={{ padding: '8px 10px', maxHeight: isRunning ? 340 : 280, overflowY: 'auto' }}>
-              {card.events.map(evt => (
-                <EventRow key={evt.id} event={evt} />
-              ))}
-
-              {/* Typing cursor when running */}
-              {isRunning && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', marginTop: 2 }}>
-                  <Icon name="loader" size={11} style={{ color: '#6366f1', flexShrink: 0 }} />
-                  <span style={{ fontSize: 11, color: '#475569' }}>
-                    {card.currentTool || 'Processing…'}
-                  </span>
-                </div>
-              )}
+            {/* Phase timeline */}
+            <div style={{ padding: '8px 14px', maxHeight: isRunning ? 280 : 220, overflowY: 'auto' }}>
+              {(() => {
+                const phases = groupEvents(card.events)
+                if (phases.length === 0 && isRunning) {
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1', animation: 'pulse 2s ease-in-out infinite' }} />
+                      <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Starting up...</span>
+                    </div>
+                  )
+                }
+                return phases.map((g, i) => (
+                  <PhaseRow key={g.type} group={g} isLast={i === phases.length - 1} />
+                ))
+              })()}
               <div ref={eventsEndRef} />
             </div>
 
-            {/* Quality gates */}
-            {card.qualityGates && Object.keys(card.qualityGates).length > 0 && (
-              <QualityGatesBar gates={card.qualityGates} />
-            )}
-
-            {/* PR / commit result bar */}
+            {/* Result bar */}
             {card.status === 'done' && (card.prUrl || card.commitHash) && (
-              <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(52,211,153,0.1)', background: 'rgba(52,211,153,0.04)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 {card.prUrl && (
                   <a href={card.prUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: 12, fontWeight: 700, color: 'white', background: 'linear-gradient(135deg, #6366f1, #818cf8)', padding: '5px 14px', borderRadius: 8, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Icon name="pr" size={12} style={{ color: 'white' }} /> View Pull Request {card.prNumber ? `#${card.prNumber}` : ''}
+                    style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-light)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Icon name="git-pull" size={12} /> Pull Request {card.prNumber ? `#${card.prNumber}` : ''}
                   </a>
                 )}
                 {card.commitHash && (
-                  <span style={{ fontSize: 11, color: '#34d399', fontFamily: 'monospace', background: 'rgba(52,211,153,0.1)', padding: '3px 8px', borderRadius: 6 }}>
-                    {card.commitHash}
-                  </span>
-                )}
-                {card.modifiedFiles && card.modifiedFiles.length > 0 && (
-                  <span style={{ fontSize: 11, color: '#64748b' }}>
-                    {card.modifiedFiles.slice(0, 3).join(', ')}{card.modifiedFiles.length > 3 ? ` +${card.modifiedFiles.length - 3} more` : ''}
+                  <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'monospace' }}>
+                    {card.commitHash.slice(0, 7)}
                   </span>
                 )}
               </div>
             )}
 
-            {/* Error retry */}
+            {/* Error */}
             {card.status === 'error' && onRetry && (
-              <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button onClick={onRetry} style={{ fontSize: 12, color: '#ef4444', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer' }}>
-                  ↺ Retry
+              <div style={{ padding: '10px 14px', borderTop: '1px solid rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button onClick={onRetry} className="db-btn db-focus" style={{ fontSize: 12, color: 'var(--error)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 'var(--radius-md)', padding: '5px 12px', cursor: 'pointer' }}>
+                  <Icon name="refresh" size={11} /> Retry
                 </button>
               </div>
             )}

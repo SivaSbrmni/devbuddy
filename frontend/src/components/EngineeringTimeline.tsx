@@ -190,40 +190,33 @@ function formatTimeAgo(dateStr: string): string {
 // SUB-COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function PhaseStepper({ 
-  phases, 
+function PhaseStepper({
+  phases,
   currentPhase,
   expandedPhase,
   onPhaseClick,
-}: { 
+}: {
   phases: ExecutionPhase[]
   currentPhase: Phase
   expandedPhase: Phase | null
   onPhaseClick: (phase: Phase) => void
 }) {
   const currentIndex = PHASE_ORDER.indexOf(currentPhase)
-  
+
   return (
-    <div style={{ 
-      display: 'flex', 
+    <div style={{
+      display: 'flex',
       alignItems: 'center',
       gap: 4,
-      padding: '12px 0',
+      padding: '10px 0',
     }}>
       {PHASE_ORDER.map((phaseId, index) => {
         const phase = phases.find(p => p.id === phaseId)
-        const config = PHASES_CONFIG[phaseId]
         const isCompleted = index < currentIndex
         const isActive = phaseId === currentPhase
-        const isExpanded = expandedPhase === phaseId
-        
-        // Calculate progress for active phase
-        const progress = isActive && phase?.stats?.duration 
-          ? Math.min((phase.stats.duration / 60) * 100, 95) // Assume 60s per phase max
-          : isCompleted ? 100 : 0
-        
+
         return (
-          <div 
+          <div
             key={phaseId}
             onClick={() => onPhaseClick(phaseId)}
             style={{
@@ -231,93 +224,27 @@ function PhaseStepper({
               flexDirection: 'column',
               alignItems: 'center',
               cursor: 'pointer',
-              position: 'relative',
               flex: 1,
             }}
           >
-            {/* Step Circle */}
+            {/* Dot */}
             <div style={{
-              width: 32,
-              height: 32,
+              width: 10,
+              height: 10,
               borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: isCompleted 
-                ? 'linear-gradient(135deg, #22c55e, #16a34a)'
-                : isActive 
-                  ? 'linear-gradient(135deg, #6366f1, #4f46e5)'
-                  : 'var(--bg-card)',
-              border: isActive 
-                ? '2px solid #6366f1'
-                : isCompleted 
-                  ? '2px solid #22c55e'
-                  : '2px solid var(--border)',
-              transition: 'all 200ms ease-in-out',
-              boxShadow: isActive 
-                ? '0 0 20px rgba(99, 102, 241, 0.4)'
-                : 'none',
-            }}>
-              {isCompleted ? (
-                <Icon name="check" size={16} color="#fff" />
-              ) : isActive ? (
-                <div 
-                  className="shimmer"
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: '#fff',
-                  }}
-                />
-              ) : (
-                <span style={{ 
-                  fontSize: 12, 
-                      color: 'var(--text-muted)',
-                      fontWeight: 600,
-                }}>
-                  {index + 1}
-                </span>
-              )}
-            </div>
-            
-            {/* Progress Bar */}
-            {isActive && (
-              <div style={{
-                position: 'absolute',
-                bottom: -4,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: 40,
-                height: 3,
-                background: 'var(--border)',
-                borderRadius: 2,
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  width: `${progress}%`,
-                  height: '100%',
-                  background: 'linear-gradient(90deg, #6366f1, #8b5cf6)',
-                  borderRadius: 2,
-                  transition: 'width 300ms ease-out',
-                }} />
-              </div>
-            )}
-            
-            {/* Connector Line */}
-            {index < PHASE_ORDER.length - 1 && (
-              <div style={{
-                position: 'absolute',
-                top: 15,
-                right: -50,
-                width: 40,
-                height: 2,
-                background: index < currentIndex 
-                  ? 'linear-gradient(90deg, #22c55e, #22c55e)'
+              background: isCompleted
+                ? '#22c55e'
+                : isActive
+                  ? '#6366f1'
                   : 'var(--border)',
-                transition: 'all 200ms ease-in-out',
-              }} />
-            )}
+              border: isActive
+                ? '2px solid #6366f1'
+                : 'none',
+              transition: 'all 200ms ease-in-out',
+              boxShadow: isActive
+                ? '0 0 8px rgba(99, 102, 241, 0.4)'
+                : 'none',
+            }} />
           </div>
         )
       })}
@@ -326,45 +253,31 @@ function PhaseStepper({
 }
 
 function LiveThinking({ phase }: { phase: ExecutionPhase }) {
-  const [messageIndex, setMessageIndex] = useState(0)
-  
-  const messages = phase.thinking || THINKING_MESSAGES[phase.id] || ['Processing...']
-  
-  useEffect(() => {
-    if (phase.status !== 'active') return
-    
-    const interval = setInterval(() => {
-      setMessageIndex(prev => (prev + 1) % messages.length)
-    }, 3000)
-    
-    return () => clearInterval(interval)
-  }, [phase.status, messages.length])
-  
   if (phase.status !== 'active') return null
-  
+
+  const message = phase.thinking?.[phase.thinking.length - 1]
+    || THINKING_MESSAGES[phase.id]?.[0]
+    || 'Working...'
+
   return (
     <div style={{
       display: 'flex',
       alignItems: 'center',
       gap: 8,
-      padding: '8px 12px',
-      background: 'rgba(99, 102, 241, 0.08)',
-      borderRadius: 8,
+      padding: '6px 0',
       fontSize: 13,
-      color: '#6366f1',
+      color: 'var(--accent-light)',
     }}>
-      <div 
+      <div
         className="pulse"
         style={{
           width: 6,
           height: 6,
           borderRadius: '50%',
-          background: '#6366f1',
+          background: 'var(--accent)',
         }}
       />
-      <span style={{ fontWeight: 500 }}>
-        {messages[messageIndex]}
-      </span>
+      <span>{message}</span>
     </div>
   )
 }
