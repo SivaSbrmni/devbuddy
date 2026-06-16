@@ -907,9 +907,10 @@ async def run_cloud_agent(
     Dispatch a GitHub Actions job for this task and stream its lifecycle as SSE.
     Falls back gracefully if Actions is not available.
     """
-    task_id = str(uuid.uuid4())[:8]
-    slug = re.sub(r"[^a-z0-9-]", "-", task[:40].lower()).strip("-")
-    branch_name = f"devbuddy/{slug}-{task_id}"
+    # Use semantic branch naming (no random hashes)
+    from app.services.semantic_branch import generate_semantic_branch_name
+    branch_name = generate_semantic_branch_name(task)
+    task_id = branch_name.split("/")[-1].replace("-", "")[:8]  # Derive task ID from semantic name
 
     job = CloudJob(
         task_id=task_id,

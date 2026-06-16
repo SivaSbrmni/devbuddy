@@ -386,8 +386,10 @@ async def run_github_agent(
 ) -> AsyncGenerator[str, None]:
     """Full autonomous GitHub engineering agent. Yields SSE strings."""
 
-    task_id = str(uuid.uuid4())[:8]
-    branch_name = f"devbuddy/{re.sub(r'[^a-z0-9-]', '-', task[:40].lower()).strip('-')}-{task_id}"
+    # Use semantic branch naming (no random hashes)
+    from app.services.semantic_branch import generate_semantic_branch_name
+    branch_name = generate_semantic_branch_name(task)
+    task_id = branch_name.split("/")[-1].replace("-", "")[:8]  # Derive task ID from semantic name
 
     state = AgentState(
         conversation_id=conversation_id or task_id,
