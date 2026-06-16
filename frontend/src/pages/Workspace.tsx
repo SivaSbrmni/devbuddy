@@ -1667,42 +1667,92 @@ export default function Workspace() {
         <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '24px 0' }}>
             {messages.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 20, padding: '40px 24px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 28, padding: '40px 24px' }}>
                 {/* Welcome */}
-                <div style={{ textAlign: 'center', maxWidth: 480 }}>
-                  <div style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-1px', background: 'linear-gradient(135deg, var(--text), var(--accent-hover))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: 8 }}>DevBuddy</div>
-                  <p style={{ color: 'var(--text-dim)', fontSize: 15, lineHeight: 1.6 }}>Your AI engineering co-pilot. Build, debug, and ship faster.</p>
+                <div style={{ textAlign: 'center', maxWidth: 520 }}>
+                  <div style={{
+                    fontSize: 36,
+                    fontWeight: 800,
+                    letterSpacing: '-1.5px',
+                    background: 'linear-gradient(135deg, var(--text) 0%, var(--accent-hover) 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    marginBottom: 12,
+                  }}>
+                    {user?.name ? `Welcome back, ${user.name.split(' ')[0]}` : 'Welcome to DevBuddy'}
+                  </div>
+                  <p style={{ color: 'var(--text-dim)', fontSize: 16, lineHeight: 1.6, margin: 0 }}>
+                    Describe what you want to build. DevBuddy will design the architecture, write the code, run tests, and deploy it.
+                  </p>
                 </div>
 
                 {/* Quick actions grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, maxWidth: 480, width: '100%' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, maxWidth: 520, width: '100%' }}>
                   {[
-                    { label: 'Build a REST API', icon: 'zap', desc: 'FastAPI + PostgreSQL' },
-                    { label: 'React Dashboard', icon: 'brain', desc: 'Charts + auth' },
-                    { label: 'CI/CD Pipeline', icon: 'rocket', desc: 'GitHub Actions' },
-                    { label: 'Debug Python', icon: 'wrench', desc: 'Trace + fix' },
+                    { label: 'Build a REST API', icon: 'zap', desc: 'FastAPI + PostgreSQL + tests' },
+                    { label: 'React Dashboard', icon: 'brain', desc: 'Charts, auth, and deployment' },
+                    { label: 'CI/CD Pipeline', icon: 'rocket', desc: 'GitHub Actions workflow' },
+                    { label: 'Debug Python', icon: 'wrench', desc: 'Trace, fix, and verify' },
                   ].map(s => (
-                    <button key={s.label} onClick={() => setInput(s.label)} className="db-btn db-focus" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px', textAlign: 'left', cursor: 'pointer', transition: 'all var(--transition-base)' }} onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'; e.currentTarget.style.background = 'rgba(99,102,241,0.06)'; e.currentTarget.style.transform = 'translateY(-1px)'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--bg-card)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <Icon name={s.icon as any} size={16} style={{ color: 'var(--accent-hover)' }} />
-                        <span style={{ color: 'var(--text)', fontSize: 13, fontWeight: 600 }}>{s.label}</span>
+                    <button
+                      key={s.label}
+                      onClick={() => setInput(s.label)}
+                      className="db-btn db-focus"
+                      style={{
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-lg)',
+                        padding: '20px',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'
+                        e.currentTarget.style.background = 'rgba(99,102,241,0.06)'
+                        e.currentTarget.style.transform = 'translateY(-2px)'
+                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = 'var(--border)'
+                        e.currentTarget.style.background = 'var(--bg-card)'
+                        e.currentTarget.style.transform = 'translateY(0)'
+                        e.currentTarget.style.boxShadow = 'none'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 'var(--radius-md)',
+                          background: 'rgba(99,102,241,0.1)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}>
+                          <Icon name={s.icon as any} size={16} style={{ color: 'var(--accent-hover)' }} />
+                        </div>
+                        <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>{s.label}</span>
                       </div>
-                      <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{s.desc}</span>
+                      <span style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.5, paddingLeft: 42 }}>{s.desc}</span>
                     </button>
                   ))}
                 </div>
 
                 {/* Tips row */}
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-faint)', fontSize: 12 }}>
-                    <Icon name="command" size={12} /> <span>⌘K for commands</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-faint)', fontSize: 12 }}>
-                    <Icon name="send" size={12} /> <span>Enter to send</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-faint)', fontSize: 12 }}>
-                    <Icon name="folder" size={12} /> <span>Drop files anywhere</span>
-                  </div>
+                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {[
+                    { icon: 'command', label: '⌘K commands' },
+                    { icon: 'send', label: 'Enter to send' },
+                    { icon: 'folder', label: 'Drop files anywhere' },
+                  ].map(tip => (
+                    <div key={tip.label} style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-faint)', fontSize: 12 }}>
+                      <Icon name={tip.icon as any} size={12} /> <span>{tip.label}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             ) : (
