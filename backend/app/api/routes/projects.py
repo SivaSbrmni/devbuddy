@@ -25,32 +25,33 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 @router.post("", response_model=ProjectOut, status_code=201)
-async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db)) -> Project:
+async def create_project(body: ProjectCreate, db: AsyncSession = Depends(get_db)) -> ProjectOut:
     project = Project(**body.model_dump())
     db.add(project)
     await db.flush()
-    return project
+    return ProjectOut.model_validate(project)
 
 
 @router.get("", response_model=list[ProjectOut])
-async def list_projects(db: AsyncSession = Depends(get_db)) -> list[Project]:
+async def list_projects(db: AsyncSession = Depends(get_db)) -> list[ProjectOut]:
     result = await db.execute(select(Project).order_by(Project.created_at.desc()))
-    return list(result.scalars().all())
+    projects = list(result.scalars().all())
+    return [ProjectOut.model_validate(p) for p in projects]
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
-async def get_project(project_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> Project:
+async def get_project(project_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> ProjectOut:
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
     if not project:
         raise HTTPException(404, "Project not found")
-    return project
+    return ProjectOut.model_validate(project)
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
 async def update_project(
     project_id: uuid.UUID, body: ProjectUpdate, db: AsyncSession = Depends(get_db)
-) -> Project:
+) -> ProjectOut:
     result = await db.execute(select(Project).where(Project.id == project_id))
     project = result.scalar_one_or_none()
     if not project:
@@ -58,7 +59,7 @@ async def update_project(
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(project, field, value)
     await db.flush()
-    return project
+    return ProjectOut.model_validate(project)
 
 
 @router.delete("/{project_id}", status_code=204, response_model=None)
@@ -163,8 +164,9 @@ async def run_coding_task(
 
 # ── Tasks ───────────────────────────────────────────────────────────
 @router.get("/{project_id}/tasks", response_model=list[TaskOut])
-async def list_tasks(project_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> list[Task]:
+async def list_tasks(project_id: uuid.UUID, db: AsyncSession = Depends(get_db)) -> list[TaskOut]:
     result = await db.execute(
         select(Task).where(Task.project_id == project_id).order_by(Task.created_at.desc())
     )
-    return list(result.scalars().all())
+    tasks = list(result.scalars().all())
+    return [TaskOut.model_validate(t) for t in tasks]

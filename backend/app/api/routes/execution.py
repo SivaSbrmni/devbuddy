@@ -22,11 +22,12 @@ router = APIRouter(tags=["execution"])
 @router.get("/projects/{project_id}/runs", response_model=list[RunOut])
 async def list_runs(
     project_id: uuid.UUID, db: AsyncSession = Depends(get_db)
-) -> list[Run]:
+) -> list[RunOut]:
     result = await db.execute(
         select(Run).where(Run.project_id == project_id).order_by(Run.created_at.desc()).limit(50)
     )
-    return list(result.scalars().all())
+    runs = list(result.scalars().all())
+    return [RunOut.model_validate(r) for r in runs]
 
 
 @router.post("/projects/{project_id}/runs", status_code=201)

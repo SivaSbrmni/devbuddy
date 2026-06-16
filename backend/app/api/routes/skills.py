@@ -15,9 +15,10 @@ router = APIRouter(prefix="/skills", tags=["skills"])
 @router.get("", response_model=list[SkillOut])
 async def list_skills(
     category: str | None = None, db: AsyncSession = Depends(get_db)
-) -> list:
+) -> list[SkillOut]:
     mgr = SkillManager(db)
-    return await mgr.list_skills(category)
+    skills = await mgr.list_skills(category)
+    return [SkillOut.model_validate(s) for s in skills]
 
 
 @router.post("/seed")
