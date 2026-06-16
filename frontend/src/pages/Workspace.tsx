@@ -1536,20 +1536,23 @@ export default function Workspace() {
             {/* Mobile menu */}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="db-btn"
+              className="db-btn db-focus"
+              aria-label="Open sidebar"
               style={{
                 display: isMobile ? 'flex' : 'none',
                 background: 'none',
                 border: 'none',
                 color: 'var(--text-muted)',
                 cursor: 'pointer',
-                width: 32,
-                height: 32,
+                width: 44,
+                height: 44,
                 alignItems: 'center',
                 justifyContent: 'center',
+                borderRadius: 'var(--radius-md)',
+                marginLeft: -6,
               }}
             >
-              <Icon name="menu" size={18} />
+              <Icon name="menu" size={20} />
             </button>
 
             {/* Title */}
@@ -1659,9 +1662,9 @@ export default function Workspace() {
             {messages.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 28, padding: '40px 24px' }}>
                 {/* Welcome */}
-                <div style={{ textAlign: 'center', maxWidth: 520 }}>
+                <div style={{ textAlign: 'center', maxWidth: 520, padding: isMobile ? '0 8px' : 0 }}>
                   <div style={{
-                    fontSize: 28,
+                    fontSize: isMobile ? 22 : 28,
                     fontWeight: 700,
                     color: 'var(--text)',
                     letterSpacing: '-0.5px',
@@ -1676,7 +1679,7 @@ export default function Workspace() {
                       return user?.name ? `Welcome back, ${user.name.split(' ')[0]}` : 'Welcome to DevBuddy'
                     })()}
                   </div>
-                  <p style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
+                  <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? 14 : 15, lineHeight: 1.6, margin: 0 }}>
                     {activeRepo
                       ? `Working in ${activeRepo.name}. Describe what you want to build — DevBuddy will write code, run tests, and open a pull request.`
                       : 'Describe what you want to build. DevBuddy will design the architecture, write the code, run tests, and deploy it.'}
@@ -1692,15 +1695,17 @@ export default function Workspace() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: 10,
-                      padding: '12px 20px',
+                      padding: isMobile ? '10px 14px' : '12px 20px',
                       background: 'var(--bg-card)',
                       border: '1px dashed var(--accent)',
                       borderRadius: 'var(--radius-lg)',
                       color: 'var(--accent-light)',
-                      fontSize: 14,
+                      fontSize: isMobile ? 13 : 14,
                       fontWeight: 500,
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
+                      textAlign: 'left',
+                      lineHeight: 1.4,
                     }}
                     onMouseEnter={e => {
                       e.currentTarget.style.background = 'rgba(99,102,241,0.08)'
@@ -1711,12 +1716,12 @@ export default function Workspace() {
                   >
                     <Icon name="git" size={16} />
                     <span>Connect a GitHub repository to start coding</span>
-                    <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 4 }}>(optional)</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 4, flexShrink: 0 }}>(optional)</span>
                   </button>
                 )}
 
                 {/* Quick actions grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, maxWidth: 520, width: '100%' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 12, maxWidth: 520, width: '100%' }}>
                   {[
                     { label: 'Build a REST API', icon: 'zap', desc: 'FastAPI + PostgreSQL + tests' },
                     { label: 'React Dashboard', icon: 'brain', desc: 'Charts, auth, and deployment' },
@@ -1731,13 +1736,13 @@ export default function Workspace() {
                         background: 'var(--bg-card)',
                         border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-lg)',
-                        padding: '20px',
+                        padding: isMobile ? '14px 16px' : '20px',
                         textAlign: 'left',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 8,
+                        gap: isMobile ? 6 : 8,
                       }}
                       onMouseEnter={e => {
                         e.currentTarget.style.borderColor = 'rgba(99,102,241,0.35)'
@@ -1750,19 +1755,20 @@ export default function Workspace() {
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{
-                          width: 32,
-                          height: 32,
+                          width: isMobile ? 28 : 32,
+                          height: isMobile ? 28 : 32,
                           borderRadius: 'var(--radius-md)',
                           background: 'rgba(99,102,241,0.1)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
+                          flexShrink: 0,
                         }}>
-                          <Icon name={s.icon as any} size={16} style={{ color: 'var(--accent-hover)' }} />
+                          <Icon name={s.icon as any} size={isMobile ? 14 : 16} style={{ color: 'var(--accent-hover)' }} />
                         </div>
-                        <span style={{ color: 'var(--text)', fontSize: 14, fontWeight: 600 }}>{s.label}</span>
+                        <span style={{ color: 'var(--text)', fontSize: isMobile ? 13 : 14, fontWeight: 600 }}>{s.label}</span>
                       </div>
-                      <span style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.5, paddingLeft: 42 }}>{s.desc}</span>
+                      <span style={{ color: 'var(--text-dim)', fontSize: isMobile ? 12 : 13, lineHeight: 1.5, paddingLeft: isMobile ? 38 : 42 }}>{s.desc}</span>
                     </button>
                   ))}
                 </div>
@@ -1899,26 +1905,26 @@ export default function Workspace() {
         {settingsOpen && (
           <div
             onClick={() => setSettingsOpen(false)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'fadeIn 0.15s ease' }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', zIndex: 200, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 20, animation: 'fadeIn 0.15s ease' }}
           >
-          <div onClick={e => e.stopPropagation()} style={{
+          <div onClick={e => e.stopPropagation()} className={isMobile ? 'mobile-sheet' : ''} style={{
             width: '100%',
-            maxWidth: 440,
-            maxHeight: '85vh',
+            maxWidth: isMobile ? '100%' : 440,
+            maxHeight: isMobile ? '90vh' : '85vh',
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-xl)',
+            borderRadius: isMobile ? 'var(--radius-xl) var(--radius-xl) 0 0' : 'var(--radius-xl)',
             boxShadow: '0 24px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            animation: 'modalContent 0.2s ease',
+            animation: isMobile ? undefined : 'modalContent 0.2s ease',
           }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <h2 style={{ margin: 0, fontSize: 15, color: 'var(--text)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="settings" size={16} /> Settings
               </h2>
-              <button onClick={() => setSettingsOpen(false)} className="db-btn db-focus" aria-label="Close settings" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: '4px 6px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'none' }}><Icon name="close" size={16} /></button>
+              <button onClick={() => setSettingsOpen(false)} className="db-btn db-focus" aria-label="Close settings" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'none' }}><Icon name="close" size={18} /></button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
               <div style={{ marginBottom: 20, padding: 16, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 'var(--radius-lg)' }}>
@@ -2069,7 +2075,7 @@ export default function Workspace() {
         />
 
         {/* Input area */}
-        <div style={{ padding: '16px 20px 20px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+        <div style={{ padding: isMobile ? '12px 16px max(16px, env(safe-area-inset-bottom))' : '16px 20px 20px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
             {/* Main input container */}
             <div
@@ -2224,9 +2230,10 @@ export default function Workspace() {
                     disabled={!input.trim() && !loading}
                     title={loading ? 'Cancel' : 'Send'}
                     className="db-btn db-focus"
+                    aria-label={loading ? 'Cancel request' : 'Send message'}
                     style={{
-                      width: 34,
-                      height: 34,
+                      width: 44,
+                      height: 44,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -2244,7 +2251,7 @@ export default function Workspace() {
                     onMouseEnter={e => { if (input.trim() && !loading) { e.currentTarget.style.boxShadow = '0 4px 16px rgba(99,102,241,0.4)'; e.currentTarget.style.transform = 'translateY(-1px) scale(1.05)' }}}
                     onMouseLeave={e => { if (input.trim() && !loading) { e.currentTarget.style.boxShadow = '0 2px 12px rgba(99,102,241,0.3)'; e.currentTarget.style.transform = 'translateY(0) scale(1)' }}}
                   >
-                    {loading ? <Icon name="close" size={14} /> : <Icon name="send" size={14} />}
+                    {loading ? <Icon name="close" size={16} /> : <Icon name="send" size={16} />}
                   </button>
                 </div>
               </div>

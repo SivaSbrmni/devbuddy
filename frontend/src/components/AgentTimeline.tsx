@@ -66,7 +66,14 @@ type Tab = 'overview' | 'plan' | 'output'
 
 export default function AgentTimeline({ run, isOpen, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('overview')
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     if (run?.status === 'running') {
@@ -84,12 +91,25 @@ export default function AgentTimeline({ run, isOpen, onClose }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label="Execution details"
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(8px)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, animation: 'fadeIn 0.15s ease' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(8px)', zIndex: 400, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 20, animation: 'fadeIn 0.15s ease' }}
       onClick={onClose}
     >
       <div
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 640, maxHeight: '92vh', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'modalContent 0.2s ease', boxShadow: '0 32px 80px rgba(0,0,0,0.6)' }}
+        className={isMobile ? 'mobile-sheet' : ''}
+        style={{
+          width: '100%',
+          maxWidth: isMobile ? '100%' : 640,
+          maxHeight: isMobile ? '92vh' : '92vh',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: isMobile ? 'var(--radius-xl) var(--radius-xl) 0 0' : 'var(--radius-xl)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          animation: isMobile ? undefined : 'modalContent 0.2s ease',
+          boxShadow: '0 32px 80px rgba(0,0,0,0.6)',
+        }}
       >
         {/* Header */}
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
