@@ -1,6 +1,7 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import ErrorBoundary from './components/ErrorBoundary'
 import LandingPage from './pages/LandingPage'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
@@ -18,24 +19,55 @@ function AuthSkeleton() {
 
 function AppRoutes() {
   const { user, loading } = useAuth()
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+
+  useEffect(() => {
+    const on = () => { setIsOnline(true) }
+    const off = () => { setIsOnline(false) }
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
 
   if (loading) {
     return <AuthSkeleton />
   }
 
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route
-        path="/app"
-        element={
-          <Suspense fallback={<AuthSkeleton />}>
-            {user ? <Workspace /> : <LoginGate />}
-          </Suspense>
-        }
-      />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      {!isOnline && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9999,
+          background: 'var(--warning)',
+          color: '#000',
+          fontSize: 13,
+          fontWeight: 600,
+          padding: '8px 16px',
+          textAlign: 'center',
+        }}>
+          You are offline. Some features may not work until your connection is restored.
+        </div>
+      )}
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/app"
+          element={
+            <Suspense fallback={<AuthSkeleton />}>
+              {user ? <Workspace /> : <LoginGate />}
+            </Suspense>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   )
 }
 
@@ -43,7 +75,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ErrorBoundary>
+          <AppRoutes />
+        </ErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   )
