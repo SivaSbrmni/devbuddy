@@ -1313,22 +1313,9 @@ export default function Workspace() {
         transition: 'left 0.3s ease',
         boxSizing: 'border-box',
       }}>
-        {/* App logo + new chat */}
-        <div style={{ padding: '4px 12px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{
-              width: 28,
-              height: 28,
-              borderRadius: 8,
-              background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              boxShadow: '0 2px 8px rgba(99,102,241,0.35)',
-            }}>
-              <Icon name="sparkles" size={14} style={{ color: 'white' }} />
-            </div>
+        {/* App header */}
+        <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.2px' }}>DevBuddy</span>
             <SyncIndicator />
           </div>
@@ -1507,18 +1494,18 @@ export default function Workspace() {
               <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.name || 'User'}</div>
               <div style={{ fontSize: 10, color: 'var(--text-faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user?.email}</div>
             </div>
-            <Icon name="command" size={12} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
+            <Icon name="chevron-down" size={12} style={{ color: 'var(--text-faint)', flexShrink: 0, transition: 'transform var(--transition-fast)', transform: userMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
           </div>
           {userMenuOpen && (
             <div
               style={{ position: 'absolute', bottom: '100%', left: 12, right: 12, marginBottom: 4, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', overflow: 'hidden', animation: 'fadeIn 0.12s ease', zIndex: 100 }}
             >
               <button onClick={() => { setPaletteOpen(true); setUserMenuOpen(false) }} className="db-btn db-focus" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}>
-                <Icon name="command" size={14} /> Commands
+                <Icon name="command" size={14} /> Command Palette
                 <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-faint)', background: 'var(--bg-card)', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace' }}>⌘K</span>
               </button>
               <button onClick={() => { setSettingsOpen(true); setUserMenuOpen(false) }} className="db-btn db-focus" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', borderBottom: '1px solid var(--border-subtle)' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)' }}>
-                <Icon name="settings" size={14} /> API Keys
+                <Icon name="settings" size={14} /> Settings
               </button>
               <button onClick={() => { logout(); setUserMenuOpen(false) }} className="db-btn db-focus" style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--error)', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left' }} onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.06)' }} onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
                 <Icon name="logout" size={14} /> Sign out
@@ -1553,21 +1540,9 @@ export default function Workspace() {
               <Icon name="menu" size={18} />
             </button>
 
-            {/* Title + mode */}
+            {/* Title */}
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {active?.title || 'New conversation'}
-            </div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              background: agentMode ? 'rgba(16,185,129,0.08)' : 'transparent',
-              border: agentMode ? '1px solid rgba(16,185,129,0.15)' : '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-full)',
-              padding: '2px 8px',
-            }}>
-              <Icon name={agentMode ? 'agent' : 'chat'} size={10} />
-              <span style={{ fontSize: 10, color: agentMode ? 'var(--success)' : 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{agentMode ? 'Agent' : 'Chat'}</span>
             </div>
 
             {/* AI Thinking indicator */}
@@ -1674,17 +1649,15 @@ export default function Workspace() {
                 {/* Welcome */}
                 <div style={{ textAlign: 'center', maxWidth: 520 }}>
                   <div style={{
-                    fontSize: 36,
-                    fontWeight: 800,
-                    letterSpacing: '-1.5px',
-                    background: 'linear-gradient(135deg, var(--text) 0%, var(--accent-hover) 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    marginBottom: 12,
+                    fontSize: 28,
+                    fontWeight: 700,
+                    color: 'var(--text)',
+                    letterSpacing: '-0.5px',
+                    marginBottom: 10,
                   }}>
                     {user?.name ? `Welcome back, ${user.name.split(' ')[0]}` : 'Welcome to DevBuddy'}
                   </div>
-                  <p style={{ color: 'var(--text-dim)', fontSize: 16, lineHeight: 1.6, margin: 0 }}>
+                  <p style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
                     Describe what you want to build. DevBuddy will design the architecture, write the code, run tests, and deploy it.
                   </p>
                 </div>
@@ -1714,16 +1687,12 @@ export default function Workspace() {
                         gap: 8,
                       }}
                       onMouseEnter={e => {
-                        e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)'
-                        e.currentTarget.style.background = 'rgba(99,102,241,0.06)'
-                        e.currentTarget.style.transform = 'translateY(-2px)'
-                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.2)'
+                        e.currentTarget.style.borderColor = 'rgba(99,102,241,0.35)'
+                        e.currentTarget.style.background = 'rgba(99,102,241,0.05)'
                       }}
                       onMouseLeave={e => {
                         e.currentTarget.style.borderColor = 'var(--border)'
                         e.currentTarget.style.background = 'var(--bg-card)'
-                        e.currentTarget.style.transform = 'translateY(0)'
-                        e.currentTarget.style.boxShadow = 'none'
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1745,18 +1714,6 @@ export default function Workspace() {
                   ))}
                 </div>
 
-                {/* Tips row */}
-                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  {[
-                    { icon: 'command', label: '⌘K commands' },
-                    { icon: 'send', label: 'Enter to send' },
-                    { icon: 'folder', label: 'Drop files anywhere' },
-                  ].map(tip => (
-                    <div key={tip.label} style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-faint)', fontSize: 12 }}>
-                      <Icon name={tip.icon as any} size={12} /> <span>{tip.label}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
             ) : (
               <div style={{ maxWidth: 780, margin: '0 auto', padding: '0 20px' }}>
@@ -1906,7 +1863,7 @@ export default function Workspace() {
           }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <h2 style={{ margin: 0, fontSize: 15, color: 'var(--text)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Icon name="settings" size={16} /> API Keys
+                <Icon name="settings" size={16} /> Settings
               </h2>
               <button onClick={() => setSettingsOpen(false)} className="db-btn db-focus" aria-label="Close settings" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: '4px 6px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'none' }}><Icon name="close" size={16} /></button>
             </div>
