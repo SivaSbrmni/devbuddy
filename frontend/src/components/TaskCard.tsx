@@ -174,10 +174,12 @@ function liveElapsed(startedAt: number): string {
 // ── Phase row: one row per phase, not per event ─────────────────────────────
 
 function PhaseRow({ group, isLast }: { group: PhaseGroup; isLast: boolean }) {
-  const { label, icon, status, events } = group
+  const { label, status, events } = group
   const isActive = status === 'active'
   const isDone = status === 'done'
   const isError = status === 'error'
+  const [expanded, setExpanded] = useState(false)
+  const canExpand = events.length > 1 && (isDone || isError)
 
   // Build a human summary from the events
   const latestEvent = events[events.length - 1]
@@ -190,52 +192,96 @@ function PhaseRow({ group, isLast }: { group: PhaseGroup; isLast: boolean }) {
         : 'Waiting...'
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 10,
-      padding: '6px 0',
-      opacity: status === 'pending' ? 0.5 : 1,
-      transition: 'opacity 0.3s ease',
-    }}>
-      {/* Status dot */}
-      <div style={{
-        width: 8,
-        height: 8,
-        borderRadius: '50%',
-        flexShrink: 0,
-        background: isError ? '#ef4444' : isActive ? '#6366f1' : isDone ? '#22c55e' : 'var(--border)',
-        boxShadow: isActive ? '0 0 8px rgba(99,102,241,0.5)' : 'none',
-        animation: isActive ? 'pulse 2s ease-in-out infinite' : 'none',
-      }} />
-
-      {/* Phase label + summary */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+    <div>
+      <div
+        onClick={() => canExpand && setExpanded(x => !x)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '6px 0',
+          opacity: status === 'pending' ? 0.5 : 1,
+          transition: 'opacity 0.3s ease',
+          cursor: canExpand ? 'pointer' : 'default',
+        }}
+      >
+        {/* Status dot */}
         <div style={{
-          fontSize: 12.5,
-          fontWeight: isActive ? 500 : 400,
-          color: isError ? '#ef4444' : isActive ? 'var(--text)' : isDone ? 'var(--text-muted)' : 'var(--text-faint)',
-          lineHeight: 1.4,
-        }}>
-          {label}
-          <span style={{
-            color: isActive ? 'var(--text-dim)' : 'var(--text-faint)',
-            fontWeight: 400,
-            marginLeft: 6,
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          flexShrink: 0,
+          background: isError ? '#ef4444' : isActive ? '#6366f1' : isDone ? '#22c55e' : 'var(--border)',
+          boxShadow: isActive ? '0 0 8px rgba(99,102,241,0.5)' : 'none',
+          animation: isActive ? 'pulse 2s ease-in-out infinite' : 'none',
+        }} />
+
+        {/* Phase label + summary */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 12.5,
+            fontWeight: isActive ? 500 : 400,
+            color: isError ? '#ef4444' : isActive ? 'var(--text)' : isDone ? 'var(--text-muted)' : 'var(--text-faint)',
+            lineHeight: 1.4,
           }}>
-            — {summary}
-          </span>
+            {label}
+            <span style={{
+              color: isActive ? 'var(--text-dim)' : 'var(--text-faint)',
+              fontWeight: 400,
+              marginLeft: 6,
+            }}>
+              — {summary}
+            </span>
+          </div>
         </div>
+
+        {/* Expand chevron (done phases with multiple events) */}
+        {canExpand && (
+          <Icon
+            name="chevron-down"
+            size={11}
+            style={{
+              color: 'var(--text-faint)',
+              flexShrink: 0,
+              transition: 'transform 0.15s ease',
+              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            }}
+          />
+        )}
+
+        {/* Running spinner */}
+        {isActive && (
+          <Icon name="loader" size={11} style={{ color: '#6366f1', flexShrink: 0 }} />
+        )}
+
+        {/* Done check */}
+        {isDone && !canExpand && (
+          <Icon name="check" size={11} style={{ color: '#22c55e', flexShrink: 0, opacity: 0.7 }} />
+        )}
       </div>
 
-      {/* Running spinner */}
-      {isActive && (
-        <Icon name="loader" size={11} style={{ color: '#6366f1', flexShrink: 0 }} />
-      )}
-
-      {/* Done check */}
-      {isDone && (
-        <Icon name="check" size={11} style={{ color: '#22c55e', flexShrink: 0, opacity: 0.7 }} />
+      {/* Expanded event list */}
+      {expanded && canExpand && (
+        <div style={{
+          marginLeft: 18,
+          paddingLeft: 12,
+          borderLeft: '1px solid var(--border-subtle)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+          animation: 'fadeIn 0.15s ease',
+        }}>
+          {events.map((evt, i) => (
+            <div key={i} style={{
+              fontSize: 12,
+              color: evt.status === 'error' ? '#ef4444' : 'var(--text-dim)',
+              lineHeight: 1.4,
+              padding: '2px 0',
+            }}>
+              {evt.title}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
@@ -389,12 +435,17 @@ export default function TaskCard({ card, userAvatar, userName, isStreaming, onRe
             </div>
 
             {/* Result bar */}
-            {card.status === 'done' && (card.prUrl || card.commitHash) && (
+            {card.status === 'done' && (card.prUrl || card.commitHash || (card.modifiedFiles && card.modifiedFiles.length > 0)) && (
               <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                {card.modifiedFiles && card.modifiedFiles.length > 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Icon name="file" size={12} /> {card.modifiedFiles.length} file{card.modifiedFiles.length !== 1 ? 's' : ''}
+                  </span>
+                )}
                 {card.prUrl && (
                   <a href={card.prUrl} target="_blank" rel="noopener noreferrer"
                     style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-light)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Icon name="git-pull" size={12} /> Pull Request {card.prNumber ? `#${card.prNumber}` : ''}
+                    <Icon name="git-pull" size={12} /> Review PR {card.prNumber ? `#${card.prNumber}` : ''}
                   </a>
                 )}
                 {card.commitHash && (

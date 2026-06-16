@@ -128,6 +128,24 @@ export default function LandingPage() {
         ))}
       </div>
 
+      {/* Sign in link for returning users */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 'var(--space-6)' }}>
+        <a href="/app" style={{
+          fontSize: 14, fontWeight: 600, color: 'var(--text)',
+          textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6,
+          padding: '8px 16px', borderRadius: 'var(--radius-md)',
+          border: '1px solid var(--border)',
+          background: 'var(--bg-card)',
+          transition: 'all var(--transition-fast)',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent-light)' }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text)' }}
+        >
+          Sign In
+        </a>
+        <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>Already have access?</span>
+      </div>
+
       {/* Card */}
       <main id="main-content" style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -193,7 +211,47 @@ export default function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer style={{ marginTop: 'var(--space-8)', color: 'var(--text-faint)', fontSize: '13px', animation: 'fadeIn 1s ease' }}>
+      <footer style={{
+        marginTop: 'var(--space-8)',
+        color: 'var(--text-faint)',
+        fontSize: '13px',
+        animation: 'fadeIn 1s ease',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 'var(--space-3)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <a href="https://github.com/SivaSbrmni/devbuddy" target="_blank" rel="noopener noreferrer" style={{
+            color: 'var(--text-dim)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4,
+            transition: 'color var(--transition-fast)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-muted)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)' }}
+          >
+            <Icon name="git" size={13} /> Open Source
+          </a>
+          <span style={{ color: 'var(--border)' }}>·</span>
+          <a href="/docs" style={{
+            color: 'var(--text-dim)', textDecoration: 'none',
+            transition: 'color var(--transition-fast)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-muted)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)' }}
+          >
+            Documentation
+          </a>
+          <span style={{ color: 'var(--border)' }}>·</span>
+          <a href="/app" style={{
+            color: 'var(--text-dim)', textDecoration: 'none',
+            transition: 'color var(--transition-fast)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-muted)' }}
+          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)' }}
+          >
+            Sign In
+          </a>
+        </div>
         <p style={{ margin: 0 }}>© 2026 DevBuddy · Invite-only private beta</p>
       </footer>
     </div>

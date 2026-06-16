@@ -1667,12 +1667,53 @@ export default function Workspace() {
                     letterSpacing: '-0.5px',
                     marginBottom: 10,
                   }}>
-                    {user?.name ? `Welcome back, ${user.name.split(' ')[0]}` : 'Welcome to DevBuddy'}
+                    {(() => {
+                      const hasVisited = localStorage.getItem('devbuddy_visited')
+                      if (!hasVisited) {
+                        localStorage.setItem('devbuddy_visited', 'true')
+                        return user?.name ? `Welcome, ${user.name.split(' ')[0]}` : 'Welcome to DevBuddy'
+                      }
+                      return user?.name ? `Welcome back, ${user.name.split(' ')[0]}` : 'Welcome to DevBuddy'
+                    })()}
                   </div>
                   <p style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.6, margin: 0 }}>
-                    Describe what you want to build. DevBuddy will design the architecture, write the code, run tests, and deploy it.
+                    {activeRepo
+                      ? `Working in ${activeRepo.name}. Describe what you want to build — DevBuddy will write code, run tests, and open a pull request.`
+                      : 'Describe what you want to build. DevBuddy will design the architecture, write the code, run tests, and deploy it.'}
                   </p>
                 </div>
+
+                {/* Connect GitHub prompt — visible when no repo */}
+                {!activeRepo && (
+                  <button
+                    onClick={() => setGithubPanelOpen(true)}
+                    className="db-btn db-focus"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '12px 20px',
+                      background: 'var(--bg-card)',
+                      border: '1px dashed var(--accent)',
+                      borderRadius: 'var(--radius-lg)',
+                      color: 'var(--accent-light)',
+                      fontSize: 14,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(99,102,241,0.08)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'var(--bg-card)'
+                    }}
+                  >
+                    <Icon name="git" size={16} />
+                    <span>Connect a GitHub repository to start coding</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 4 }}>(optional)</span>
+                  </button>
+                )}
 
                 {/* Quick actions grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, maxWidth: 520, width: '100%' }}>
@@ -2162,7 +2203,18 @@ export default function Workspace() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Dropdown
                     value={model}
-                    options={models.map(m => ({ value: m.id, label: m.label, description: m.provider }))}
+                    options={models.map(m => {
+                      const guidance: Record<string, string> = {
+                        anthropic: 'Best for complex engineering tasks',
+                        llama: 'Fast, good for drafts and exploration',
+                        ollama: 'Run locally, great for privacy',
+                      }
+                      return {
+                        value: m.id,
+                        label: m.label,
+                        description: guidance[m.provider] || m.provider,
+                      }
+                    })}
                     onChange={setModel}
                     disabled={modelsLoading}
                   />
