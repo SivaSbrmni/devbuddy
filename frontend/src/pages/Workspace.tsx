@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { GitHubProvider, useGitHub } from '../context/GitHubContext'
 import { useServerConversations } from '../hooks/useServerConversations'
+import LLMProviderSettings from '../components/LLMProviderSettings'
 import GitHubPanel from '../components/GitHubPanel'
 import AgentTimeline, { AgentRun, TimelineStep } from '../components/AgentTimeline'
 import TaskCard, { TaskCardData, TaskEvent, sseToTaskEvent } from '../components/TaskCard'
@@ -269,6 +270,7 @@ export default function Workspace() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null)
   const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [llmProviderSettingsOpen, setLlmProviderSettingsOpen] = useState(false)
   const [mentionOpen, setMentionOpen] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
   const [mentionIndex, setMentionIndex] = useState(0)
@@ -1654,8 +1656,38 @@ export default function Workspace() {
               <button onClick={() => setSettingsOpen(false)} className="db-btn" style={{ background: 'none', border: 'none', color: 'var(--text-faint)', cursor: 'pointer', padding: '4px 6px', borderRadius: 'var(--radius-sm)', transition: 'all var(--transition-fast)' }} onMouseEnter={e => { e.currentTarget.style.color = 'var(--text)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }} onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-faint)'; e.currentTarget.style.background = 'none' }}><Icon name="close" size={16} /></button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+              <div style={{ marginBottom: 20, padding: 16, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 'var(--radius-lg)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <h3 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600 }}>Universal LLM Providers</h3>
+                    <p style={{ margin: 0, fontSize: 12, color: 'var(--text-dim)' }}>
+                      Add any OpenAI-compatible endpoint (Ollama, OpenRouter, Azure, etc.)
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSettingsOpen(false)
+                      setLlmProviderSettingsOpen(true)
+                    }}
+                    className="db-btn"
+                    style={{
+                      padding: '8px 16px',
+                      background: 'var(--accent)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 'var(--radius-md)',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Configure
+                  </button>
+                </div>
+              </div>
+
               <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                Add your API keys to unlock LLM providers. Keys are encrypted at rest.
+                Or add individual API keys below. Keys are encrypted at rest.
               </p>
 
               {[
@@ -1764,6 +1796,12 @@ export default function Workspace() {
           </div>
           </div>
         )}
+
+        {/* LLM Provider Settings Modal */}
+        <LLMProviderSettings
+          isOpen={llmProviderSettingsOpen}
+          onClose={() => setLlmProviderSettingsOpen(false)}
+        />
 
         {/* Input area */}
         <div style={{ padding: '16px 20px 20px', borderTop: '1px solid var(--border-subtle)', flexShrink: 0 }}>
@@ -1969,6 +2007,7 @@ export default function Workspace() {
           { id: 'new-chat', label: 'New conversation', shortcut: 'Ctrl+N', icon: 'sparkles', action: () => { createNew(); setWorkspaceOpen(false) } },
           { id: 'workspace', label: 'Toggle workspace panel', shortcut: 'Ctrl+Shift+F', icon: 'folder', action: () => setWorkspaceOpen(!workspaceOpen) },
           { id: 'settings', label: 'Open settings', shortcut: '', icon: 'settings', action: () => setSettingsOpen(true) },
+          { id: 'llm-providers', label: 'Configure LLM providers', shortcut: '', icon: 'bot', action: () => setLlmProviderSettingsOpen(true) },
           { id: 'agent-mode', label: agentMode ? 'Switch to Chat mode' : 'Switch to Agent mode', shortcut: '', icon: agentMode ? 'chat' : 'agent', action: () => setAgentMode(!agentMode) },
           { id: 'logout', label: 'Sign out', shortcut: '', icon: 'logout', action: () => logout() },
         ]}
