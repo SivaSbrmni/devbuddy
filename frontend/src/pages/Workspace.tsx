@@ -288,6 +288,7 @@ export default function Workspace() {
   })
   const [savingKeys, setSavingKeys] = useState(false)
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  const [modKey] = useState(() => navigator.platform?.includes('Mac') ? '⌘' : 'Ctrl')
   const [lastDeleted, setLastDeleted] = useState<Conversation | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -2231,7 +2232,7 @@ export default function Workspace() {
             {/* Hint text — only on desktop */}
             {!isMobile && (
               <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, fontSize: 11, color: 'var(--text-faint)', opacity: 0.7 }}>
-                <span>↵ send · ⇧↵ newline · {navigator.platform.includes('Mac') ? '⌘' : 'Ctrl'}K commands</span>
+                <span>↵ send · ⇧↵ newline · {modKey}K commands</span>
               </div>
             )}
           </div>
