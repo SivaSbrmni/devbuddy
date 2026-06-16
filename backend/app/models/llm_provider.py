@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, func, Float, Boolean, Integer
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func, Float, Boolean, Integer
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -113,7 +113,7 @@ class ProviderRoutingRule(Base):
     
     # Routing criteria
     priority: Mapped[int] = mapped_column(default=100)  # Lower = preferred
-    max_cost_per_request: Mapped[float | None] = mapped_column()  $USD
+    max_cost_per_request: Mapped[float | None] = mapped_column()  # USD
     min_quality_score: Mapped[float | None] = mapped_column()  # 0-1
     speed_priority: Mapped[bool] = mapped_column(default=False)  # Prefer lower latency
     

@@ -89,7 +89,7 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     
     # Rich metadata for agent context
-    metadata: Mapped[dict] = mapped_column(JSONB, default=dict)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
     # {
     #   task_id: "...",
     #   run_id: "...",
