@@ -56,3 +56,16 @@ class _Crypto:
 
 
 crypto = _Crypto()
+
+
+# Convenience functions for encrypting/decrypting single values
+def encrypt_value(plaintext: str) -> str:
+    """Encrypt a single string value."""
+    return crypto.encrypt(plaintext)
+
+
+def decrypt_value(ciphertext: str) -> str:
+    """Decrypt a single string value."""
+    if not ciphertext:
+        return ""
+    return crypto.decrypt(ciphertext)

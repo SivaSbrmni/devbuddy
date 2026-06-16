@@ -21,6 +21,7 @@ from app.api.routes.llm_providers import router as llm_providers_router
 from app.api.routes.health import router as health_router
 from app.api.routes.knowledge import router as knowledge_router
 from app.api.routes.memory import router as memory_router
+from app.api.routes.memory_context import router as memory_context_router
 from app.api.routes.metrics import router as metrics_router
 from app.api.routes.mcp import router as mcp_router
 from app.api.routes.models import router as models_router
@@ -168,6 +169,7 @@ app.include_router(models_router, prefix=settings.API_PREFIX)
 app.include_router(chat_router, prefix=settings.API_PREFIX)
 app.include_router(agent_router, prefix=settings.API_PREFIX)
 app.include_router(knowledge_router, prefix=settings.API_PREFIX)
+app.include_router(memory_context_router, prefix=settings.API_PREFIX)
 app.include_router(mcp_router, prefix=settings.API_PREFIX)
 app.include_router(settings_router, prefix=settings.API_PREFIX)
 app.include_router(github_router, prefix=settings.API_PREFIX)
