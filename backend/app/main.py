@@ -45,11 +45,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.db.session import engine
 
     # Import all models so they register on Base.metadata
+    # Legacy models
     import app.models.project  # noqa: F401
     import app.models.task  # noqa: F401
     import app.models.execution  # noqa: F401
     import app.models.memory  # noqa: F401
     import app.models.user_settings  # noqa: F401
+    
+    # New cloud-native architecture models
+    import app.models.user  # noqa: F401
+    import app.models.conversation  # noqa: F401
+    import app.models.llm_provider  # noqa: F401
+    import app.models.user_memory  # noqa: F401
 
     # Ensure database tables exist — tolerate partial schemas on HF Space
     # restarts where /data/pgdata persists and indexes may already exist.
@@ -164,6 +171,38 @@ app.include_router(settings_router, prefix=settings.API_PREFIX)
 app.include_router(github_router, prefix=settings.API_PREFIX)
 app.include_router(github_agent_router, prefix=settings.API_PREFIX)
 app.include_router(cloud_agent_router, prefix=settings.API_PREFIX)
+
+# Migration status endpoint - for verifying database setup
+@app.get("/api/v1/migration-status")
+async def migration_status():
+    """Check if all required tables exist in the database."""
+    from sqlalchemy import inspect, text
+    from app.db.session import engine
+    from app.db.base import Base
+    
+    async with engine.connect() as conn:
+        def check_tables(sync_conn):
+            inspector = inspect(sync_conn)
+            existing = set(inspector.get_table_names())
+            
+            # Core new tables
+            required_new = {
+                'users', 'conversations', 'messages', 'conversation_tasks',
+                'user_llm_providers', 'user_memories', 'repository_memories'
+            }
+            
+            existing_required = existing & required_new
+            missing = required_new - existing
+            
+            return {
+                'all_tables_exist': len(missing) == 0,
+                'existing_new_tables': list(existing_required),
+                'missing_tables': list(missing),
+                'total_tables_in_db': len(existing),
+            }
+        
+        result = await conn.run_sync(check_tables)
+        return result
 
 # Serve pre-built React frontend as static files
 _static_dir = Path(__file__).resolve().parent.parent / "static"
