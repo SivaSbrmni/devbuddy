@@ -6,6 +6,7 @@ import LLMProviderSettings from '../components/LLMProviderSettings'
 import GitHubPanel from '../components/GitHubPanel'
 import AgentTimeline, { AgentRun, TimelineStep } from '../components/AgentTimeline'
 import TaskCard, { TaskCardData, TaskEvent, sseToTaskEvent } from '../components/TaskCard'
+import EngineeringTimeline, { EngineeringTask, ExecutionPhase, Phase } from '../components/EngineeringTimeline'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import JSZip from 'jszip'
@@ -50,6 +51,8 @@ interface Message {
   files?: { name: string; content: string }[]
   agentEvents?: AgentEvent[]
   taskCard?: TaskCardData
+  engineeringTask?: EngineeringTask  // New professional execution experience
+  intentType?: 'analyze' | 'question' | 'chat' | 'implement'  // From intent classifier
 }
 
 interface AgentEvent {
@@ -258,6 +261,7 @@ export default function Workspace() {
   })
   const [agentRun, setAgentRun] = useState<AgentRun | null>(null)
   const [agentTimelineOpen, setAgentTimelineOpen] = useState(false)
+  const [engineeringTasks, setEngineeringTasks] = useState<EngineeringTask[]>([])
   const [models, setModels] = useState<Model[]>(FALLBACK_MODELS)
   const [modelsLoading, setModelsLoading] = useState(true)
   const [model, setModel] = useState(FALLBACK_MODELS[0].id)
@@ -432,6 +436,189 @@ export default function Workspace() {
     const owner = (activeRepo as any).owner || activeRepo.full_name?.split('/')[0] || ''
     const repo = activeRepo.name
 
+    // ─── INTENT CLASSIFICATION ─────────────────────────────────────────────
+    // Check if this is an analyze/question request (no code changes needed)
+    const intentResp = await fetch(`${API}/follow-up/create-task?token=${encodeURIComponent(token)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversation_id: activeId,
+        message: task,
+        force_new_task: false,
+      }),
+    })
+    
+    let intentType: Message['intentType'] = 'implement'
+    let noCodeWorkNeeded = false
+    
+    if (intentResp.ok) {
+      const intentData = await intentResp.json()
+      intentType = intentData.intent_type || 'implement'
+      noCodeWorkNeeded = intentData.no_code_work_needed || false
+      
+      // For analyze/question intents, use Engineering Timeline instead of TaskCard
+      if (noCodeWorkNeeded || ['analyze', 'question', 'chat'].includes(intentType)) {
+        // Create an engineering task for analysis
+        const analysisTask: EngineeringTask = {
+          id: msgId,
+          title: task.slice(0, 100),
+          repository: {
+            name: repo,
+            owner: owner,
+            fullName: `${owner}/${repo}`,
+          },
+          branch: '',  // No branch for analysis
+          baseBranch: 'main',
+          status: 'working',
+          startedAt: new Date().toISOString(),
+          currentPhase: 'understanding',
+          phases: [
+            {
+              id: 'understanding',
+              label: 'Understanding',
+              status: 'active',
+              startedAt: new Date().toISOString(),
+              currentFile: 'Analyzing repository structure...',
+              thinking: [
+                'Analyzing project structure...',
+                'Reviewing repository layout...',
+                'Identifying key components...',
+              ],
+              stats: { duration: 0 },
+            },
+            {
+              id: 'planning',
+              label: 'Planning',
+              status: 'pending',
+              files: [],
+            },
+            {
+              id: 'implementing',
+              label: 'Implementation',
+              status: 'pending',
+              files: [],
+            },
+            {
+              id: 'validating',
+              label: 'Validation',
+              status: 'pending',
+              files: [],
+            },
+            {
+              id: 'delivering',
+              label: 'Delivery',
+              status: 'pending',
+              files: [],
+            },
+            {
+              id: 'completed',
+              label: 'Completed',
+              status: 'pending',
+              files: [],
+            },
+          ],
+        }
+        
+        // Add to state and messages
+        setEngineeringTasks(prev => [...prev, analysisTask])
+        
+        const analysisMsg: Message = {
+          id: msgId,
+          role: 'assistant',
+          content: '',
+          ts: Date.now(),
+          engineeringTask: analysisTask,
+          intentType: intentType,
+        }
+        
+        const convTitle = conversationAtStart.length === 1 
+          ? capitalizeFirst(task.slice(0, 50)) 
+          : (active?.title || capitalizeFirst(task.slice(0, 50)))
+        updateActive([...conversationAtStart, analysisMsg], convTitle)
+        
+        // For analysis intents, use the chat endpoint instead of github-agent
+        // to get a proper analysis response
+        try {
+          const chatResp = await fetch(`${API}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: conversationAtStart.map(m => ({
+                role: m.role,
+                content: m.content,
+              })),
+              model,
+              stream: true,
+            }),
+          })
+          
+          if (chatResp.ok && chatResp.body) {
+            const reader = chatResp.body.getReader()
+            const decoder = new TextDecoder()
+            let content = ''
+            
+            // Update to "delivering" phase
+            setEngineeringTasks(prev => prev.map(t => 
+              t.id === msgId 
+                ? { ...t, currentPhase: 'delivering' as Phase, phases: t.phases.map(p => 
+                    p.id === 'understanding' ? { ...p, status: 'completed' as const, completedAt: new Date().toISOString() }
+                    : p.id === 'planning' ? { ...p, status: 'completed' as const }
+                    : p.id === 'delivering' ? { ...p, status: 'active' as const, startedAt: new Date().toISOString() }
+                    : p
+                  )}
+                : t
+            ))
+            
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              content += decoder.decode(value, { stream: true })
+              
+              // Update message content
+              updateActive(prev => prev.map(m => 
+                m.id === msgId 
+                  ? { ...m, content }
+                  : m
+              ), convTitle)
+            }
+            
+            // Mark as completed
+            setEngineeringTasks(prev => prev.map(t => 
+              t.id === msgId 
+                ? { 
+                    ...t, 
+                    status: 'completed' as const, 
+                    currentPhase: 'completed' as Phase,
+                    completedAt: new Date().toISOString(),
+                    phases: t.phases.map(p => 
+                      p.status === 'active' || p.status === 'pending' 
+                        ? { ...p, status: 'completed' as const, completedAt: new Date().toISOString() }
+                        : p
+                    ),
+                    summary: {
+                      filesChanged: 0,
+                      testsPassed: 0,
+                      testsTotal: 0,
+                    }
+                  }
+                : t
+            ))
+            
+            updateActive(prev => prev.map(m => 
+              m.id === msgId 
+                ? { ...m, content, engineeringTask: { ...m.engineeringTask!, status: 'completed' } }
+                : m
+            ), convTitle)
+          }
+        } catch (err) {
+          console.error('Analysis request failed:', err)
+        }
+        
+        return true
+      }
+    }
+    
+    // ─── CODE WORKFLOW (IMPLEMENT INTENT) ─────────────────────────────────
     const cardId = msgId
     const initialCard: TaskCardData = {
       id: cardId,
@@ -453,6 +640,7 @@ export default function Workspace() {
       content: '',
       ts: Date.now(),
       taskCard: initialCard,
+      intentType: intentType,
     }
 
     const convTitle = conversationAtStart.length === 1 ? capitalizeFirst(task.slice(0, 50)) : (active?.title || capitalizeFirst(task.slice(0, 50)))
@@ -1547,7 +1735,20 @@ export default function Workspace() {
                   }
 
                   return pairs.map(({ user: uMsg, agent: aMsg }) => {
-                    // ── TaskCard (GitHub agent) ──
+                    // ── Engineering Timeline (New Professional Experience) ──
+                    // Use for analyze/question intents or when engineeringTask is present
+                    if (aMsg?.engineeringTask || (aMsg?.intentType && ['analyze', 'question'].includes(aMsg.intentType))) {
+                      const task = aMsg?.engineeringTask || engineeringTasks.find(t => t.id === aMsg?.id)
+                      if (task) {
+                        return (
+                          <div key={aMsg.id} style={{ marginBottom: 24 }}>
+                            <EngineeringTimeline tasks={[task]} />
+                          </div>
+                        )
+                      }
+                    }
+                    
+                    // ── TaskCard (Legacy GitHub agent - for implement intents) ──
                     if (aMsg?.taskCard) {
                       return (
                         <TaskCard

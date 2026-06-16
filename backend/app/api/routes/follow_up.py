@@ -50,6 +50,8 @@ class CreateTaskResponse(BaseModel):
     inherited_files: list[str]
     confidence: float
     suggested_prompt_context: str
+    no_code_work_needed: bool = False  # True for analyze/question/chat intents
+    intent_type: str = "implement"  # analyze, question, chat, implement
 
 
 class TaskChainResponse(BaseModel):
@@ -101,12 +103,51 @@ async def create_task_with_context(
     req: CreateTaskRequest,
     user: User = Depends(get_current_user),
 ) -> CreateTaskResponse:
-    """Create a task with automatic follow-up detection."""
+    """Create a task with automatic follow-up detection and intent classification."""
     from app.models.conversation import Conversation
+    from app.services.intent_classifier import classify_intent, IntentType
     from sqlalchemy import select
     from app.db.session import async_session_factory
     
-    # Verify ownership
+    # ─── INTENT CLASSIFICATION ──────────────────────────────────────────────
+    # First, classify the user's intent to determine if code work is needed
+    intent_result = classify_intent(req.message)
+    
+    # If user is asking to analyze/explain/question (not implement), don't create code task
+    if intent_result.intent in (IntentType.ANALYZE, IntentType.QUESTION, IntentType.CHAT):
+        # Return a special response indicating no code work needed
+        log.info(
+            "task.intent_no_code_work",
+            intent=intent_result.intent.value,
+            message_preview=req.message[:50],
+        )
+        
+        return CreateTaskResponse(
+            task_id="",
+            is_follow_up=False,
+            parent_task_id=None,
+            branch="",
+            previous_branch=None,
+            inherited_files=[],
+            confidence=intent_result.confidence,
+            suggested_prompt_context=f"""User intent: {intent_result.intent.value}
+{intent_result.explanation}
+
+This is an analysis/question request. Do NOT:
+- Create a branch
+- Push code changes
+- Create a PR
+
+Instead:
+- Analyze the codebase
+- Provide a clear explanation
+- Answer the question thoroughly
+- Use the engineering timeline UI for presentation""",
+            no_code_work_needed=True,
+            intent_type=intent_result.intent.value,
+        )
+    
+    # ─── VERIFY OWNERSHIP ───────────────────────────────────────────────────
     async with async_session_factory() as db:
         conv_stmt = select(Conversation).where(
             Conversation.id == uuid.UUID(req.conversation_id),
