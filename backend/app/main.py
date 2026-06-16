@@ -172,13 +172,12 @@ app.include_router(github_router, prefix=settings.API_PREFIX)
 app.include_router(github_agent_router, prefix=settings.API_PREFIX)
 app.include_router(cloud_agent_router, prefix=settings.API_PREFIX)
 
-# Migration status endpoint - for verifying database setup
+# Migration status endpoint - MUST be before SPA fallback
 @app.get("/api/v1/migration-status")
 async def migration_status():
     """Check if all required tables exist in the database."""
-    from sqlalchemy import inspect, text
+    from sqlalchemy import inspect
     from app.db.session import engine
-    from app.db.base import Base
     
     async with engine.connect() as conn:
         def check_tables(sync_conn):
