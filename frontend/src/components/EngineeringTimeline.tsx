@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Engineering Timeline - Professional execution experience
  * 

@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 const BACKEND = import.meta.env.VITE_API_URL || ''
 
 interface User {
+  id?: string
   email: string
   name: string
   picture: string

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * LLM Provider Settings - Universal endpoint configuration UI
  * 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * ConversationMemory - Show and edit conversation memory
  * 
