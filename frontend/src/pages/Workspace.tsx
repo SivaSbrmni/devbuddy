@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { GitHubProvider, useGitHub } from '../context/GitHubContext'
+import { useServerConversations } from '../hooks/useServerConversations'
 import GitHubPanel from '../components/GitHubPanel'
 import AgentTimeline, { AgentRun, TimelineStep } from '../components/AgentTimeline'
 import TaskCard, { TaskCardData, TaskEvent, sseToTaskEvent } from '../components/TaskCard'
@@ -14,6 +15,7 @@ import WorkspacePanel from '../components/WorkspacePanel'
 import ContextBar from '../components/ContextBar'
 import Icon from '../components/Icon'
 import Dropdown from '../components/Dropdown'
+import { Conversation as ServerConversation } from '../api/conversations'
 
 const BACKEND = import.meta.env.VITE_API_URL || ''
 const API = `${BACKEND}/api/v1`
@@ -55,73 +57,199 @@ interface AgentEvent {
   payload: any
 }
 
-interface Conversation {
-  id: string
-  title: string
+// Local interface extending server type with UI-specific fields
+interface LocalConversation extends ServerConversation {
   messages: Message[]
-  ts: number
+  ts: number // Derived from created_at for sorting
 }
 
-function newConv(): Conversation {
-  return { id: crypto.randomUUID(), title: 'New conversation', messages: [], ts: Date.now() }
-}
-
-function useConversations() {
-  const [convs, setConvs] = useState<Conversation[]>(() => {
-    try { return JSON.parse(localStorage.getItem('devbuddy_convs') || '[]') } catch { return [] }
-  })
-  const [activeId, setActiveId] = useState<string>(() => {
-    const stored = JSON.parse(localStorage.getItem('devbuddy_convs') || '[]')
-    return stored[0]?.id || ''
-  })
-
-  const save = (list: Conversation[]) => {
-    setConvs(list)
-    localStorage.setItem('devbuddy_convs', JSON.stringify(list))
+// Migration: Load from localStorage and sync to server on first load
+async function migrateLocalStorageToServer(): Promise<LocalConversation[]> {
+  try {
+    const local = JSON.parse(localStorage.getItem('devbuddy_convs') || '[]')
+    if (!local.length) return []
+    
+    const { createConversation, createMessage } = await import('../api/conversations')
+    
+    const migrated: LocalConversation[] = []
+    for (const conv of local.slice(0, 10)) { // Migrate max 10
+      try {
+        const serverConv = await createConversation({
+          title: conv.title || 'Migrated conversation',
+        })
+        
+        // Migrate messages
+        if (conv.messages?.length) {
+          for (const msg of conv.messages) {
+            await createMessage(serverConv.id, {
+              role: msg.role,
+              content: msg.content || '',
+              metadata: msg.taskCard ? { task_card: msg.taskCard } : {},
+            })
+          }
+        }
+        
+        migrated.push({
+          ...serverConv,
+          messages: conv.messages || [],
+          ts: new Date(serverConv.created_at).getTime(),
+        })
+      } catch (e) {
+        console.error('Failed to migrate conversation:', e)
+      }
+    }
+    
+    // Clear localStorage after migration
+    localStorage.removeItem('devbuddy_convs')
+    return migrated
+  } catch {
+    return []
   }
-
-  const active = convs.find(c => c.id === activeId) || null
-
-  const createNew = () => {
-    const c = newConv()
-    const list = [c, ...convs]
-    save(list)
-    setActiveId(c.id)
-    return c
-  }
-
-  const updateActive = (msgs: Message[] | ((prev: Message[]) => Message[]), title?: string, forceId?: string) => {
-    const targetId = forceId ?? activeId
-    setConvs(prev => {
-      const list = prev.map(c => {
-        if (c.id !== targetId) return c
-        const next = typeof msgs === 'function' ? msgs(c.messages) : msgs
-        return { ...c, messages: next, title: title || c.title, ts: Date.now() }
-      })
-      localStorage.setItem('devbuddy_convs', JSON.stringify(list))
-      return list
-    })
-  }
-
-  const selectConv = (id: string) => setActiveId(id)
-
-  const deleteConv = (id: string) => {
-    const list = convs.filter(c => c.id !== id)
-    save(list)
-    if (activeId === id) setActiveId(list[0]?.id || '')
-  }
-
-  const restoreConv = (conv: Conversation) => {
-    save([conv, ...convs])
-    setActiveId(conv.id)
-  }
-
-  return { convs, active, activeId, createNew, updateActive, selectConv, deleteConv, restoreConv }
 }
 
 export default function Workspace() {
   const { user, logout } = useAuth()
-  const { convs, active, activeId, createNew, updateActive, selectConv, deleteConv, restoreConv } = useConversations()
+  const {
+    conversations,
+    activeConversation,
+    messages: serverMessages,
+    loading: conversationsLoading,
+    syncStatus,
+    isWebSocketConnected,
+    setActiveConversation,
+    createConversation,
+    updateConversation,
+    deleteConversation,
+    createMessage: createServerMessage,
+    refreshMessages,
+    sync,
+    forceRefresh,
+  } = useServerConversations({ autoSync: true, syncInterval: 30000 })
+  
+  // Compatibility layer - adapt server API to existing component expectations
+  const convs = conversations.map(c => ({
+    ...c,
+    messages: c.id === activeConversation?.id ? serverMessages : [],
+    ts: new Date(c.created_at).getTime(),
+  })) as LocalConversation[]
+  
+  const active = activeConversation ? {
+    ...activeConversation,
+    messages: serverMessages,
+    ts: new Date(activeConversation.created_at).getTime(),
+  } as LocalConversation : null
+  
+  const activeId = activeConversation?.id || ''
+  
+  const createNew = () => {
+    // Create optimistic conversation immediately for UI responsiveness
+    const tempId = crypto.randomUUID()
+    const optimisticConv: LocalConversation = {
+      id: tempId,
+      user_id: user?.id || '',
+      title: 'New conversation',
+      repository_url: activeRepo?.html_url || null,
+      repository_name: activeRepo?.name || null,
+      repository_owner: activeRepo?.owner || null,
+      branch: null,
+      summary: '',
+      current_goal: '',
+      completed_tasks: [],
+      open_tasks: [],
+      modified_files: [],
+      important_decisions: [],
+      status: 'active',
+      last_message_at: null,
+      message_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      messages: [],
+      ts: Date.now(),
+    }
+    
+    // Set active immediately
+    setActiveConversation(tempId)
+    
+    // Create on server in background
+    createConversation({ 
+      title: 'New conversation',
+      repository_url: activeRepo?.html_url,
+      repository_name: activeRepo?.name,
+      repository_owner: activeRepo?.owner,
+    }).then(serverConv => {
+      // Replace optimistic with server version
+      setActiveConversation(serverConv.id)
+    }).catch(err => {
+      console.error('Failed to create conversation:', err)
+    })
+    
+    return optimisticConv
+  }
+  
+  // Sync status indicator component
+  const SyncIndicator = () => {
+    if (!syncStatus || syncStatus === 'idle') return null
+    
+    const statusConfig = {
+      syncing: { icon: 'refresh', color: '#6366f1', text: 'Syncing...' },
+      error: { icon: 'error', color: '#ef4444', text: 'Sync failed' },
+      offline: { icon: 'offline', color: '#9ca3af', text: 'Offline' },
+    }
+    
+    const config = statusConfig[syncStatus]
+    if (!config) return null
+    
+    return (
+      <span style={{ 
+        fontSize: 10, 
+        color: config.color,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        marginLeft: 8,
+      }}>
+        <Icon name={config.icon} size={10} />
+        {config.text}
+      </span>
+    )
+  }
+  
+  const updateActive = (msgs: Message[] | ((prev: Message[]) => Message[]), title?: string, forceId?: string) => {
+    const targetId = forceId || activeId
+    if (!targetId) return
+    
+    // Handle function updates
+    const nextMsgs = typeof msgs === 'function' ? msgs(serverMessages) : msgs
+    
+    // Create/update messages on server
+    nextMsgs.forEach(async (msg) => {
+      if (!msg.id.startsWith('temp-')) { // Only create if not optimistic
+        await createServerMessage(targetId, {
+          role: msg.role,
+          content: msg.content,
+          metadata: msg.taskCard ? { task_card: msg.taskCard } : {},
+        })
+      }
+    })
+    
+    // Update title if provided
+    if (title && targetId) {
+      updateConversation(targetId, { title })
+    }
+  }
+  
+  const selectConv = (id: string) => {
+    setActiveConversation(id)
+  }
+  
+  const deleteConv = async (id: string) => {
+    await deleteConversation(id)
+  }
+  
+  const restoreConv = (conv: LocalConversation) => {
+    // Server already has it, just select it
+    setActiveConversation(conv.id)
+  }
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [githubPanelOpen, setGithubPanelOpen] = useState(false)
   const [activeRepo, setActiveRepoLocal] = useState<{ name: string; owner: string; full_name: string; html_url: string; default_branch?: string } | null>(() => {
@@ -1010,6 +1138,7 @@ export default function Workspace() {
               <Icon name="sparkles" size={14} style={{ color: 'white' }} />
             </div>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.2px' }}>DevBuddy</span>
+            <SyncIndicator />
           </div>
           <button
             onClick={createNew}

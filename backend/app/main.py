@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes.agent import router as agent_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
+from app.api.routes.conversations import router as conversations_router
 from app.api.routes.execution import router as execution_router
 from app.api.routes.health import router as health_router
 from app.api.routes.knowledge import router as knowledge_router
@@ -147,6 +148,7 @@ app.add_middleware(
 # Register routers
 app.include_router(health_router)
 app.include_router(auth_router, prefix=settings.API_PREFIX)
+app.include_router(conversations_router, prefix=settings.API_PREFIX)
 app.include_router(projects_router, prefix=settings.API_PREFIX)
 app.include_router(memory_router, prefix=settings.API_PREFIX)
 app.include_router(skills_router, prefix=settings.API_PREFIX)

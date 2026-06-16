@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.db.base import Base
 
 # Import all models so Alembic sees them
+# Legacy models
 from app.models.project import Project  # noqa: F401
 from app.models.task import Task, Milestone, AgentStep  # noqa: F401
 from app.models.execution import Run, WorkflowRun, Artifact, DebugExperiment  # noqa: F401
@@ -20,6 +21,13 @@ from app.models.memory import (  # noqa: F401
     ProjectMemory, KnowledgeEntry, Skill,
     DeploymentHistory, ModelUsage, AuditLog,
 )
+from app.models.user_settings import UserSettings  # noqa: F401
+
+# New cloud-native architecture models
+from app.models.user import Organization, User, UserSession  # noqa: F401
+from app.models.conversation import Conversation, Message, ConversationTask, ConversationEvent, TaskEvent  # noqa: F401
+from app.models.llm_provider import UserLLMProvider, ProviderRoutingRule  # noqa: F401
+from app.models.user_memory import UserMemory, RepositoryMemory, OrganizationMemory  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
