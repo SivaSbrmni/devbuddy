@@ -104,20 +104,22 @@ export default function CommandPalette({ isOpen, onClose, commands, conversation
     </div>
   )
 
+  const selectedId = items[selectedIndex] ? `cmd-item-${items[selectedIndex].type}-${items[selectedIndex].index}` : undefined
+
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '12vh', animation: 'fadeIn 0.15s ease' }} onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="Command palette" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '12vh', animation: 'fadeIn 0.15s ease' }} onClick={onClose}>
       <div style={{ width: '100%', maxWidth: 560, background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-xl)', boxShadow: '0 24px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)', overflow: 'hidden', animation: 'modalContent 0.2s ease' }} onClick={e => e.stopPropagation()}>
         {/* Search input */}
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 12 }}>
           <Icon name="search" size={18} style={{ color: 'var(--text-faint)' }} />
-          <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyDown} placeholder="Search commands, conversations, files..." style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 16, fontFamily: 'inherit' }} />
+          <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleKeyDown} placeholder="Search commands, conversations, files..." aria-label="Search commands and conversations" aria-autocomplete="list" aria-controls="cmd-results" aria-activedescendant={selectedId} style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 16, fontFamily: 'inherit' }} />
           <span style={{ fontSize: 11, color: 'var(--text-faint)', background: 'var(--bg-card)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'monospace' }}>ESC</span>
         </div>
 
         {/* Results */}
-        <div ref={listRef} style={{ maxHeight: 380, overflowY: 'auto', padding: '6px' }}>
+        <div ref={listRef} id="cmd-results" role="listbox" aria-label="Results" style={{ maxHeight: 380, overflowY: 'auto', padding: '6px' }}>
           {items.length === 0 && (
-            <div style={{ padding: '32px', textAlign: 'center' }}>
+            <div role="status" aria-live="polite" style={{ padding: '32px', textAlign: 'center' }}>
               <Icon name="search" size={32} style={{ color: 'var(--border)', marginBottom: 12 }} />
               <div style={{ color: 'var(--text-faint)', fontSize: 14 }}>No results for &quot;{query}&quot;</div>
             </div>
@@ -130,7 +132,7 @@ export default function CommandPalette({ isOpen, onClose, commands, conversation
                 const globalIndex = items.findIndex(it => it.type === 'command' && it.index === i)
                 const isSelected = globalIndex === selectedIndex
                 return (
-                  <div key={cmd.id} data-selected={isSelected} onClick={() => { cmd.action(); onClose() }} onMouseEnter={() => setSelectedIndex(globalIndex)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: isSelected ? 'rgba(99,102,241,0.12)' : 'transparent', border: isSelected ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent', transition: 'all 0.08s ease' }}>
+                  <div key={cmd.id} id={`cmd-item-command-${i}`} role="option" aria-selected={isSelected} tabIndex={-1} data-selected={isSelected} onClick={() => { cmd.action(); onClose() }} onMouseEnter={() => setSelectedIndex(globalIndex)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: isSelected ? 'rgba(99,102,241,0.12)' : 'transparent', border: isSelected ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent', transition: 'all 0.08s ease' }}>
                     <Icon name={cmd.icon as any} size={18} style={{ color: isSelected ? 'var(--accent-hover)' : 'var(--text-dim)' }} />
                     <span style={{ flex: 1, fontSize: 14, color: 'var(--text)' }}>{cmd.label}</span>
                     {cmd.shortcut && <span style={{ fontSize: 11, color: 'var(--text-faint)', background: 'var(--bg-card)', padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'monospace' }}>{cmd.shortcut}</span>}
@@ -147,7 +149,7 @@ export default function CommandPalette({ isOpen, onClose, commands, conversation
                 const globalIndex = items.findIndex(it => it.type === 'conversation' && it.index === i)
                 const isSelected = globalIndex === selectedIndex
                 return (
-                  <div key={conv.id} data-selected={isSelected} onClick={() => { onSelectConversation?.(conv.id); onClose() }} onMouseEnter={() => setSelectedIndex(globalIndex)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: isSelected ? 'rgba(99,102,241,0.12)' : 'transparent', border: isSelected ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent', transition: 'all 0.08s ease' }}>
+                  <div key={conv.id} id={`cmd-item-conversation-${i}`} role="option" aria-selected={isSelected} tabIndex={-1} data-selected={isSelected} onClick={() => { onSelectConversation?.(conv.id); onClose() }} onMouseEnter={() => setSelectedIndex(globalIndex)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', background: isSelected ? 'rgba(99,102,241,0.12)' : 'transparent', border: isSelected ? '1px solid rgba(99,102,241,0.2)' : '1px solid transparent', transition: 'all 0.08s ease' }}>
                     <div style={{ width: 28, height: 28, borderRadius: '50%', background: isSelected ? `hsl(${conv.title.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0) % 360}, 70%, 55%)` : `hsl(${conv.title.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0) % 360}, 50%, 20%)`, border: isSelected ? 'none' : '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'white', flexShrink: 0 }}>
                       {conv.title.charAt(0).toUpperCase()}
                     </div>

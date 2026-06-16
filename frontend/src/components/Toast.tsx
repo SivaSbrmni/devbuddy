@@ -32,18 +32,24 @@ export default function ToastContainer() {
   if (toasts.length === 0) return null
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 20,
-      right: 20,
-      zIndex: 200,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8,
-    }}>
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      style={{
+        position: 'fixed',
+        top: 20,
+        right: 20,
+        zIndex: 200,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
       {toasts.map(t => (
         <div
           key={t.id}
+          role="alert"
           style={{
             background: t.type === 'error' ? 'rgba(239,68,68,0.9)' : t.type === 'success' ? 'rgba(16,185,129,0.9)' : 'rgba(99,102,241,0.9)',
             backdropFilter: 'blur(8px)',
