@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react'
 
 const BACKEND = import.meta.env.VITE_API_URL || ''
 
@@ -26,20 +26,33 @@ const AuthContext = createContext<AuthCtx>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
+    const controller = new AbortController()
+    abortRef.current = controller
+
     const params = new URLSearchParams(window.location.search)
     const token = params.get('token')
     if (token) {
       localStorage.setItem('devbuddy_token', token)
       window.history.replaceState({}, '', window.location.pathname)
     }
+
     const stored = localStorage.getItem('devbuddy_token')
-    if (!stored) { setLoading(false); return }
-    fetch(`${BACKEND}/api/v1/auth/me?token=${stored}`)
+    if (!stored) {
+      setLoading(false)
+      return
+    }
+
+    fetch(`${BACKEND}/api/v1/auth/me?token=${stored}`, { signal: controller.signal })
       .then(r => r.ok ? r.json() : null)
-      .then(u => { setUser(u); setLoading(false) })
-      .catch(() => setLoading(false))
+      .then(u => { if (!controller.signal.aborted) { setUser(u); setLoading(false) } })
+      .catch(() => { if (!controller.signal.aborted) setLoading(false) })
+
+    return () => {
+      controller.abort()
+    }
   }, [])
 
   const login = () => {
