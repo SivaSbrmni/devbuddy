@@ -79,10 +79,13 @@ class UserLLMProvider(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     
-    # Relationships
-    user: Mapped[User] = relationship("User", back_populates="llm_providers")
+    # Relationships - use lazy='select' to prevent mapper conflicts
+    user: Mapped[User] = relationship("User", back_populates="llm_providers", lazy="select")
     routing_rules: Mapped[list["ProviderRoutingRule"]] = relationship(
-        "ProviderRoutingRule", back_populates="provider", cascade="all, delete-orphan"
+        "ProviderRoutingRule", 
+        back_populates="provider", 
+        cascade="all, delete-orphan",
+        lazy="select"
     )
     
     __table_args__ = (
@@ -129,11 +132,12 @@ class ProviderRoutingRule(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     
-    # Relationships
+    # Relationships - use lazy='select' to prevent mapper conflicts
     provider: Mapped[UserLLMProvider] = relationship(
         "UserLLMProvider", 
         back_populates="routing_rules",
-        foreign_keys=[provider_id]
+        foreign_keys=[provider_id],
+        lazy="select"
     )
     
     __table_args__ = (

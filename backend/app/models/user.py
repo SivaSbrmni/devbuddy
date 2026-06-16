@@ -70,7 +70,7 @@ class User(Base):
         "Conversation", back_populates="user", cascade="all, delete-orphan"
     )
     llm_providers: Mapped[list["UserLLMProvider"]] = relationship(
-        "UserLLMProvider", back_populates="user", cascade="all, delete-orphan"
+        "UserLLMProvider", back_populates="user", cascade="all, delete-orphan", lazy="select"
     )
     sessions: Mapped[list["UserSession"]] = relationship(
         "UserSession", back_populates="user", cascade="all, delete-orphan"
