@@ -82,10 +82,11 @@ class UserLLMProvider(Base):
     # Relationships - use lazy='select' to prevent mapper conflicts
     user: Mapped[User] = relationship("User", back_populates="llm_providers", lazy="select")
     routing_rules: Mapped[list["ProviderRoutingRule"]] = relationship(
-        "ProviderRoutingRule", 
-        back_populates="provider", 
+        "ProviderRoutingRule",
+        back_populates="provider",
         cascade="all, delete-orphan",
-        lazy="select"
+        lazy="select",
+        foreign_keys="ProviderRoutingRule.provider_id",
     )
     
     __table_args__ = (
