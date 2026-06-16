@@ -139,21 +139,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Temporary debug exception handler
-import traceback
-from fastapi.responses import JSONResponse
-
-@app.exception_handler(Exception)
-async def debug_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": str(exc),
-            "traceback": traceback.format_exc(),
-            "type": type(exc).__name__,
-        },
-    )
-
 # CORS
 app.add_middleware(
     CORSMiddleware,
