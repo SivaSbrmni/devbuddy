@@ -18,6 +18,11 @@ import Dropdown from '../components/Dropdown'
 const BACKEND = import.meta.env.VITE_API_URL || ''
 const API = `${BACKEND}/api/v1`
 
+function capitalizeFirst(s: string): string {
+  if (!s) return s
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
 interface Model {
   id: string
   label: string
@@ -320,7 +325,7 @@ export default function Workspace() {
       taskCard: initialCard,
     }
 
-    const convTitle = conversationAtStart.length === 1 ? task.slice(0, 50) : (active?.title || task.slice(0, 50))
+    const convTitle = conversationAtStart.length === 1 ? capitalizeFirst(task.slice(0, 50)) : (active?.title || capitalizeFirst(task.slice(0, 50)))
     updateActive([...conversationAtStart, agentMsg], convTitle)
 
     // Helper: patch the taskCard of the agent message in-place
@@ -470,7 +475,7 @@ export default function Workspace() {
       taskCard: initialCard,
     }
 
-    const convTitle = conversationAtStart.length === 1 ? task.slice(0, 50) : (active?.title || task.slice(0, 50))
+    const convTitle = conversationAtStart.length === 1 ? capitalizeFirst(task.slice(0, 50)) : (active?.title || capitalizeFirst(task.slice(0, 50)))
     updateActive([...conversationAtStart, agentMsg], convTitle, convId)
 
     const patchCard = (fn: (c: TaskCardData) => TaskCardData) => {
@@ -724,7 +729,7 @@ export default function Workspace() {
       const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text, ts: Date.now() }
       const agentMsgId = crypto.randomUUID()
       const msgsWithUser = [...conv.messages, userMsg]
-      updateActive(msgsWithUser, text.slice(0, 50), convId)
+      updateActive(msgsWithUser, capitalizeFirst(text.slice(0, 50)), convId)
       await runCloudAgent(text, agentMsgId, msgsWithUser, convId)
       return
     }
@@ -748,7 +753,7 @@ export default function Workspace() {
     if (!conv) conv = createNew()
 
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text, ts: Date.now() }
-    const title = conv.messages.length === 0 ? text.slice(0, 50) : conv.title
+    const title = conv.messages.length === 0 ? capitalizeFirst(text.slice(0, 50)) : conv.title
     const newMsgs = [...conv.messages, userMsg]
     updateActive(newMsgs, title)
     setInput('')
