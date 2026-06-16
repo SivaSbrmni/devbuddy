@@ -10,6 +10,7 @@ Fetches and injects memory from:
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import Optional
 from dataclasses import dataclass
