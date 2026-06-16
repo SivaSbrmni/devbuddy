@@ -14,7 +14,7 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 async def extract_knowledge(conversation_id: str, messages: list[dict]) -> list[KnowledgeEntry]:
     """Extract knowledge from a conversation using LLM."""
     from app.core.model_router import model_router, LLMRequest
-    
+
     # Build extraction prompt
     prompt = f"""Extract key knowledge from this conversation. For each piece of knowledge, provide:
 1. A clear title
@@ -26,7 +26,7 @@ Conversation:
 {messages}
 
 Return as JSON array with format: [{{"title": "...", "content": "...", "keywords": ["..."], "category": "..."}}]"""
-    
+
     try:
         # Call LLM to extract knowledge
         llm_req = LLMRequest(
@@ -35,15 +35,15 @@ Return as JSON array with format: [{{"title": "...", "content": "...", "keywords
             model="qwen3-coder:480b",
             provider="ollama",
         )
-        
+
         response = ""
         async for delta in model_router._call_provider_stream(llm_req, "ollama"):
             response += delta
-        
+
         # Parse response (simplified - in production use better parsing)
         import json
         import re
-        
+
         # Try to extract JSON from response
         json_match = re.search(r'\[.*\]', response, re.DOTALL)
         if json_match:
@@ -56,7 +56,7 @@ Return as JSON array with format: [{{"title": "...", "content": "...", "keywords
                 "keywords": ["summary", "conversation"],
                 "category": "general"
             }]
-        
+
         # Store knowledge entries
         entries = []
         for item in knowledge_data:
@@ -68,9 +68,9 @@ Return as JSON array with format: [{{"title": "...", "content": "...", "keywords
                 category=item.get("category", "general")
             ))
             entries.append(entry)
-        
+
         return entries
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to extract knowledge: {str(e)}")
 

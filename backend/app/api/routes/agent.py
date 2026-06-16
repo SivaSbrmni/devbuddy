@@ -19,7 +19,6 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.orchestrator import TaskOrchestrator
-from app.core.config import settings
 from app.core.deps import get_db
 from app.core.model_router import model_router
 from app.models.project import Project

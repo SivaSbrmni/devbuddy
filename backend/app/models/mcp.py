@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 class MCPConfig(BaseModel):
     """MCP server configuration."""
-    
+
     id: UUID = Field(default_factory=uuid4)
     name: str
     server_type: str  # e.g., 'github', 'huggingface', 'filesystem', 'database'
@@ -16,14 +16,14 @@ class MCPConfig(BaseModel):
     api_key: Optional[str] = None
     config: dict = Field(default_factory=dict)
     enabled: bool = True
-    
+
     class Config:
         from_attributes = True
 
 
 class MCPTool(BaseModel):
     """Available tool from an MCP server."""
-    
+
     name: str
     description: str
     input_schema: dict
@@ -32,7 +32,7 @@ class MCPTool(BaseModel):
 
 class MCPToolCall(BaseModel):
     """Request to call an MCP tool."""
-    
+
     server_id: UUID
     tool_name: str
     arguments: dict
@@ -40,7 +40,7 @@ class MCPToolCall(BaseModel):
 
 class MCPToolResult(BaseModel):
     """Result from an MCP tool call."""
-    
+
     success: bool
     result: Optional[dict] = None
     error: Optional[str] = None

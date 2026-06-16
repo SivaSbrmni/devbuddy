@@ -113,7 +113,7 @@ async def create_conversation(
     """Create a new conversation."""
     from app.db.session import async_session_factory
     from app.models.conversation import Conversation
-    
+
     async with async_session_factory() as db:
         conv = Conversation(
             user_id=user.id,
@@ -126,7 +126,7 @@ async def create_conversation(
         db.add(conv)
         await db.commit()
         await db.refresh(conv)
-        
+
         return ConversationResponse(
             id=conv.id,
             user_id=conv.user_id,
@@ -161,21 +161,21 @@ async def list_conversations(
     from app.db.session import async_session_factory
     from app.models.conversation import Conversation
     from sqlalchemy import select, func
-    
+
     async with async_session_factory() as db:
         stmt = select(Conversation).where(Conversation.user_id == user.id)
-        
+
         if status:
             stmt = stmt.where(Conversation.status == status)
         if repo_url:
             stmt = stmt.where(Conversation.repository_url == repo_url)
-        
+
         stmt = stmt.order_by(Conversation.last_message_at.desc().nullslast())
         stmt = stmt.offset(offset).limit(limit)
-        
+
         result = await db.execute(stmt)
         conversations = result.scalars().all()
-        
+
         # Get message counts
         conv_ids = [c.id for c in conversations]
         from app.models.conversation import Message
@@ -186,7 +186,7 @@ async def list_conversations(
         )
         count_result = await db.execute(count_stmt)
         counts = {row[0]: row[1] for row in count_result.all()}
-        
+
         return [
             ConversationListResponse(
                 id=c.id,
@@ -211,7 +211,7 @@ async def get_conversation(
     from app.db.session import async_session_factory
     from app.models.conversation import Conversation, Message
     from sqlalchemy import select, func
-    
+
     async with async_session_factory() as db:
         # Get conversation
         stmt = select(Conversation).where(
@@ -220,10 +220,10 @@ async def get_conversation(
         )
         result = await db.execute(stmt)
         conv = result.scalar_one_or_none()
-        
+
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        
+
         # Get message count
         count_stmt = (
             select(func.count(Message.id))
@@ -231,7 +231,7 @@ async def get_conversation(
         )
         count_result = await db.execute(count_stmt)
         message_count = count_result.scalar()
-        
+
         messages = []
         if include_messages:
             msg_stmt = (
@@ -252,7 +252,7 @@ async def get_conversation(
                 )
                 for m in msg_result.scalars().all()
             ]
-        
+
         return ConversationDetailResponse(
             id=conv.id,
             user_id=conv.user_id,
@@ -286,7 +286,7 @@ async def update_conversation(
     from app.db.session import async_session_factory
     from app.models.conversation import Conversation
     from sqlalchemy import select
-    
+
     async with async_session_factory() as db:
         stmt = select(Conversation).where(
             Conversation.id == conversation_id,
@@ -294,10 +294,10 @@ async def update_conversation(
         )
         result = await db.execute(stmt)
         conv = result.scalar_one_or_none()
-        
+
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        
+
         if req.title is not None:
             conv.title = req.title
         if req.summary is not None:
@@ -306,11 +306,11 @@ async def update_conversation(
             conv.current_goal = req.current_goal
         if req.status is not None:
             conv.status = req.status
-        
+
         conv.version += 1  # Optimistic locking
         await db.commit()
         await db.refresh(conv)
-        
+
         return ConversationResponse(
             id=conv.id,
             user_id=conv.user_id,
@@ -342,7 +342,7 @@ async def delete_conversation(
     from app.db.session import async_session_factory
     from app.models.conversation import Conversation
     from sqlalchemy import select
-    
+
     async with async_session_factory() as db:
         stmt = select(Conversation).where(
             Conversation.id == conversation_id,
@@ -350,13 +350,13 @@ async def delete_conversation(
         )
         result = await db.execute(stmt)
         conv = result.scalar_one_or_none()
-        
+
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        
+
         await db.delete(conv)
         await db.commit()
-        
+
         return {"deleted": True, "id": str(conversation_id)}
 
 
@@ -372,7 +372,7 @@ async def create_message(
     from app.db.session import async_session_factory
     from app.models.conversation import Conversation, Message
     from sqlalchemy import select
-    
+
     async with async_session_factory() as db:
         # Verify ownership
         conv_stmt = select(Conversation).where(
@@ -381,10 +381,10 @@ async def create_message(
         )
         conv_result = await db.execute(conv_stmt)
         conv = conv_result.scalar_one_or_none()
-        
+
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        
+
         # Create message
         msg = Message(
             conversation_id=conversation_id,
@@ -393,14 +393,14 @@ async def create_message(
             metadata=req.metadata,
         )
         db.add(msg)
-        
+
         # Update conversation
         conv.last_message_at = datetime.utcnow()
         conv.version += 1
-        
+
         await db.commit()
         await db.refresh(msg)
-        
+
         return MessageResponse(
             id=msg.id,
             conversation_id=msg.conversation_id,
@@ -423,7 +423,7 @@ async def list_messages(
     from app.db.session import async_session_factory
     from app.models.conversation import Conversation, Message
     from sqlalchemy import select
-    
+
     async with async_session_factory() as db:
         # Verify ownership
         conv_stmt = select(Conversation.id).where(
@@ -433,7 +433,7 @@ async def list_messages(
         conv_result = await db.execute(conv_stmt)
         if not conv_result.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Conversation not found")
-        
+
         stmt = (
             select(Message)
             .where(Message.conversation_id == conversation_id)
@@ -443,7 +443,7 @@ async def list_messages(
         )
         result = await db.execute(stmt)
         messages = result.scalars().all()
-        
+
         return [
             MessageResponse(
                 id=m.id,
@@ -477,7 +477,7 @@ async def sync_conversations(
     user: User = Depends(get_current_user),
 ) -> SyncResponse:
     """Sync conversations between client and server.
-    
+
     Client sends its last known state, server returns:
     - New/updated conversations since last_sync_at
     - IDs of conversations deleted on server
@@ -486,23 +486,23 @@ async def sync_conversations(
     from app.db.session import async_session_factory
     from app.models.conversation import Conversation
     from sqlalchemy import select
-    
+
     async with async_session_factory() as db:
         # Get all conversations updated since last sync
         stmt = select(Conversation).where(Conversation.user_id == user.id)
-        
+
         if req.last_sync_at:
             stmt = stmt.where(Conversation.updated_at > req.last_sync_at)
-        
+
         stmt = stmt.order_by(Conversation.updated_at.desc())
-        
+
         result = await db.execute(stmt)
         conversations = result.scalars().all()
-        
+
         # TODO: Detect deleted conversations
         # This requires tombstones or a deleted_conversations table
         deleted_ids = []
-        
+
         return SyncResponse(
             updated_conversations=[
                 ConversationResponse(
@@ -536,28 +536,28 @@ async def sync_conversations(
 
 class ConnectionManager:
     """Manage WebSocket connections for real-time sync."""
-    
+
     def __init__(self):
         self.active_connections: dict[uuid.UUID, list[WebSocket]] = {}
-    
+
     async def connect(self, websocket: WebSocket, user_id: uuid.UUID):
         await websocket.accept()
         if user_id not in self.active_connections:
             self.active_connections[user_id] = []
         self.active_connections[user_id].append(websocket)
-    
+
     def disconnect(self, websocket: WebSocket, user_id: uuid.UUID):
         if user_id in self.active_connections:
             self.active_connections[user_id].remove(websocket)
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
-    
+
     async def broadcast_to_user(self, user_id: uuid.UUID, message: dict):
         if user_id in self.active_connections:
             for ws in self.active_connections[user_id]:
                 try:
                     await ws.send_json(message)
-                except:
+                except Exception:
                     pass
 
 
@@ -572,7 +572,7 @@ async def websocket_endpoint(
     """WebSocket for real-time conversation updates."""
     # TODO: Authenticate token
     user_id = uuid.uuid4()  # Placeholder - get from token
-    
+
     await manager.connect(websocket, user_id)
     try:
         while True:

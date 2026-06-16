@@ -7,14 +7,19 @@ linked tasks with proper context inheritance.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+import structlog
 
 from app.core.security import get_current_user
 from app.models.user import User
-from app.services.follow_up_service import follow_up_service, FollowUpAnalysis
+from app.services.follow_up_service import follow_up_service
+from app.services.semantic_branch import generate_semantic_branch_name
+
+log = structlog.get_logger()
 
 router = APIRouter(prefix="/follow-up", tags=["follow-up"])
 
@@ -69,7 +74,7 @@ async def analyze_message(
     from app.models.conversation import Conversation
     from sqlalchemy import select
     from app.db.session import async_session_factory
-    
+
     # Verify ownership
     async with async_session_factory() as db:
         conv_stmt = select(Conversation).where(
@@ -78,16 +83,16 @@ async def analyze_message(
         )
         conv_result = await db.execute(conv_stmt)
         conv = conv_result.scalar_one_or_none()
-        
+
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     # Analyze the message
     analysis = await follow_up_service.handle_new_message(
         conversation_id=uuid.UUID(req.conversation_id),
         message=req.message,
     )
-    
+
     return AnalyzeResponse(
         is_follow_up=analysis.get('is_follow_up', False),
         confidence=analysis.get('confidence', 0.5),
@@ -108,11 +113,11 @@ async def create_task_with_context(
     from app.services.intent_classifier import classify_intent, IntentType
     from sqlalchemy import select
     from app.db.session import async_session_factory
-    
+
     # ─── INTENT CLASSIFICATION ──────────────────────────────────────────────
     # First, classify the user's intent to determine if code work is needed
     intent_result = classify_intent(req.message)
-    
+
     # If user is asking to analyze/explain/question (not implement), don't create code task
     if intent_result.intent in (IntentType.ANALYZE, IntentType.QUESTION, IntentType.CHAT):
         # Return a special response indicating no code work needed
@@ -121,7 +126,7 @@ async def create_task_with_context(
             intent=intent_result.intent.value,
             message_preview=req.message[:50],
         )
-        
+
         return CreateTaskResponse(
             task_id="",
             is_follow_up=False,
@@ -146,7 +151,7 @@ Instead:
             no_code_work_needed=True,
             intent_type=intent_result.intent.value,
         )
-    
+
     # ─── VERIFY OWNERSHIP ───────────────────────────────────────────────────
     async with async_session_factory() as db:
         conv_stmt = select(Conversation).where(
@@ -155,20 +160,20 @@ Instead:
         )
         conv_result = await db.execute(conv_stmt)
         conv = conv_result.scalar_one_or_none()
-        
+
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-    
+
     # Import semantic branch naming
     from app.services.semantic_branch import generate_semantic_branch_name
-    
+
     # If forced new task, skip detection
     if req.force_new_task:
         # Create new task without follow-up logic
         from app.models.conversation import ConversationTask
-        
+
         branch = generate_semantic_branch_name(req.message)
-        
+
         async with async_session_factory() as db:
             task = ConversationTask(
                 conversation_id=uuid.UUID(req.conversation_id),
@@ -179,7 +184,7 @@ Instead:
             )
             db.add(task)
             await db.flush()
-            
+
             # Update conversation open_tasks
             if not conv.open_tasks:
                 conv.open_tasks = []
@@ -187,11 +192,11 @@ Instead:
                 'task_id': str(task.id),
                 'title': req.message[:100],
                 'status': 'pending',
-                'created_at': datetime.utcnow().isoformat(),
+                'created_at': datetime.now(timezone.utc).isoformat(),
             })
-            
+
             await db.commit()
-            
+
             return CreateTaskResponse(
                 task_id=str(task.id),
                 is_follow_up=False,
@@ -202,13 +207,13 @@ Instead:
                 confidence=1.0,
                 suggested_prompt_context="",
             )
-    
+
     # Use follow-up service to detect and create
     result = await follow_up_service.handle_new_message(
         conversation_id=uuid.UUID(req.conversation_id),
         message=req.message,
     )
-    
+
     # Build suggested prompt context
     prompt_context = ""
     if result.get('is_follow_up') and result.get('parent_task_id'):
@@ -219,7 +224,7 @@ Previous work context:
 - Modified files: {', '.join(result.get('inherited_files', [])[:5])}
 
 Continue working on the same codebase, building upon the previous changes."""
-    
+
     return CreateTaskResponse(
         task_id=result['task_id'],
         is_follow_up=result['is_follow_up'],
@@ -252,8 +257,7 @@ async def continue_on_branch(
     from sqlalchemy import select
     from app.db.session import async_session_factory
     from datetime import datetime
-    import re
-    
+
     # Verify ownership
     async with async_session_factory() as db:
         conv_stmt = select(Conversation).where(
@@ -262,10 +266,10 @@ async def continue_on_branch(
         )
         conv_result = await db.execute(conv_stmt)
         conv = conv_result.scalar_one_or_none()
-        
+
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        
+
         # Get most recent task
         recent_stmt = (
             select(ConversationTask)
@@ -275,7 +279,7 @@ async def continue_on_branch(
         )
         recent_result = await db.execute(recent_stmt)
         prev_task = recent_result.scalar_one_or_none()
-        
+
         if not prev_task:
             # No previous task, create new with semantic branch name
             branch = generate_semantic_branch_name(req.message)
@@ -288,18 +292,18 @@ async def continue_on_branch(
             )
             db.add(task)
             await db.flush()
-            
+
             if not conv.open_tasks:
                 conv.open_tasks = []
             conv.open_tasks.append({
                 'task_id': str(task.id),
                 'title': req.message[:100],
                 'status': 'pending',
-                'created_at': datetime.utcnow().isoformat(),
+                'created_at': datetime.now(timezone.utc).isoformat(),
             })
-            
+
             await db.commit()
-            
+
             return CreateTaskResponse(
                 task_id=str(task.id),
                 is_follow_up=False,
@@ -310,7 +314,7 @@ async def continue_on_branch(
                 confidence=1.0,
                 suggested_prompt_context="",
             )
-        
+
         # Continue on same branch
         task = ConversationTask(
             conversation_id=uuid.UUID(req.conversation_id),
@@ -321,21 +325,21 @@ async def continue_on_branch(
             branch=prev_task.branch,  # Same branch!
             status='pending',
         )
-        
+
         db.add(task)
         await db.flush()
-        
+
         if not conv.open_tasks:
             conv.open_tasks = []
         conv.open_tasks.append({
             'task_id': str(task.id),
             'title': req.message[:100],
             'status': 'pending',
-            'created_at': datetime.utcnow().isoformat(),
+            'created_at': datetime.now(timezone.utc).isoformat(),
         })
-        
+
         await db.commit()
-        
+
         prompt_context = f"""Continue working on branch '{prev_task.branch}'.
 
 Previous work:
@@ -343,7 +347,7 @@ Previous work:
 - Commit: {prev_task.commit_hash or 'N/A'}
 
 Build upon these changes."""
-        
+
         return CreateTaskResponse(
             task_id=str(task.id),
             is_follow_up=True,

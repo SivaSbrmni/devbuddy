@@ -155,7 +155,7 @@ async def list_providers(
     from app.db.session import async_session_factory
     from app.models.llm_provider import UserLLMProvider
     from sqlalchemy import select
-    
+
     async with async_session_factory() as db:
         stmt = (
             select(UserLLMProvider)
@@ -175,18 +175,18 @@ async def create_provider(
     """Create a new LLM provider."""
     from app.db.session import async_session_factory
     from app.models.llm_provider import UserLLMProvider
-    
+
     async with async_session_factory() as db:
         # If this is set as default, unset any existing default
         if req.is_default:
             await db.execute(
                 f"""
-                UPDATE user_llm_providers 
-                SET is_default = false 
+                UPDATE user_llm_providers
+                SET is_default = false
                 WHERE user_id = '{user.id}'
                 """
             )
-        
+
         provider = UserLLMProvider(
             user_id=user.id,
             name=req.name,
@@ -206,11 +206,11 @@ async def create_provider(
             priority=req.priority,
             is_default=req.is_default,
         )
-        
+
         db.add(provider)
         await db.commit()
         await db.refresh(provider)
-        
+
         return provider_to_response(provider)
 
 
@@ -223,7 +223,7 @@ async def get_provider(
     from app.db.session import async_session_factory
     from app.models.llm_provider import UserLLMProvider
     from sqlalchemy import select
-    
+
     async with async_session_factory() as db:
         stmt = select(UserLLMProvider).where(
             UserLLMProvider.id == provider_id,
@@ -231,10 +231,10 @@ async def get_provider(
         )
         result = await db.execute(stmt)
         provider = result.scalar_one_or_none()
-        
+
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
-        
+
         return provider_to_response(provider)
 
 
@@ -248,7 +248,7 @@ async def update_provider(
     from app.db.session import async_session_factory
     from app.models.llm_provider import UserLLMProvider
     from sqlalchemy import select
-    
+
     async with async_session_factory() as db:
         stmt = select(UserLLMProvider).where(
             UserLLMProvider.id == provider_id,
@@ -256,20 +256,20 @@ async def update_provider(
         )
         result = await db.execute(stmt)
         provider = result.scalar_one_or_none()
-        
+
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
-        
+
         # If setting as default, unset others
         if req.is_default:
             await db.execute(
                 f"""
-                UPDATE user_llm_providers 
-                SET is_default = false 
+                UPDATE user_llm_providers
+                SET is_default = false
                 WHERE user_id = '{user.id}' AND id != '{provider_id}'
                 """
             )
-        
+
         # Update fields
         update_data = req.model_dump(exclude_unset=True)
         for field, value in update_data.items():
@@ -279,10 +279,10 @@ async def update_provider(
                 setattr(provider, field, value.rstrip("/"))
             elif hasattr(provider, field):
                 setattr(provider, field, value)
-        
+
         await db.commit()
         await db.refresh(provider)
-        
+
         return provider_to_response(provider)
 
 
@@ -295,7 +295,7 @@ async def delete_provider(
     from app.db.session import async_session_factory
     from app.models.llm_provider import UserLLMProvider
     from sqlalchemy import select
-    
+
     async with async_session_factory() as db:
         stmt = select(UserLLMProvider).where(
             UserLLMProvider.id == provider_id,
@@ -303,13 +303,13 @@ async def delete_provider(
         )
         result = await db.execute(stmt)
         provider = result.scalar_one_or_none()
-        
+
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
-        
+
         await db.delete(provider)
         await db.commit()
-        
+
         return {"deleted": True, "id": str(provider_id)}
 
 
@@ -321,18 +321,18 @@ async def test_provider_connection(
 ) -> TestProviderResponse:
     """Test connection to a provider without saving it."""
     import time
-    
+
     start = time.monotonic()
-    
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             headers = {"Content-Type": "application/json"}
             if req.api_key:
                 headers["Authorization"] = f"Bearer {req.api_key}"
-            
+
             # Try to list models (OpenAI-compatible endpoint)
             base_url = req.base_url.rstrip("/")
-            
+
             if req.provider_type == "ollama":
                 # Ollama uses /api/tags for models
                 resp = await client.get(
@@ -383,14 +383,14 @@ async def test_provider_connection(
                             latency_ms=latency,
                             message="Connected (test completion succeeded)",
                         )
-            
+
             latency = int((time.monotonic() - start) * 1000)
             return TestProviderResponse(
                 success=False,
                 latency_ms=latency,
                 message=f"Connection failed: HTTP {resp.status_code}",
             )
-            
+
     except httpx.TimeoutException:
         latency = int((time.monotonic() - start) * 1000)
         return TestProviderResponse(
@@ -417,7 +417,7 @@ async def test_saved_provider(
     from app.models.llm_provider import UserLLMProvider
     from sqlalchemy import select
     import time
-    
+
     async with async_session_factory() as db:
         stmt = select(UserLLMProvider).where(
             UserLLMProvider.id == provider_id,
@@ -425,37 +425,37 @@ async def test_saved_provider(
         )
         result = await db.execute(stmt)
         provider = result.scalar_one_or_none()
-        
+
         if not provider:
             raise HTTPException(status_code=404, detail="Provider not found")
-        
+
         # Run test
         api_key = decrypt_value(provider.api_key_encrypted)
-        
+
         start = time.monotonic()
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 headers = {"Content-Type": "application/json"}
                 if api_key:
                     headers["Authorization"] = f"Bearer {api_key}"
-                
+
                 base_url = provider.base_url
-                
+
                 # Simple test request
                 if provider.provider_type == "ollama":
                     resp = await client.get(f"{base_url}/api/tags", headers=headers)
                 else:
                     resp = await client.get(f"{base_url}/v1/models", headers=headers)
-                
+
                 latency = int((time.monotonic() - start) * 1000)
-                
+
                 if resp.status_code == 200:
                     provider.health_status = "healthy"
                     provider.health_message = "Connected successfully"
                     provider.latency_ms = latency
                     provider.last_tested_at = datetime.utcnow()
                     await db.commit()
-                    
+
                     return TestProviderResponse(
                         success=True,
                         latency_ms=latency,
@@ -467,13 +467,13 @@ async def test_saved_provider(
                     provider.latency_ms = latency
                     provider.last_tested_at = datetime.utcnow()
                     await db.commit()
-                    
+
                     return TestProviderResponse(
                         success=False,
                         latency_ms=latency,
                         message=f"HTTP {resp.status_code}",
                     )
-                    
+
         except Exception as e:
             latency = int((time.monotonic() - start) * 1000)
             provider.health_status = "error"
@@ -481,7 +481,7 @@ async def test_saved_provider(
             provider.latency_ms = latency
             provider.last_tested_at = datetime.utcnow()
             await db.commit()
-            
+
             return TestProviderResponse(
                 success=False,
                 latency_ms=latency,
@@ -499,15 +499,15 @@ async def get_available_models(
     from app.db.session import async_session_factory
     from app.models.llm_provider import UserLLMProvider
     from sqlalchemy import select
-    
+
     async with async_session_factory() as db:
         stmt = (
             select(UserLLMProvider)
-            .where(UserLLMProvider.user_id == user.id, UserLLMProvider.is_active == True)
+            .where(UserLLMProvider.user_id == user.id, UserLLMProvider.is_active)
         )
         result = await db.execute(stmt)
         providers = result.scalars().all()
-        
+
         all_models = []
         for provider in providers:
             for model in provider.available_models:
@@ -519,7 +519,7 @@ async def get_available_models(
                     "provider_type": provider.provider_type,
                     "health_status": provider.health_status,
                 })
-        
+
         return {
             "models": all_models,
             "default_provider": str(next((p.id for p in providers if p.is_default), None)),

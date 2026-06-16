@@ -163,7 +163,7 @@ class ModelRouter:
         if request.provider:
             log.info("model_router.override", provider=request.provider, model=request.model)
             return await self._call_provider(request, request.provider)
-        
+
         tier = self._select_tier(request.task_category)
         log.info("model_router.routing", tier=tier.value, category=request.task_category.value)
 

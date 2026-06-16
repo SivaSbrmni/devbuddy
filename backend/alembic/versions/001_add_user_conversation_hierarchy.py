@@ -1,7 +1,7 @@
 """Add User, Conversation, and LLM Provider hierarchy.
 
 Revision ID: 001
-Revises: 
+Revises:
 Create Date: 2026-06-16
 
 This migration creates the foundation for:
@@ -15,11 +15,10 @@ This migration creates the foundation for:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Sequence
 
 from alembic import op
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, Boolean, func
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, Boolean, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 # revision identifiers
@@ -31,7 +30,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Create all new tables for cloud-native architecture."""
-    
+
     # ─── Organizations ─────────────────────────────────────────────────
     op.create_table(
         "organizations",
@@ -43,7 +42,7 @@ def upgrade() -> None:
         Column("created_at", DateTime(timezone=True), server_default=func.now()),
         Column("updated_at", DateTime(timezone=True), server_default=func.now(), onupdate=func.now()),
     )
-    
+
     # ─── Users ─────────────────────────────────────────────────────────
     op.create_table(
         "users",
@@ -60,7 +59,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_users_email", "users", ["email"])
     op.create_index("ix_users_org_id", "users", ["org_id"])
-    
+
     # ─── User Sessions ─────────────────────────────────────────────────
     op.create_table(
         "user_sessions",
@@ -77,7 +76,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_user_sessions_user_id", "user_sessions", ["user_id"])
     op.create_index("ix_user_sessions_active", "user_sessions", ["user_id", "is_active"])
-    
+
     # ─── Conversations ─────────────────────────────────────────────────
     op.create_table(
         "conversations",
@@ -104,7 +103,7 @@ def upgrade() -> None:
     op.create_index("ix_conversations_status", "conversations", ["user_id", "status"])
     op.create_index("ix_conversations_repo", "conversations", ["repository_url"])
     op.create_index("ix_conversations_last_message", "conversations", ["user_id", "last_message_at"])
-    
+
     # ─── Messages ──────────────────────────────────────────────────────
     op.create_table(
         "messages",
@@ -119,7 +118,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_messages_conversation_id", "messages", ["conversation_id"])
     op.create_index("ix_messages_created", "messages", ["conversation_id", "created_at"])
-    
+
     # ─── Conversation Tasks ─────────────────────────────────────────────
     op.create_table(
         "conversation_tasks",
@@ -144,7 +143,7 @@ def upgrade() -> None:
     op.create_index("ix_tasks_conversation_id", "conversation_tasks", ["conversation_id"])
     op.create_index("ix_tasks_status", "conversation_tasks", ["conversation_id", "status"])
     op.create_index("ix_tasks_branch", "conversation_tasks", ["branch"])
-    
+
     # ─── Conversation Events ────────────────────────────────────────────
     op.create_table(
         "conversation_events",
@@ -162,7 +161,7 @@ def upgrade() -> None:
     op.create_index("ix_events_conversation_id", "conversation_events", ["conversation_id"])
     op.create_index("ix_events_sequence", "conversation_events", ["conversation_id", "sequence_number"])
     op.create_index("ix_events_type", "conversation_events", ["event_type"])
-    
+
     # ─── Task Events ────────────────────────────────────────────────────
     op.create_table(
         "task_events",
@@ -175,7 +174,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_task_events_task_id", "task_events", ["task_id"])
     op.create_index("ix_task_events_type", "task_events", ["event_type"])
-    
+
     # ─── User LLM Providers ───────────────────────────────────────────
     op.create_table(
         "user_llm_providers",
@@ -211,7 +210,7 @@ def upgrade() -> None:
     op.create_index("ix_llm_providers_user_id", "user_llm_providers", ["user_id"])
     op.create_index("ix_llm_providers_active", "user_llm_providers", ["user_id", "is_active"])
     op.create_index("ix_llm_providers_default", "user_llm_providers", ["user_id", "is_default"])
-    
+
     # ─── Provider Routing Rules ────────────────────────────────────────
     op.create_table(
         "provider_routing_rules",
@@ -231,7 +230,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_routing_rules_user_id", "provider_routing_rules", ["user_id"])
     op.create_index("ix_routing_rules_task", "provider_routing_rules", ["user_id", "task_type"])
-    
+
     # ─── User Memory ───────────────────────────────────────────────────
     op.create_table(
         "user_memories",
@@ -266,7 +265,7 @@ def upgrade() -> None:
         Column("updated_at", DateTime(timezone=True), server_default=func.now(), onupdate=func.now()),
     )
     op.create_index("ix_user_memories_user_id", "user_memories", ["user_id"])
-    
+
     # ─── Repository Memory ─────────────────────────────────────────────
     op.create_table(
         "repository_memories",
@@ -298,7 +297,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_repo_memories_url", "repository_memories", ["repo_url"])
     op.create_index("ix_repo_memories_owner", "repository_memories", ["repo_owner"])
-    
+
     # ─── Organization Memory ──────────────────────────────────────────
     op.create_table(
         "organization_memories",

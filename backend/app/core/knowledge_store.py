@@ -11,11 +11,11 @@ from app.models.knowledge import KnowledgeEntry, KnowledgeCreate
 
 class KnowledgeStore:
     """SQLite-based knowledge storage."""
-    
+
     def __init__(self, db_path: str = "knowledge.db"):
         self.db_path = db_path
         self._init_db()
-    
+
     def _init_db(self):
         """Initialize database schema."""
         conn = sqlite3.connect(self.db_path)
@@ -43,13 +43,13 @@ class KnowledgeStore:
         """)
         conn.commit()
         conn.close()
-    
+
     def create(self, entry: KnowledgeCreate) -> KnowledgeEntry:
         """Create a new knowledge entry."""
         from uuid import uuid4
         id = str(uuid4())
         now = datetime.utcnow().isoformat()
-        
+
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
@@ -61,7 +61,7 @@ class KnowledgeStore:
         )
         conn.commit()
         conn.close()
-        
+
         return KnowledgeEntry(
             id=UUID(id),
             conversation_id=entry.conversation_id,
@@ -72,7 +72,7 @@ class KnowledgeStore:
             created_at=datetime.fromisoformat(now),
             updated_at=datetime.fromisoformat(now)
         )
-    
+
     def get_by_id(self, id: str) -> Optional[KnowledgeEntry]:
         """Get knowledge entry by ID."""
         conn = sqlite3.connect(self.db_path)
@@ -80,25 +80,25 @@ class KnowledgeStore:
         cursor.execute("SELECT * FROM knowledge WHERE id = ?", (id,))
         row = cursor.fetchone()
         conn.close()
-        
+
         if not row:
             return None
-        
+
         return self._row_to_entry(row)
-    
+
     def search(self, query: str, category: Optional[str] = None, limit: int = 10) -> list[KnowledgeEntry]:
         """Search knowledge by query."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        
+
         # Simple keyword matching - in production, use vector embeddings
         query_lower = query.lower()
-        
+
         if category:
             cursor.execute(
                 """
-                SELECT * FROM knowledge 
-                WHERE category = ? 
+                SELECT * FROM knowledge
+                WHERE category = ?
                 AND (LOWER(title) LIKE ? OR LOWER(content) LIKE ? OR keywords LIKE ?)
                 ORDER BY created_at DESC
                 LIMIT ?
@@ -108,19 +108,19 @@ class KnowledgeStore:
         else:
             cursor.execute(
                 """
-                SELECT * FROM knowledge 
+                SELECT * FROM knowledge
                 WHERE LOWER(title) LIKE ? OR LOWER(content) LIKE ? OR keywords LIKE ?
                 ORDER BY created_at DESC
                 LIMIT ?
                 """,
                 (f"%{query_lower}%", f"%{query_lower}%", f"%{query_lower}%", limit)
             )
-        
+
         rows = cursor.fetchall()
         conn.close()
-        
+
         return [self._row_to_entry(row) for row in rows]
-    
+
     def get_by_conversation(self, conversation_id: str) -> list[KnowledgeEntry]:
         """Get all knowledge entries for a conversation."""
         conn = sqlite3.connect(self.db_path)
@@ -128,9 +128,9 @@ class KnowledgeStore:
         cursor.execute("SELECT * FROM knowledge WHERE conversation_id = ? ORDER BY created_at DESC", (conversation_id,))
         rows = cursor.fetchall()
         conn.close()
-        
+
         return [self._row_to_entry(row) for row in rows]
-    
+
     def _row_to_entry(self, row: tuple) -> KnowledgeEntry:
         """Convert database row to KnowledgeEntry."""
         return KnowledgeEntry(

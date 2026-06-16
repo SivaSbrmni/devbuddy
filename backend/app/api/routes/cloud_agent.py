@@ -91,7 +91,8 @@ async def run_agent(
             ):
                 yield chunk
         except Exception as e:
-            import json, time
+            import json
+            import time
             yield f"data: {json.dumps({'type': 'error', 'timestamp': int(time.time()*1000), 'payload': {'message': str(e)}})}\n\n"
 
     return StreamingResponse(

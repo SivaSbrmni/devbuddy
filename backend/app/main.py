@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import app.models.execution  # noqa: F401
     import app.models.memory  # noqa: F401
     import app.models.user_settings  # noqa: F401
-    
+
     # New cloud-native architecture models
     import app.models.user  # noqa: F401
     import app.models.conversation  # noqa: F401
@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             existing = set(inspector.get_table_names())
             all_tables = set(Base.metadata.tables.keys())
             missing = all_tables - existing
-            
+
             if missing:
                 print(f"[db init] Missing tables: {missing}")
                 # Drop ALL existing indexes to avoid conflicts from partial prior runs
@@ -82,12 +82,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     if not idx_name.endswith('_pkey') and not idx_name.endswith('_idx'):
                         sync_conn.execute(text(f"DROP INDEX IF EXISTS {idx_name}"))
                         print(f"[db init] Dropped index: {idx_name}")
-                
+
                 # Create tables in dependency order using SQLAlchemy's create_all
                 # which handles FK ordering. Catch index errors and continue.
                 try:
                     Base.metadata.create_all(sync_conn, checkfirst=True)
-                    print(f"[db init] All tables created successfully")
+                    print("[db init] All tables created successfully")
                 except Exception as e:
                     err_msg = str(e).lower()
                     if "already exists" in err_msg or "duplicate" in err_msg:
@@ -184,28 +184,28 @@ async def migration_status():
     """Check if all required tables exist in the database."""
     from sqlalchemy import inspect
     from app.db.session import engine
-    
+
     async with engine.connect() as conn:
         def check_tables(sync_conn):
             inspector = inspect(sync_conn)
             existing = set(inspector.get_table_names())
-            
+
             # Core new tables
             required_new = {
                 'users', 'conversations', 'messages', 'conversation_tasks',
                 'user_llm_providers', 'user_memories', 'repository_memories'
             }
-            
+
             existing_required = existing & required_new
             missing = required_new - existing
-            
+
             return {
                 'all_tables_exist': len(missing) == 0,
                 'existing_new_tables': list(existing_required),
                 'missing_tables': list(missing),
                 'total_tables_in_db': len(existing),
             }
-        
+
         result = await conn.run_sync(check_tables)
         return result
 
@@ -220,7 +220,7 @@ if _static_dir.is_dir():
         # Don't intercept API routes
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404, detail="Not found")
-        
+
         file_path = _static_dir / full_path
         if file_path.is_file():
             return FileResponse(file_path)

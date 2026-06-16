@@ -19,10 +19,9 @@ import os
 import re
 import shutil
 import time
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
 import httpx
 import structlog
@@ -587,7 +586,7 @@ Output a numbered list of concrete implementation steps. Each step should be a s
         pr_body = (
             f"## Changes\n\n{done_summary}\n\n"
             f"## Modified Files\n\n" + "\n".join(f"- `{f}`" for f in state.modified_files) +
-            f"\n\n## Plan\n\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(state.plan)) +
+            "\n\n## Plan\n\n" + "\n".join(f"{i+1}. {s}" for i, s in enumerate(state.plan)) +
             f"\n\n---\n*Autonomous implementation by [DevBuddy](https://devbuddy.org) · Task `{state.task_id}`*"
         )
         pr = await _create_pr(

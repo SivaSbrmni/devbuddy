@@ -6,7 +6,7 @@ import asyncio
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,12 +115,12 @@ async def list_models(
     ollama_cfg = user_keys.get("ollama") or {}
     ollama_key = ollama_cfg.get("key") or settings.OLLAMA_API_KEY
     ollama_base = ollama_cfg.get("base_url") or settings.OLLAMA_API_BASE
-    
+
     # Always try to fetch live Ollama models from cloud API
     cache_key = f"{ollama_base}:{ollama_key[:4] if ollama_key else 'nokey'}"
     now = asyncio.get_event_loop().time()
     cached = _ollama_cache.get(cache_key)
-    
+
     if cached and now - cached[0] < _CACHE_TTL:
         models.extend(cached[1])
     else:

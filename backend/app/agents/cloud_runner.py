@@ -21,7 +21,6 @@ import asyncio
 import json
 import re
 import time
-import uuid
 from dataclasses import dataclass, field
 from typing import AsyncGenerator
 
@@ -211,7 +210,8 @@ async def _download_logs(owner: str, repo: str, token: str, run_id: int) -> str:
             if not resp.is_success:
                 return ""
             # The response is a ZIP — extract first text file
-            import io, zipfile
+            import io
+            import zipfile
             with zipfile.ZipFile(io.BytesIO(resp.content)) as z:
                 names = sorted(z.namelist())
                 text_parts = []
@@ -684,7 +684,7 @@ def _sse(event_type: str, payload: dict) -> str:
 def _parse_iso(ts: str) -> int:
     """Parse ISO8601 timestamp to epoch seconds (best-effort)."""
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
         return int(dt.timestamp())
     except Exception:

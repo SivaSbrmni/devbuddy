@@ -6,7 +6,7 @@ import time
 from typing import Optional, Any
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from jose import jwt
 from pydantic import BaseModel
@@ -214,7 +214,7 @@ async def search_repos(
 ) -> list[dict]:
     """Search across user's repos."""
     gh = _get_github_token(token or "")
-    payload = _decode_devbuddy_token(token or "")
+    _decode_devbuddy_token(token or "")
     # Search within user's repos
     user = await _github_get("/user", gh)
     login = user.get("login", "")
@@ -435,7 +435,7 @@ def _format_issue(i: dict) -> dict:
         "title": i.get("title", ""),
         "state": i.get("state", ""),
         "body": (i.get("body") or "")[:500],
-        "labels": [l["name"] for l in i.get("labels", [])],
+        "labels": [label["name"] for label in i.get("labels", [])],
         "assignees": [a["login"] for a in i.get("assignees", [])],
         "created_at": i.get("created_at", ""),
         "updated_at": i.get("updated_at", ""),

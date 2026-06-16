@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from app.core.security import get_current_user
 from app.models.user import User
-from app.services.memory_service import memory_service, MemoryContext, PromptInjector
+from app.services.memory_service import memory_service, PromptInjector
 from app.services.memory_extractor import memory_extractor
 
 router = APIRouter(prefix="/memory-context", tags=["memory"])
@@ -57,7 +57,7 @@ async def get_conversation_memory(
     from app.models.conversation import Conversation
     from sqlalchemy import select
     from app.db.session import async_session_factory
-    
+
     async with async_session_factory() as db:
         # Verify ownership
         stmt = select(Conversation).where(
@@ -66,17 +66,17 @@ async def get_conversation_memory(
         )
         result = await db.execute(stmt)
         conv = result.scalar_one_or_none()
-        
+
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        
+
         # Build memory context
         memory = await memory_service.build_memory_context(
             user_id=user.id,
             conversation_id=conversation_id,
             repo_url=conv.repository_url,
         )
-        
+
         return MemoryContextResponse(
             conversation_id=str(conversation_id),
             user_preferences=memory.user_preferences,
@@ -143,15 +143,15 @@ async def get_user_preferences(
     from app.models.user_memory import UserMemory
     from sqlalchemy import select
     from app.db.session import async_session_factory
-    
+
     async with async_session_factory() as db:
         stmt = select(UserMemory).where(UserMemory.user_id == user.id)
         result = await db.execute(stmt)
         mem = result.scalar_one_or_none()
-        
+
         if not mem:
             return {}
-        
+
         return {
             "preferred_language": mem.preferred_language,
             "preferred_framework": mem.preferred_framework,
@@ -185,7 +185,7 @@ async def build_prompt_with_memory(
     repo_url: Optional[str] = None,
 ) -> str:
     """Build a complete prompt with all memory context injected.
-    
+
     Used by the LLM router to automatically include memory in every request.
     """
     memory = await memory_service.build_memory_context(
@@ -193,5 +193,5 @@ async def build_prompt_with_memory(
         conversation_id=conversation_id,
         repo_url=repo_url,
     )
-    
+
     return PromptInjector.inject_memory(base_prompt, memory)

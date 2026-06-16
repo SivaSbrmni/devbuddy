@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -32,10 +31,10 @@ async def _stream_chat(request: ChatRequest):
     """Stream LLM response as SSE events."""
     import structlog
     log = structlog.get_logger()
-    
+
     provider = _resolve_provider(request.model)
     log.info("chat_request", model=request.model, provider=provider, messages_count=len(request.messages))
-    
+
     # Build LLM request
     llm_req = LLMRequest(
         messages=request.messages,
@@ -46,12 +45,12 @@ async def _stream_chat(request: ChatRequest):
         model=request.model,
         provider=provider,
     )
-    
+
     try:
         async for delta in model_router._call_provider_stream(llm_req, provider):
             # Send as SSE event
             yield f"data: {delta}\n\n"
-        
+
         # Send done event
         yield "data: [DONE]\n\n"
     except Exception as e:
