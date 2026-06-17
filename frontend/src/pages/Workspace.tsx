@@ -823,9 +823,7 @@ export default function Workspace() {
       })
       if (!resp.ok) {
         const err = await resp.text()
-        patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
-          events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: err.slice(0, 160), status: 'error' } as TaskEvent] }))
-        return true
+        throw new Error(err.slice(0, 160))
       }
 
       const reader = resp.body!.getReader()
