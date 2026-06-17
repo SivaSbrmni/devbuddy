@@ -165,50 +165,17 @@ export default function Workspace() {
 
   const activeId = activeConversation?.id || ''
 
-  const createNew = useCallback(() => {
-    // Create optimistic conversation immediately for UI responsiveness
-    const tempId = crypto.randomUUID()
-    const optimisticConv: LocalConversation = {
-      id: tempId,
-      user_id: user?.id || '',
-      title: 'New conversation',
-      repository_url: activeRepo?.html_url || null,
-      repository_name: activeRepo?.name || null,
-      repository_owner: activeRepo?.owner || null,
-      branch: null,
-      summary: '',
-      current_goal: '',
-      completed_tasks: [],
-      open_tasks: [],
-      modified_files: [],
-      important_decisions: [],
-      status: 'active',
-      last_message_at: null,
-      message_count: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      messages: [],
-      ts: Date.now(),
-    }
-    
-    // Set active immediately
-    setActiveConversation(tempId)
-    
-    // Create on server in background
-    createConversation({ 
+  const createNew = useCallback(async () => {
+    // Create on server first to get real ID
+    const serverConv = await createConversation({
       title: 'New conversation',
       repository_url: activeRepo?.html_url,
       repository_name: activeRepo?.name,
       repository_owner: activeRepo?.owner,
-    }).then(serverConv => {
-      // Replace optimistic with server version
-      setActiveConversation(serverConv.id)
-    }).catch(err => {
-      console.error('Failed to create conversation:', err)
     })
-    
-    return optimisticConv
-  }, [user?.id, activeRepo, createConversation, setActiveConversation])
+    setActiveConversation(serverConv.id)
+    return serverConv
+  }, [activeRepo, createConversation, setActiveConversation])
 
   // Sync status indicator component
   const SyncIndicator = () => {
@@ -1102,7 +1069,7 @@ export default function Workspace() {
       let conv = active
       let convId = activeId
       if (!conv) {
-        conv = createNew()
+        conv = await createNew()
         convId = conv.id
       }
       const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text, ts: Date.now() }
@@ -1138,12 +1105,13 @@ export default function Workspace() {
     }
 
     let conv = active
-    if (!conv) conv = createNew()
+    if (!conv) conv = await createNew()
+    const convId = conv.id
 
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text, ts: Date.now() }
     const title = conv.messages.length === 0 ? capitalizeFirst(text.slice(0, 50)) : conv.title
     const newMsgs = [...conv.messages, userMsg]
-    updateActive(newMsgs, title)
+    updateActive(newMsgs, title, convId)
     setInput('')
     setLoading(true)
     setAiThinking(true)
@@ -1151,7 +1119,7 @@ export default function Workspace() {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
     const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', ts: Date.now(), steps: [], files: [], agentEvents: [] }
-    updateActive([...newMsgs, assistantMsg], title)
+    updateActive([...newMsgs, assistantMsg], title, convId)
 
     try {
       if (agentMode) {
@@ -1163,7 +1131,7 @@ export default function Workspace() {
       const errorMsg = e instanceof Error && e.name === 'AbortError'
         ? 'Request cancelled'
         : `Error: ${e instanceof Error ? e.message : 'Failed to connect'}`
-      updateActive([...newMsgs, { ...assistantMsg, content: errorMsg }], title)
+      updateActive([...newMsgs, { ...assistantMsg, content: errorMsg }], title, convId)
     } finally {
       cleanup()
       if (active && active.messages.length > 2) {
