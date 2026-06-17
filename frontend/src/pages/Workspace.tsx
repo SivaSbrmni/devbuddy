@@ -133,7 +133,21 @@ export default function Workspace() {
     sync,
     forceRefresh,
   } = useServerConversations({ autoSync: true, syncInterval: 30000 })
-  
+
+  // Active repository state — MUST be declared before any callback that references it
+  const [activeRepo, setActiveRepoLocal] = useState<{ name: string; owner: string; full_name: string; html_url: string; default_branch?: string } | null>(() => {
+    try { return JSON.parse(localStorage.getItem('devbuddy_active_repo') || 'null') } catch { return null }
+  })
+
+  // Persist activeRepo to localStorage whenever it changes
+  useEffect(() => {
+    if (activeRepo) {
+      localStorage.setItem('devbuddy_active_repo', JSON.stringify(activeRepo))
+    } else {
+      localStorage.removeItem('devbuddy_active_repo')
+    }
+  }, [activeRepo])
+
   // Compatibility layer - adapt server API to existing component expectations
   const convs = useMemo(() => conversations.map(c => ({
     ...c,
@@ -259,19 +273,6 @@ export default function Workspace() {
   }, [setActiveConversation])
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [githubPanelOpen, setGithubPanelOpen] = useState(false)
-  const [activeRepo, setActiveRepoLocal] = useState<{ name: string; owner: string; full_name: string; html_url: string; default_branch?: string } | null>(() => {
-    try { return JSON.parse(localStorage.getItem('devbuddy_active_repo') || 'null') } catch { return null }
-  })
-
-  // Persist activeRepo to localStorage whenever it changes
-  useEffect(() => {
-    if (activeRepo) {
-      localStorage.setItem('devbuddy_active_repo', JSON.stringify(activeRepo))
-    } else {
-      localStorage.removeItem('devbuddy_active_repo')
-    }
-  }, [activeRepo])
-
   const [agentRun, setAgentRun] = useState<AgentRun | null>(null)
   const [agentTimelineOpen, setAgentTimelineOpen] = useState(false)
   const [engineeringTasks, setEngineeringTasks] = useState<EngineeringTask[]>([])
