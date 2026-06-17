@@ -204,6 +204,74 @@ async def list_conversations(
         ]
 
 
+sse_manager = SSEManager()
+
+
+@router.get("/sse")
+async def sse_endpoint(
+    token: str = Query(...),
+):
+    """SSE endpoint for real-time conversation updates."""
+    # Manually validate token
+    from app.core.security import decode_token
+    from app.db.session import async_session_factory
+    from app.models.user import User
+    from sqlalchemy import select
+
+    payload = decode_token(token)
+    if not payload:
+        return StreamingResponse(
+            iter([b"data: {\"type\": \"error\", \"message\": \"Invalid token\"}\n\n"]),
+            media_type="text/event-stream",
+        )
+
+    email = payload.get("email") or payload.get("sub")
+    if not email:
+        return StreamingResponse(
+            iter([b"data: {\"type\": \"error\", \"message\": \"Token missing user identification\"}\n\n"]),
+            media_type="text/event-stream",
+        )
+
+    async with async_session_factory() as db:
+        stmt = select(User).where(User.email == email.lower())
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        if not user:
+            return StreamingResponse(
+                iter([b"data: {\"type\": \"error\", \"message\": \"User not found\"}\n\n"]),
+                media_type="text/event-stream",
+            )
+
+    queue = sse_manager.connect(user.id)
+
+    async def event_generator():
+        """Generate SSE events."""
+        try:
+            # Send initial connection event
+            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+            
+            while True:
+                # Wait for messages from the queue
+                message = await queue.get()
+                yield f"data: {json.dumps(message)}\n\n"
+        except asyncio.CancelledError:
+            # Client disconnected
+            sse_manager.disconnect(queue, user.id)
+        except Exception:
+            sse_manager.disconnect(queue, user.id)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
+
+
 @router.get("/{conversation_id}", response_model=ConversationDetailResponse)
 async def get_conversation(
     conversation_id: uuid.UUID,
@@ -568,70 +636,3 @@ class SSEManager:
                 except Exception:
                     pass
 
-
-sse_manager = SSEManager()
-
-
-@router.get("/sse")
-async def sse_endpoint(
-    token: str = Query(...),
-):
-    """SSE endpoint for real-time conversation updates."""
-    # Manually validate token
-    from app.core.security import decode_token
-    from app.db.session import async_session_factory
-    from app.models.user import User
-    from sqlalchemy import select
-
-    payload = decode_token(token)
-    if not payload:
-        return StreamingResponse(
-            iter([b"data: {\"type\": \"error\", \"message\": \"Invalid token\"}\n\n"]),
-            media_type="text/event-stream",
-        )
-
-    email = payload.get("email") or payload.get("sub")
-    if not email:
-        return StreamingResponse(
-            iter([b"data: {\"type\": \"error\", \"message\": \"Token missing user identification\"}\n\n"]),
-            media_type="text/event-stream",
-        )
-
-    async with async_session_factory() as db:
-        stmt = select(User).where(User.email == email.lower())
-        result = await db.execute(stmt)
-        user = result.scalar_one_or_none()
-
-        if not user:
-            return StreamingResponse(
-                iter([b"data: {\"type\": \"error\", \"message\": \"User not found\"}\n\n"]),
-                media_type="text/event-stream",
-            )
-
-    queue = sse_manager.connect(user.id)
-
-    async def event_generator():
-        """Generate SSE events."""
-        try:
-            # Send initial connection event
-            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
-            
-            while True:
-                # Wait for messages from the queue
-                message = await queue.get()
-                yield f"data: {json.dumps(message)}\n\n"
-        except asyncio.CancelledError:
-            # Client disconnected
-            sse_manager.disconnect(queue, user.id)
-        except Exception:
-            sse_manager.disconnect(queue, user.id)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
-        },
-    )
