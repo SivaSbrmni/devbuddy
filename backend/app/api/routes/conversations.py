@@ -574,22 +574,10 @@ sse_manager = SSEManager()
 
 @router.get("/sse")
 async def sse_endpoint(
-    token: str = Query(...),
+    user: User = Depends(get_current_user),
 ):
     """SSE endpoint for real-time conversation updates."""
-    # Authenticate token
-    from app.core.security import verify_token
-    try:
-        payload = verify_token(token)
-        user_id = uuid.UUID(payload.get("sub"))
-    except Exception:
-        # Return 401 if token is invalid
-        return StreamingResponse(
-            iter([b"data: {\"type\": \"error\", \"message\": \"Invalid token\"}\n\n"]),
-            media_type="text/event-stream",
-        )
-
-    queue = sse_manager.connect(user_id)
+    queue = sse_manager.connect(user.id)
 
     async def event_generator():
         """Generate SSE events."""
@@ -603,9 +591,9 @@ async def sse_endpoint(
                 yield f"data: {json.dumps(message)}\n\n"
         except asyncio.CancelledError:
             # Client disconnected
-            sse_manager.disconnect(queue, user_id)
+            sse_manager.disconnect(queue, user.id)
         except Exception:
-            sse_manager.disconnect(queue, user_id)
+            sse_manager.disconnect(queue, user.id)
 
     return StreamingResponse(
         event_generator(),
