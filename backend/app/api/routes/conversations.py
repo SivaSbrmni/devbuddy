@@ -574,9 +574,40 @@ sse_manager = SSEManager()
 
 @router.get("/sse")
 async def sse_endpoint(
-    user: User = Depends(get_current_user),
+    token: str = Query(...),
 ):
     """SSE endpoint for real-time conversation updates."""
+    # Manually validate token
+    from app.core.security import decode_token
+    from app.db.session import async_session_factory
+    from app.models.user import User
+    from sqlalchemy import select
+
+    payload = decode_token(token)
+    if not payload:
+        return StreamingResponse(
+            iter([b"data: {\"type\": \"error\", \"message\": \"Invalid token\"}\n\n"]),
+            media_type="text/event-stream",
+        )
+
+    email = payload.get("email") or payload.get("sub")
+    if not email:
+        return StreamingResponse(
+            iter([b"data: {\"type\": \"error\", \"message\": \"Token missing user identification\"}\n\n"]),
+            media_type="text/event-stream",
+        )
+
+    async with async_session_factory() as db:
+        stmt = select(User).where(User.email == email.lower())
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        if not user:
+            return StreamingResponse(
+                iter([b"data: {\"type\": \"error\", \"message\": \"User not found\"}\n\n"]),
+                media_type="text/event-stream",
+            )
+
     queue = sse_manager.connect(user.id)
 
     async def event_generator():
