@@ -931,7 +931,7 @@ export default function Workspace() {
     if (buf) onChunk(buf)
   }
 
-  const sendChat = async (newMsgs: Message[], assistantMsg: Message, title: string) => {
+  const sendChat = async (newMsgs: Message[], assistantMsg: Message, title: string, convId: string) => {
     const resp = await fetch(`${API}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -952,21 +952,20 @@ export default function Workspace() {
       if (data.startsWith('[ERROR]')) throw new Error(data.slice(7))
       if (data.startsWith('[STEP]')) {
         assistantMsg.steps = [...(assistantMsg.steps || []), data.slice(7)]
-        updateActive([...newMsgs, { ...assistantMsg }], title)
       } else if (data.startsWith('[FILE]')) {
         try {
           const fileData = JSON.parse(data.slice(6))
           assistantMsg.files = [...(assistantMsg.files || []), fileData]
-          updateActive([...newMsgs, { ...assistantMsg }], title)
         } catch {}
       } else {
         fullContent += data
-        updateActive([...newMsgs, { ...assistantMsg, content: fullContent }], title)
       }
     })
+    assistantMsg.content = fullContent
+    updateActive([...newMsgs, assistantMsg], title, convId)
   }
 
-  const sendAgent = async (text: string, newMsgs: Message[], assistantMsg: Message, title: string) => {
+  const sendAgent = async (text: string, newMsgs: Message[], assistantMsg: Message, title: string, convId: string) => {
     const resp = await fetch(`${API}/agent/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1001,11 +1000,10 @@ export default function Workspace() {
         } else if (event.type === 'error') {
           assistantMsg.content = `Agent error: ${event.payload?.message || 'Unknown error'}`
         }
-        updateActive([...newMsgs, { ...assistantMsg }], title)
       } catch {}
     })
     if (!assistantMsg.content) assistantMsg.content = summaryContent || 'Agent run complete.'
-    updateActive([...newMsgs, { ...assistantMsg }], title)
+    updateActive([...newMsgs, assistantMsg], title, convId)
   }
 
   // Auto-detect mode from prompt keywords
@@ -1123,9 +1121,9 @@ export default function Workspace() {
 
     try {
       if (agentMode) {
-        await sendAgent(text, newMsgs, assistantMsg, title)
+        await sendAgent(text, newMsgs, assistantMsg, title, convId)
       } else {
-        await sendChat(newMsgs, assistantMsg, title)
+        await sendChat(newMsgs, assistantMsg, title, convId)
       }
     } catch (e) {
       const errorMsg = e instanceof Error && e.name === 'AbortError'

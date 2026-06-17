@@ -142,7 +142,10 @@ export function useServerConversations(
           
         case 'message_created':
           if (msg.conversation_id === activeConversationId) {
-            setMessages(prev => [...prev, msg.message])
+            setMessages(prev => {
+              if (prev.find(m => m.id === msg.message.id)) return prev
+              return [...prev, msg.message]
+            })
           }
           // Update conversation last_message_at
           setConversations(prev =>
