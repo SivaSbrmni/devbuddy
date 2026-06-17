@@ -6,11 +6,14 @@ enabling device-independent access and real-time synchronization.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.core.security import get_current_user
@@ -532,53 +535,84 @@ async def sync_conversations(
         )
 
 
-# ─── WebSocket for Real-Time Updates ─────────────────────────────────────────
+# ─── SSE for Real-Time Updates ────────────────────────────────────────────────
 
-class ConnectionManager:
-    """Manage WebSocket connections for real-time sync."""
+class SSEManager:
+    """Manage SSE connections for real-time sync."""
 
     def __init__(self):
-        self.active_connections: dict[uuid.UUID, list[WebSocket]] = {}
+        self.active_connections: dict[uuid.UUID, list[asyncio.Queue]] = {}
 
-    async def connect(self, websocket: WebSocket, user_id: uuid.UUID):
-        await websocket.accept()
+    def connect(self, user_id: uuid.UUID) -> asyncio.Queue:
+        """Create a new queue for a user's SSE connection."""
         if user_id not in self.active_connections:
             self.active_connections[user_id] = []
-        self.active_connections[user_id].append(websocket)
+        queue = asyncio.Queue()
+        self.active_connections[user_id].append(queue)
+        return queue
 
-    def disconnect(self, websocket: WebSocket, user_id: uuid.UUID):
+    def disconnect(self, queue: asyncio.Queue, user_id: uuid.UUID):
+        """Remove a queue when client disconnects."""
         if user_id in self.active_connections:
-            self.active_connections[user_id].remove(websocket)
+            if queue in self.active_connections[user_id]:
+                self.active_connections[user_id].remove(queue)
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
 
     async def broadcast_to_user(self, user_id: uuid.UUID, message: dict):
+        """Send a message to all active SSE connections for a user."""
         if user_id in self.active_connections:
-            for ws in self.active_connections[user_id]:
+            for queue in self.active_connections[user_id]:
                 try:
-                    await ws.send_json(message)
+                    await queue.put(message)
                 except Exception:
                     pass
 
 
-manager = ConnectionManager()
+sse_manager = SSEManager()
 
 
-@router.websocket("/ws")
-async def websocket_endpoint(
-    websocket: WebSocket,
+@router.get("/sse")
+async def sse_endpoint(
     token: str = Query(...),
 ):
-    """WebSocket for real-time conversation updates."""
-    # TODO: Authenticate token
-    user_id = uuid.uuid4()  # Placeholder - get from token
-
-    await manager.connect(websocket, user_id)
+    """SSE endpoint for real-time conversation updates."""
+    # Authenticate token
+    from app.core.security import verify_token
     try:
-        while True:
-            data = await websocket.receive_json()
-            # Handle client messages (acknowledgments, ping, etc.)
-            if data.get("type") == "ping":
-                await websocket.send_json({"type": "pong"})
-    except WebSocketDisconnect:
-        manager.disconnect(websocket, user_id)
+        payload = verify_token(token)
+        user_id = uuid.UUID(payload.get("sub"))
+    except Exception:
+        # Return 401 if token is invalid
+        return StreamingResponse(
+            iter([b"data: {\"type\": \"error\", \"message\": \"Invalid token\"}\n\n"]),
+            media_type="text/event-stream",
+        )
+
+    queue = sse_manager.connect(user_id)
+
+    async def event_generator():
+        """Generate SSE events."""
+        try:
+            # Send initial connection event
+            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+            
+            while True:
+                # Wait for messages from the queue
+                message = await queue.get()
+                yield f"data: {json.dumps(message)}\n\n"
+        except asyncio.CancelledError:
+            # Client disconnected
+            sse_manager.disconnect(queue, user_id)
+        except Exception:
+            sse_manager.disconnect(queue, user_id)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )

@@ -19,8 +19,8 @@ import {
   listMessages,
   createMessage as apiCreateMessage,
   syncConversations,
-  conversationWS,
-  WebSocketMessage,
+  conversationSSE,
+  SSEMessage,
 } from '../api/conversations'
 
 interface UseServerConversationsOptions {
@@ -121,14 +121,14 @@ export function useServerConversations(
     }
   }, [loadConversations])
   
-  // ─── WebSocket Real-Time Updates ─────────────────────────────────────────
+  // ─── SSE Real-Time Updates ────────────────────────────────────────────────
   
   useEffect(() => {
-    // Connect WebSocket
-    conversationWS.connect()
+    // Connect SSE
+    conversationSSE.connect()
     
     // Handle messages
-    const unsubscribeMessage = conversationWS.onMessage((msg: WebSocketMessage) => {
+    const unsubscribeMessage = conversationSSE.onMessage((msg: SSEMessage) => {
       switch (msg.type) {
         case 'conversation_updated':
           setConversations(prev => {
@@ -161,29 +161,21 @@ export function useServerConversations(
     })
     
     // Handle connection state
-    const unsubscribeConnect = conversationWS.onConnect(() => {
+    const unsubscribeConnect = conversationSSE.onConnect(() => {
       setIsWebSocketConnected(true)
       setSyncStatus('idle')
     })
     
-    const unsubscribeDisconnect = conversationWS.onDisconnect(() => {
+    const unsubscribeDisconnect = conversationSSE.onDisconnect(() => {
       setIsWebSocketConnected(false)
       setSyncStatus('offline')
     })
-    
-    // Periodic ping to keep connection alive
-    const pingInterval = setInterval(() => {
-      if (conversationWS.isConnected) {
-        conversationWS.ping()
-      }
-    }, 30000)
     
     return () => {
       unsubscribeMessage()
       unsubscribeConnect()
       unsubscribeDisconnect()
-      clearInterval(pingInterval)
-      conversationWS.disconnect()
+      conversationSSE.disconnect()
     }
   }, [activeConversationId])
   
@@ -435,8 +427,8 @@ export function useConversation(id: string | null) {
     
     load()
     
-    // Subscribe to WebSocket updates
-    const unsubscribe = conversationWS.onMessage((msg) => {
+    // Subscribe to SSE updates
+    const unsubscribe = conversationSSE.onMessage((msg: SSEMessage) => {
       if (!isMounted) return
       
       switch (msg.type) {

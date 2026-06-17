@@ -1,6 +1,8 @@
 """Simple Hugging Face MCP server using the official MCP SDK and huggingface_hub."""
 
 import os
+
+import httpx
 from huggingface_hub import HfApi, InferenceClient, list_models, model_info
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -67,6 +69,34 @@ async def list_tools() -> list[Tool]:
                 "required": ["repo_id", "filename"],
             },
         ),
+        Tool(
+            name="hf_get_space_run_logs",
+            description="Fetch run logs for a Hugging Face Space",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "space_id": {
+                        "type": "string",
+                        "description": "Hugging Face Space ID, e.g. Sivasbrmni/devbuddy",
+                    },
+                },
+                "required": ["space_id"],
+            },
+        ),
+        Tool(
+            name="hf_get_space_build_logs",
+            description="Fetch build logs for a Hugging Face Space",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "space_id": {
+                        "type": "string",
+                        "description": "Hugging Face Space ID, e.g. Sivasbrmni/devbuddy",
+                    },
+                },
+                "required": ["space_id"],
+            },
+        ),
     ]
 
 
@@ -119,6 +149,34 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         local_dir = arguments.get("local_dir")
         path = api.hf_hub_download(repo_id=repo_id, filename=filename, local_dir=local_dir, token=HF_TOKEN)
         return [TextContent(type="text", text=f"Downloaded to: {path}")]
+
+    elif name == "hf_get_space_run_logs":
+        space_id = arguments["space_id"]
+        url = f"https://huggingface.co/api/spaces/{space_id}/logs/run"
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers, timeout=60.0)
+                response.raise_for_status()
+                return [TextContent(type="text", text=response.text)]
+        except httpx.HTTPStatusError as e:
+            return [TextContent(type="text", text=f"HTTP error fetching run logs: {e.response.status_code}\n{e.response.text}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error fetching run logs: {type(e).__name__}: {e}")]
+
+    elif name == "hf_get_space_build_logs":
+        space_id = arguments["space_id"]
+        url = f"https://huggingface.co/api/spaces/{space_id}/logs/build"
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers, timeout=60.0)
+                response.raise_for_status()
+                return [TextContent(type="text", text=response.text)]
+        except httpx.HTTPStatusError as e:
+            return [TextContent(type="text", text=f"HTTP error fetching build logs: {e.response.status_code}\n{e.response.text}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error fetching build logs: {type(e).__name__}: {e}")]
 
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]

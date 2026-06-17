@@ -204,92 +204,65 @@ export async function syncConversations(req: SyncRequest): Promise<SyncResponse>
   return response.json()
 }
 
-// ─── WebSocket ─────────────────────────────────────────────────────────────
+// ─── SSE (Server-Sent Events) ────────────────────────────────────────────────
 
-export type WebSocketMessage =
-  | { type: 'ping' }
-  | { type: 'pong' }
+export type SSEMessage =
+  | { type: 'connected' }
+  | { type: 'error'; message: string }
   | { type: 'conversation_updated'; conversation: Conversation }
   | { type: 'message_created'; conversation_id: string; message: Message }
   | { type: 'sync_required' }
 
-export class ConversationWebSocket {
-  private ws: WebSocket | null = null
-  private reconnectAttempts = 0
-  private maxReconnectAttempts = 5
-  private reconnectDelay = 1000
-  private listeners: Array<(msg: WebSocketMessage) => void> = []
+export class ConversationSSE {
+  private eventSource: EventSource | null = null
+  private listeners: Array<(msg: SSEMessage) => void> = []
   private onConnectCallbacks: Array<() => void> = []
   private onDisconnectCallbacks: Array<() => void> = []
 
   connect(): void {
     const token = getToken()
     if (!token) {
-      console.error('Cannot connect WebSocket: no token')
+      console.error('Cannot connect SSE: no token')
       return
     }
 
-    const wsUrl = `${API.replace(/^http/, 'ws')}/conversations/ws?token=${encodeURIComponent(token)}`
+    const sseUrl = `${API}/conversations/sse?token=${encodeURIComponent(token)}`
     
-    this.ws = new WebSocket(wsUrl)
+    this.eventSource = new EventSource(sseUrl)
     
-    this.ws.onopen = () => {
-      console.log('WebSocket connected')
-      this.reconnectAttempts = 0
+    this.eventSource.onopen = () => {
+      console.log('SSE connected')
       this.onConnectCallbacks.forEach(cb => cb())
     }
     
-    this.ws.onmessage = (event) => {
+    this.eventSource.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data) as WebSocketMessage
+        const msg = JSON.parse(event.data) as SSEMessage
         this.listeners.forEach(cb => cb(msg))
       } catch (e) {
-        console.error('Failed to parse WebSocket message:', e)
+        console.error('Failed to parse SSE message:', e)
       }
     }
     
-    this.ws.onclose = () => {
-      console.log('WebSocket disconnected')
+    this.eventSource.onerror = (error) => {
+      console.error('SSE error:', error)
       this.onDisconnectCallbacks.forEach(cb => cb())
-      this.attemptReconnect()
+      // EventSource auto-reconnects, but we can force close on error
+      if (this.eventSource) {
+        this.eventSource.close()
+        this.eventSource = null
+      }
     }
-    
-    this.ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
-    }
-  }
-
-  private attemptReconnect(): void {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Max WebSocket reconnect attempts reached')
-      return
-    }
-    
-    this.reconnectAttempts++
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
-    
-    console.log(`Reconnecting in ${delay}ms... (attempt ${this.reconnectAttempts})`)
-    setTimeout(() => this.connect(), delay)
   }
 
   disconnect(): void {
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
+    if (this.eventSource) {
+      this.eventSource.close()
+      this.eventSource = null
     }
   }
 
-  send(msg: WebSocketMessage): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg))
-    }
-  }
-
-  ping(): void {
-    this.send({ type: 'ping' })
-  }
-
-  onMessage(callback: (msg: WebSocketMessage) => void): () => void {
+  onMessage(callback: (msg: SSEMessage) => void): () => void {
     this.listeners.push(callback)
     return () => {
       const index = this.listeners.indexOf(callback)
@@ -320,9 +293,9 @@ export class ConversationWebSocket {
   }
 
   get isConnected(): boolean {
-    return this.ws !== null && this.ws.readyState === WebSocket.OPEN
+    return this.eventSource !== null && this.eventSource.readyState === EventSource.OPEN
   }
 }
 
-// Singleton WebSocket instance
-export const conversationWS = new ConversationWebSocket()
+// Singleton SSE instance
+export const conversationSSE = new ConversationSSE()
