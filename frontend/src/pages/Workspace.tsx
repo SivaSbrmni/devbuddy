@@ -931,7 +931,7 @@ export default function Workspace() {
     if (buf) onChunk(buf)
   }
 
-  const sendChat = async (newMsgs: Message[], assistantMsg: Message, title: string, convId: string) => {
+  const sendChat = async (newMsgs: Message[], title: string, convId: string) => {
     const resp = await fetch(`${API}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -945,27 +945,29 @@ export default function Workspace() {
     const reader = resp.body?.getReader()
     if (!reader) return
     let fullContent = ''
+    const steps: string[] = []
+    const files: { name: string; content: string }[] = []
     await processSSEStream(reader, (line) => {
       if (!line.startsWith('data: ')) return
       const data = line.slice(6)
       if (data === '[DONE]') return
       if (data.startsWith('[ERROR]')) throw new Error(data.slice(7))
       if (data.startsWith('[STEP]')) {
-        assistantMsg.steps = [...(assistantMsg.steps || []), data.slice(7)]
+        steps.push(data.slice(7))
       } else if (data.startsWith('[FILE]')) {
         try {
           const fileData = JSON.parse(data.slice(6))
-          assistantMsg.files = [...(assistantMsg.files || []), fileData]
+          files.push(fileData)
         } catch {}
       } else {
         fullContent += data
       }
     })
-    assistantMsg.content = fullContent
+    const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: fullContent, ts: Date.now(), steps, files, agentEvents: [] }
     updateActive([...newMsgs, assistantMsg], title, convId)
   }
 
-  const sendAgent = async (text: string, newMsgs: Message[], assistantMsg: Message, title: string, convId: string) => {
+  const sendAgent = async (text: string, newMsgs: Message[], title: string, convId: string) => {
     const resp = await fetch(`${API}/agent/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -976,19 +978,23 @@ export default function Workspace() {
     const reader = resp.body?.getReader()
     if (!reader) return
     let summaryContent = ''
+    const agentEvents: AgentEvent[] = []
+    const steps: string[] = []
+    const files: { name: string; content: string }[] = []
+    let content = ''
     await processSSEStream(reader, (line) => {
       if (!line.startsWith('data: ')) return
       let raw = line.slice(6).trim()
       if (!raw || raw === '[DONE]') return
       try {
         const event: AgentEvent = JSON.parse(raw)
-        assistantMsg.agentEvents = [...(assistantMsg.agentEvents || []), event]
+        agentEvents.push(event)
         if (event.type === 'step') {
-          assistantMsg.steps = [...(assistantMsg.steps || []), event.payload?.message || event.payload?.agent || '']
+          steps.push(event.payload?.message || event.payload?.agent || '')
         } else if (event.type === 'file') {
           const f = event.payload
           if (f?.path && f?.content !== undefined) {
-            assistantMsg.files = [...(assistantMsg.files || []), { name: f.path, content: f.content }]
+            files.push({ name: f.path, content: f.content })
             setWorkspaceFiles(prev => prev.includes(f.path) ? prev : [...prev, f.path])
           }
         } else if (event.type === 'workspace') {
@@ -996,13 +1002,14 @@ export default function Workspace() {
           if (event.payload?.files) setWorkspaceFiles(event.payload.files)
         } else if (event.type === 'done') {
           summaryContent = event.payload?.summary || event.payload?.message || 'Agent completed.'
-          assistantMsg.content = summaryContent
+          content = summaryContent
         } else if (event.type === 'error') {
-          assistantMsg.content = `Agent error: ${event.payload?.message || 'Unknown error'}`
+          content = `Agent error: ${event.payload?.message || 'Unknown error'}`
         }
       } catch {}
     })
-    if (!assistantMsg.content) assistantMsg.content = summaryContent || 'Agent run complete.'
+    if (!content) content = summaryContent || 'Agent run complete.'
+    const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content, ts: Date.now(), steps, files, agentEvents }
     updateActive([...newMsgs, assistantMsg], title, convId)
   }
 
@@ -1116,20 +1123,18 @@ export default function Workspace() {
     setAiReasoning(agentMode ? 'Planning autonomous pipeline...' : 'Analyzing your question...')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
 
-    const assistantMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: '', ts: Date.now(), steps: [], files: [], agentEvents: [] }
-    updateActive([...newMsgs, assistantMsg], title, convId)
-
     try {
       if (agentMode) {
-        await sendAgent(text, newMsgs, assistantMsg, title, convId)
+        await sendAgent(text, newMsgs, title, convId)
       } else {
-        await sendChat(newMsgs, assistantMsg, title, convId)
+        await sendChat(newMsgs, title, convId)
       }
     } catch (e) {
       const errorMsg = e instanceof Error && e.name === 'AbortError'
         ? 'Request cancelled'
         : `Error: ${e instanceof Error ? e.message : 'Failed to connect'}`
-      updateActive([...newMsgs, { ...assistantMsg, content: errorMsg }], title, convId)
+      const errorAssistant: Message = { id: crypto.randomUUID(), role: 'assistant', content: errorMsg, ts: Date.now(), steps: [], files: [], agentEvents: [] }
+      updateActive([...newMsgs, errorAssistant], title, convId)
     } finally {
       cleanup()
       if (active && active.messages.length > 2) {
