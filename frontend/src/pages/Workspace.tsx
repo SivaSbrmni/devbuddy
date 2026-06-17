@@ -50,7 +50,7 @@ interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
-  ts: number
+  ts?: number
   steps?: string[]
   files?: { name: string; content: string }[]
   agentEvents?: AgentEvent[]
@@ -151,13 +151,15 @@ export default function Workspace() {
   // Compatibility layer - adapt server API to existing component expectations
   const convs = useMemo(() => conversations.map(c => ({
     ...c,
-    messages: c.id === activeConversation?.id ? serverMessages : [],
+    messages: c.id === activeConversation?.id
+      ? serverMessages.map(m => ({ ...m, ts: m.ts || new Date(m.created_at).getTime() }))
+      : [],
     ts: new Date(c.created_at).getTime(),
   })) as LocalConversation[], [conversations, activeConversation?.id, serverMessages])
 
   const active = useMemo(() => activeConversation ? {
     ...activeConversation,
-    messages: serverMessages,
+    messages: serverMessages.map(m => ({ ...m, ts: m.ts || new Date(m.created_at).getTime() })),
     ts: new Date(activeConversation.created_at).getTime(),
   } as LocalConversation : null, [activeConversation, serverMessages])
 
@@ -1911,7 +1913,7 @@ export default function Workspace() {
                             </div>
                             <div className="message-enter" style={{ maxWidth: '78%', background: 'rgba(99,102,241,0.09)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: '16px 16px 4px 16px', padding: '12px 16px' }}>
                               <div style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{uMsg.content}</div>
-                              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 4, textAlign: 'right' }}>{new Date(uMsg.ts).toLocaleTimeString()}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 4, textAlign: 'right' }}>{uMsg.ts ? new Date(uMsg.ts).toLocaleTimeString() : ''}</div>
                             </div>
                           </div>
                         )}
@@ -1955,7 +1957,7 @@ export default function Workspace() {
                                   </button>
                                 </div>
                               )}
-                              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 6 }}>{new Date(aMsg.ts).toLocaleTimeString()}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 6 }}>{aMsg.ts ? new Date(aMsg.ts).toLocaleTimeString() : ''}</div>
                             </div>
                           </div>
                         )}
