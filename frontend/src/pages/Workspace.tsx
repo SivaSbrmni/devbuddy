@@ -258,7 +258,7 @@ export default function Workspace() {
     if (title && targetId) {
       updateConversation(targetId, { title })
     }
-  }, [activeId, serverMessages, setMessages, createMessage, updateConversation])
+  }, [activeId, serverMessages, createServerMessage, updateConversation])
 
   const selectConv = useCallback((id: string) => {
     setActiveConversation(id)
