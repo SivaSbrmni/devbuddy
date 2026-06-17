@@ -204,6 +204,40 @@ async def list_conversations(
         ]
 
 
+# ─── SSE for Real-Time Updates ────────────────────────────────────────────────
+
+class SSEManager:
+    """Manage SSE connections for real-time sync."""
+
+    def __init__(self):
+        self.active_connections: dict[uuid.UUID, list[asyncio.Queue]] = {}
+
+    def connect(self, user_id: uuid.UUID) -> asyncio.Queue:
+        """Create a new queue for a user's SSE connection."""
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = []
+        queue = asyncio.Queue()
+        self.active_connections[user_id].append(queue)
+        return queue
+
+    def disconnect(self, queue: asyncio.Queue, user_id: uuid.UUID):
+        """Remove a queue when client disconnects."""
+        if user_id in self.active_connections:
+            if queue in self.active_connections[user_id]:
+                self.active_connections[user_id].remove(queue)
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+
+    async def broadcast_to_user(self, user_id: uuid.UUID, message: dict):
+        """Send a message to all active SSE connections for a user."""
+        if user_id in self.active_connections:
+            for queue in self.active_connections[user_id]:
+                try:
+                    await queue.put(message)
+                except Exception:
+                    pass
+
+
 sse_manager = SSEManager()
 
 
@@ -601,38 +635,4 @@ async def sync_conversations(
             deleted_ids=deleted_ids,
             server_timestamp=datetime.utcnow(),
         )
-
-
-# ─── SSE for Real-Time Updates ────────────────────────────────────────────────
-
-class SSEManager:
-    """Manage SSE connections for real-time sync."""
-
-    def __init__(self):
-        self.active_connections: dict[uuid.UUID, list[asyncio.Queue]] = {}
-
-    def connect(self, user_id: uuid.UUID) -> asyncio.Queue:
-        """Create a new queue for a user's SSE connection."""
-        if user_id not in self.active_connections:
-            self.active_connections[user_id] = []
-        queue = asyncio.Queue()
-        self.active_connections[user_id].append(queue)
-        return queue
-
-    def disconnect(self, queue: asyncio.Queue, user_id: uuid.UUID):
-        """Remove a queue when client disconnects."""
-        if user_id in self.active_connections:
-            if queue in self.active_connections[user_id]:
-                self.active_connections[user_id].remove(queue)
-            if not self.active_connections[user_id]:
-                del self.active_connections[user_id]
-
-    async def broadcast_to_user(self, user_id: uuid.UUID, message: dict):
-        """Send a message to all active SSE connections for a user."""
-        if user_id in self.active_connections:
-            for queue in self.active_connections[user_id]:
-                try:
-                    await queue.put(message)
-                except Exception:
-                    pass
 
