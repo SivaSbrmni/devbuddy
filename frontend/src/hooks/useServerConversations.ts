@@ -331,9 +331,15 @@ export function useServerConversations(
       const message = await apiCreateMessage(conversationId, req)
       
       if (isMountedRef.current) {
-        // Replace optimistic message with real one
         if (conversationId === activeConversationId) {
-          setMessages(prev => prev.map(m => m.id === optimisticMessage.id ? message : m))
+          setMessages(prev => {
+            // If SSE already added the real message, just remove the optimistic one
+            if (prev.find(m => m.id === message.id)) {
+              return prev.filter(m => m.id !== optimisticMessage.id)
+            }
+            // Otherwise replace optimistic with real
+            return prev.map(m => m.id === optimisticMessage.id ? message : m)
+          })
         }
         
         // Update conversation in list

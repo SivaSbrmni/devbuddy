@@ -208,13 +208,14 @@ export default function Workspace() {
   const updateActive = useCallback((msgs: Message[] | ((prev: Message[]) => Message[]), title?: string, forceId?: string) => {
     const targetId = forceId || activeId
     if (!targetId) return
-    
+
     // Handle function updates
     const nextMsgs = typeof msgs === 'function' ? msgs(serverMessages) : msgs
-    
-    // Create/update messages on server
+
+    // Create/update messages on server (skip already-created)
     nextMsgs.forEach(async (msg) => {
-      if (!msg.id.startsWith('temp-')) { // Only create if not optimistic
+      if (!msg.id.startsWith('temp-') && !createdMessageIds.current.has(msg.id)) {
+        createdMessageIds.current.add(msg.id)
         await createServerMessage(targetId, {
           role: msg.role,
           content: msg.content,
@@ -222,7 +223,7 @@ export default function Workspace() {
         })
       }
     })
-    
+
     // Update title if provided
     if (title && targetId) {
       updateConversation(targetId, { title })
@@ -276,6 +277,7 @@ export default function Workspace() {
   const abortControllerRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const createdMessageIds = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768)
@@ -317,6 +319,11 @@ export default function Workspace() {
   useEffect(() => {
     if (!activeId && !loading) createNew()
   }, [])
+
+  // Clear tracked message IDs when switching conversations
+  useEffect(() => {
+    createdMessageIds.current.clear()
+  }, [activeId])
 
   // Handle GitHub OAuth callback — refresh token if github_connected param present
   useEffect(() => {
@@ -896,11 +903,12 @@ export default function Workspace() {
       }
     } catch (e: any) {
       const isNetworkError = e.name === 'AbortError' || e.message?.includes('network') || e.message?.includes('fetch') || e.message?.includes('Failed')
-      const errorTitle = isNetworkError
-        ? 'Connection lost — the task may still be running on the server. Check your repository for updates.'
-        : e.message || 'Task failed'
-      patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
-        events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: errorTitle, status: 'error' } as TaskEvent] }))
+      if (isNetworkError) {
+        patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
+          events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: 'Connection lost — the task may still be running on the server. Check your repository for updates.', status: 'error' } as TaskEvent] }))
+        return true
+      }
+      throw e
     }
     return true
   }, [activeRepo, activeId, active?.title])
