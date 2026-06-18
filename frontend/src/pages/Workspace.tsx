@@ -782,43 +782,20 @@ export default function Workspace() {
     const repo = activeRepo.name
 
     const cardId = msgId
-    const initialCard: TaskCardData = {
-      id: cardId,
-      task,
-      repo: `${owner}/${repo}`,
-      branch: '',
-      startedAt: Date.now(),
-      status: 'running',
-      progress: 2,
-      currentTool: 'Dispatching GitHub Actions runner…',
-      events: [],
-      isGitHubTask: true,
-      isCloudJob: true,
-      runnerState: 'queued',
-    }
-
-    const agentMsg: Message = {
-      id: cardId,
-      role: 'assistant',
-      content: '',
-      ts: Date.now(),
-      taskCard: initialCard,
-    }
-
     const convTitle = conversationAtStart.length === 1 ? capitalizeFirst(task.slice(0, 50)) : (active?.title || capitalizeFirst(task.slice(0, 50)))
-    updateActive([...conversationAtStart, agentMsg], convTitle, convId)
-
-    const patchCard = (fn: (c: TaskCardData) => TaskCardData) => {
-      updateActive(prev => prev.map(m => m.id === cardId && m.taskCard
-        ? { ...m, taskCard: fn(m.taskCard) }
-        : m
-      ), convTitle, convId)
-    }
 
     const PROGRESS: Record<string, number> = {
       queued: 4, provisioning: 12, initializing: 20, connecting: 30,
       analyzing: 40, executing: 55, validating: 72, reflecting: 80,
       pushing: 88, creating_pr: 94, uploading: 97, completed: 100,
+    }
+
+    // Define patchCard before try so catch block can access it
+    const patchCard = (fn: (c: TaskCardData) => TaskCardData) => {
+      updateActive(prev => prev.map(m => m.id === cardId && m.taskCard
+        ? { ...m, taskCard: fn(m.taskCard) }
+        : m
+      ), convTitle, convId)
     }
 
     try {
@@ -832,6 +809,30 @@ export default function Workspace() {
         const err = await resp.text()
         throw new Error(err.slice(0, 160))
       }
+
+      // Only create task card after successful API response
+      const initialCard: TaskCardData = {
+        id: cardId,
+        task,
+        repo: `${owner}/${repo}`,
+        branch: '',
+        startedAt: Date.now(),
+        status: 'running',
+        progress: 2,
+        currentTool: 'Dispatching GitHub Actions runner…',
+        events: [],
+        isGitHubTask: true,
+        isCloudJob: true,
+        runnerState: 'queued',
+      }
+      const agentMsg: Message = {
+        id: cardId,
+        role: 'assistant',
+        content: '',
+        ts: Date.now(),
+        taskCard: initialCard,
+      }
+      updateActive([...conversationAtStart, agentMsg], convTitle, convId)
 
       const reader = resp.body!.getReader()
       const decoder = new TextDecoder()
