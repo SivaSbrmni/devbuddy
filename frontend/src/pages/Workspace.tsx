@@ -205,7 +205,7 @@ export default function Workspace() {
     )
   }
   
-  const updateActive = useCallback((msgs: Message[] | ((prev: Message[]) => Message[]), title?: string, forceId?: string) => {
+  const updateActive = useCallback(async (msgs: Message[] | ((prev: Message[]) => Message[]), title?: string, forceId?: string) => {
     const targetId = forceId || activeId
     if (!targetId) return
 
@@ -213,16 +213,24 @@ export default function Workspace() {
     const nextMsgs = typeof msgs === 'function' ? msgs(serverMessages) : msgs
 
     // Create/update messages on server (skip already-created)
-    nextMsgs.forEach(async (msg) => {
-      if (!msg.id.startsWith('temp-') && !createdMessageIds.current.has(msg.id)) {
+    const createPromises = nextMsgs
+      .filter(msg => !msg.id.startsWith('temp-') && !createdMessageIds.current.has(msg.id))
+      .map(async (msg) => {
         createdMessageIds.current.add(msg.id)
-        await createServerMessage(targetId, {
-          role: msg.role,
-          content: msg.content,
-          metadata: msg.taskCard ? { task_card: msg.taskCard } : {},
-        })
-      }
-    })
+        try {
+          await createServerMessage(targetId, {
+            role: msg.role,
+            content: msg.content,
+            metadata: msg.taskCard ? { task_card: msg.taskCard } : {},
+          })
+        } catch (e) {
+          // Remove from tracking on error so it can be retried
+          createdMessageIds.current.delete(msg.id)
+          console.error('Failed to create message:', e)
+        }
+      })
+
+    await Promise.all(createPromises)
 
     // Update title if provided
     if (title && targetId) {

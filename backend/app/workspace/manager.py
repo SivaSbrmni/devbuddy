@@ -111,9 +111,10 @@ class WorkspaceManager:
         if not full.is_dir():
             return []
         result = []
+        root_resolved = self._workspaces[workspace_id].root_path.resolve()
         for item in sorted(full.rglob("*")):
             if item.is_file():
-                result.append(str(item.relative_to(self._workspaces[workspace_id].root_path)))
+                result.append(str(item.resolve().relative_to(root_resolved)))
         return result
 
     # ── Shell Operations ────────────────────────────────────────────
@@ -220,8 +221,9 @@ class WorkspaceManager:
     def _resolve(self, workspace_id: str, path: str) -> Path:
         info = self._workspaces[workspace_id]
         resolved = (info.root_path / path).resolve()
+        root_resolved = info.root_path.resolve()
         # Security: prevent path traversal
-        if not str(resolved).startswith(str(info.root_path)):
+        if not str(resolved).startswith(str(root_resolved)):
             raise PermissionError(f"Path traversal blocked: {path}")
         return resolved
 
