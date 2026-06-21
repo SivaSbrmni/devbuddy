@@ -84,6 +84,7 @@ async def run_agent(
                 repo=body.repo,
                 github_token=github_token,
                 devbuddy_url=devbuddy_url,
+                devbuddy_token=token,
                 conversation_id=body.conversation_id,
                 ollama_key=ollama_key,
                 ollama_base=ollama_base,

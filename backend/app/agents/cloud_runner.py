@@ -87,6 +87,7 @@ class CloudJob:
     ollama_key: str = ""
     ollama_base: str = "https://ollama.com"
     ollama_model: str = "qwen3-coder:480b"
+    devbuddy_token: str = ""
 
 
 # ── GitHub API helpers ────────────────────────────────────────────────────────
@@ -364,7 +365,46 @@ SYSTEM = (
 def call_llm(messages):
     import urllib.request
 
-    # 1. Ollama Cloud (https://ollama.com/api/chat)
+    # 1. DevBuddy backend chat (uses the user's configured LLM providers)
+    devbuddy_url = os.environ.get("DEVBUDDY_URL", "")
+    devbuddy_token = os.environ.get("DEVBUDDY_TOKEN", "")
+    if devbuddy_url and devbuddy_token:
+        try:
+            msgs = [{"role": "system", "content": SYSTEM}] + messages
+            payload = json.dumps({
+                "messages": msgs,
+                "model": "",
+                "system_prompt": "",
+                "max_tokens": 4096,
+                "temperature": 0.0,
+            }).encode()
+            url = f"{devbuddy_url}/chat?token={devbuddy_token}"
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            chunks = []
+            with urllib.request.urlopen(req, timeout=120) as r:
+                for line in r:
+                    line = line.decode('utf-8').strip()
+                    if not line.startswith('data: '):
+                        continue
+                    data = line[6:]
+                    if data == '[DONE]':
+                        break
+                    if data.startswith('[ERROR]'):
+                        print(f"DevBuddy chat error: {data}", flush=True)
+                        break
+                    chunks.append(data)
+            content = ''.join(chunks).strip()
+            if content:
+                return content
+        except Exception as e:
+            print(f"DevBuddy chat error: {e}", flush=True)
+
+    # 2. Ollama Cloud (https://ollama.com/api/chat)
     ollama_key  = os.environ.get("OLLAMA_API_KEY", "")
     ollama_base = os.environ.get("OLLAMA_API_BASE", "https://ollama.com").rstrip("/")
     ollama_model = os.environ.get("OLLAMA_MODEL", "qwen3-coder:480b")
@@ -394,7 +434,7 @@ def call_llm(messages):
         except Exception as e:
             print(f"Ollama error: {e}", flush=True)
 
-    # 2. Anthropic
+    # 3. Anthropic
     if os.environ.get("ANTHROPIC_API_KEY"):
         payload = json.dumps({
             "model": "claude-3-5-haiku-20241022",
@@ -418,7 +458,7 @@ def call_llm(messages):
         except Exception as e:
             print(f"Anthropic error: {e}", flush=True)
 
-    # 3. OpenAI
+    # 4. OpenAI
     if os.environ.get("OPENAI_API_KEY"):
         msgs = [{"role": "system", "content": SYSTEM}] + messages
         payload = json.dumps({"model": "gpt-4o-mini", "messages": msgs, "max_tokens": 4096}).encode()
@@ -437,22 +477,7 @@ def call_llm(messages):
         except Exception as e:
             print(f"OpenAI error: {e}", flush=True)
 
-    # 4. DevBuddy relay
-    if DEVBUDDY_URL:
-        payload = json.dumps({"messages": messages, "system": SYSTEM, "task_id": TASK_ID}).encode()
-        req = urllib.request.Request(
-            f"{DEVBUDDY_URL}/llm/complete",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                return json.loads(r.read()).get("content", "")
-        except Exception as e:
-            print(f"DevBuddy relay error: {e}", flush=True)
-
-    raise RuntimeError("No LLM available. Add OLLAMA_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY to repository secrets.")
+    raise RuntimeError("No LLM available. Configure a provider in DevBuddy Settings → LLM Providers, or add OLLAMA_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY to repository secrets.")
 
 def parse_action(text):
     action_m = re.search(r"ACTION:\s*(\w+)", text)
@@ -641,6 +666,7 @@ jobs:
           DEVBUDDY_REPO: {job.repo}
           DEVBUDDY_BRANCH: {job.branch}
           DEVBUDDY_URL: ${{{{ inputs.devbuddy_url }}}}
+          DEVBUDDY_TOKEN: {job.devbuddy_token}
           AGENT_B64: {agent_b64}
         run: |
           echo "::group::DevBuddy Agent Boot"
@@ -907,6 +933,7 @@ async def run_cloud_agent(
     repo: str,
     github_token: str,
     devbuddy_url: str = "",
+    devbuddy_token: str = "",
     conversation_id: str = "",
     ollama_key: str = "",
     ollama_base: str = "https://ollama.com",
@@ -931,6 +958,7 @@ async def run_cloud_agent(
         ollama_key=ollama_key,
         ollama_base=ollama_base or "https://ollama.com",
         ollama_model=ollama_model or "qwen3-coder:480b",
+        devbuddy_token=devbuddy_token,
     )
 
     def emit(event_type: str, payload: dict) -> str:
