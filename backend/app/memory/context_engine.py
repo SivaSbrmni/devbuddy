@@ -16,9 +16,7 @@ Memory types (spec Part 7):
 from __future__ import annotations
 
 import os
-import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
 
 import structlog
 
@@ -116,7 +114,6 @@ class ContextEngine:
         try:
             from app.db.session import get_db
             from app.models.aep import AepMemory
-            from sqlalchemy import select
 
             # Generate embedding (if LLM gateway is available)
             embedding = None
@@ -203,7 +200,7 @@ class ContextEngine:
         try:
             from app.db.session import get_db
             from app.models.aep import AepMemory
-            from sqlalchemy import select, text
+            from sqlalchemy import select
 
             # Generate query embedding
             query_embedding = None

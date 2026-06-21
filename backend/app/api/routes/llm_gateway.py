@@ -22,7 +22,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app.core.feature_flags import feature_flags, FeatureDisabledError
+from app.core.feature_flags import feature_flags
 
 router = APIRouter(prefix="/LLM", tags=["llm-gateway"])
 

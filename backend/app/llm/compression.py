@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import Any
+from typing import Any, Optional
 
 import structlog
 

@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, String, Integer, Text, ForeignKey, Index, DateTime, JSON,
+    Column, Integer, Text, ForeignKey, Index, DateTime,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from pgvector.sqlalchemy import Vector

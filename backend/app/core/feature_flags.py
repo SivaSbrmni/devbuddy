@@ -12,7 +12,7 @@ This module is the single source of truth for feature gating.
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import Optional
 
 import structlog
 

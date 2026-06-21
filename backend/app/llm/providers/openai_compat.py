@@ -8,12 +8,12 @@ the common HTTP client logic, reducing per-provider code to just config.
 from __future__ import annotations
 
 import time
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator
 
 import httpx
 import structlog
 
-from app.llm.providers.base import BaseProvider, NormalizedResponse, ProviderConfig
+from app.llm.providers.base import BaseProvider, NormalizedResponse
 
 log = structlog.get_logger()
 

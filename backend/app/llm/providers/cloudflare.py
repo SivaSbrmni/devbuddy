@@ -7,7 +7,7 @@ Uses Cloudflare's REST API for Workers AI.
 from __future__ import annotations
 
 import time
-from typing import Any, AsyncIterator
+from typing import AsyncIterator
 
 import httpx
 

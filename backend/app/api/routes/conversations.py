@@ -284,7 +284,7 @@ async def sse_endpoint(
         try:
             # Send initial connection event
             yield f"data: {json.dumps({'type': 'connected'})}\n\n"
-            
+
             while True:
                 # Wait for messages from the queue
                 message = await queue.get()
