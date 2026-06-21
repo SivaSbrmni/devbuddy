@@ -31,6 +31,14 @@ BLOCKED_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"chmod\s+777", re.IGNORECASE),                     # overly permissive
     re.compile(r"passwd|shadow", re.IGNORECASE),                   # system files
     re.compile(r"(?:DROP|DELETE)\s+(?:DATABASE|TABLE)", re.IGNORECASE),  # destructive SQL
+    # Spec Part 10 additions:
+    re.compile(r"\bdd\s+.*of=/dev/", re.IGNORECASE),              # dd to device files
+    re.compile(r"mkfs", re.IGNORECASE),                            # filesystem creation
+    re.compile(r"chmod\s+777\s+/", re.IGNORECASE),                # chmod 777 on root
+    re.compile(r"env\s*\|\s*grep", re.IGNORECASE),                # credential dumping
+    re.compile(r"cat\s+/etc/passwd", re.IGNORECASE),              # passwd file access
+    re.compile(r"printenv", re.IGNORECASE),                        # env var dumping
+    re.compile(r"curl\s+.*\$\(.*\)", re.IGNORECASE),              # command substitution in curl
 ]
 
 # Allowed domains for network access

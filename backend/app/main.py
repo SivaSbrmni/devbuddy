@@ -33,6 +33,8 @@ from app.api.routes.workspace import router as workspace_router
 from app.api.routes.github import router as github_router
 from app.api.routes.github_agent import router as github_agent_router
 from app.api.routes.cloud_agent import router as cloud_agent_router
+from app.api.routes.llm_gateway import router as llm_gateway_router
+from app.api.routes.webhooks import router as webhooks_router
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.model_router import model_router
@@ -60,6 +62,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import app.models.conversation  # noqa: F401
     import app.models.llm_provider  # noqa: F401
     import app.models.user_memory  # noqa: F401
+
+    # AEP (Autonomous Engineering Platform) models — additive, aep_ prefix
+    import app.models.aep  # noqa: F401
 
     # Ensure database tables exist — tolerate partial schemas on HF Space
     # restarts where /data/pgdata persists and indexes may already exist.
@@ -177,6 +182,8 @@ app.include_router(settings_router, prefix=settings.API_PREFIX)
 app.include_router(github_router, prefix=settings.API_PREFIX)
 app.include_router(github_agent_router, prefix=settings.API_PREFIX)
 app.include_router(cloud_agent_router, prefix=settings.API_PREFIX)
+app.include_router(llm_gateway_router, prefix=settings.API_PREFIX)
+app.include_router(webhooks_router, prefix=settings.API_PREFIX)
 
 # Migration status endpoint - MUST be before SPA fallback
 @app.get("/api/v1/migration-status")
