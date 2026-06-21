@@ -1108,6 +1108,9 @@ export default function Workspace() {
 
     // If a GitHub repo is active and agent mode is on → always cloud
     if (activeRepo && agentMode) {
+      setLoading(true)
+      setAiThinking(true)
+      setAiReasoning('Planning autonomous pipeline...')
       setInput('')
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
       let conv = active
@@ -1253,7 +1256,7 @@ export default function Workspace() {
         return
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+    if (e.key === 'Enter' && !e.shiftKey && !loading) { e.preventDefault(); send() }
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -2104,6 +2107,7 @@ export default function Workspace() {
                 rows={1}
                 className="db-input"
                 aria-label={activeRepo && agentMode ? `Describe a task for ${activeRepo.name}` : "Describe what you want to build"}
+                disabled={loading}
                 style={{ width: '100%', background: 'none', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 14, lineHeight: 1.5, resize: 'none', maxHeight: 200, fontFamily: 'inherit', overflowY: 'auto', padding: '0 4px' }}
                 onFocus={e => { const container = document.getElementById('chat-input-container'); if (container) { container.style.borderColor = 'rgba(99,102,241,0.4)'; container.style.boxShadow = '0 4px 24px rgba(0,0,0,0.2), 0 0 0 3px rgba(99,102,241,0.1)'; } }}
                 onBlur={e => { setTimeout(() => setMentionOpen(false), 200); const container = document.getElementById('chat-input-container'); if (container) { container.style.borderColor = 'var(--border)'; container.style.boxShadow = '0 4px 24px rgba(0,0,0,0.2)'; } }}
