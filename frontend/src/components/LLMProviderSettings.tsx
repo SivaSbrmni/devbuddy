@@ -50,6 +50,7 @@ export default function LLMProviderSettings({ isOpen, onClose }: LLMProviderSett
     base_url: '',
     api_key: '',
     default_model: '',
+    available_models: [],
     supports_streaming: true,
     supports_tools: true,
     supports_vision: false,
@@ -68,18 +69,27 @@ export default function LLMProviderSettings({ isOpen, onClose }: LLMProviderSett
         ...prev,
         ...preset,
         name: presetKey.charAt(0).toUpperCase() + presetKey.slice(1),
+        available_models: preset.default_model ? [preset.default_model] : [],
       }))
     }
   }
 
   const handleTest = async () => {
     if (!formData.base_url || !formData.default_model) return
-    await testNewConnection({
+    const result = await testNewConnection({
       base_url: formData.base_url,
       api_key: formData.api_key || '',
       provider_type: formData.provider_type,
       model: formData.default_model,
     })
+    if (result.success && result.models_available && result.models_available.length > 0) {
+      const models = result.models_available
+      setFormData(prev => ({
+        ...prev,
+        available_models: models,
+        default_model: prev.default_model || models[0],
+      }))
+    }
   }
 
   const handleSave = async () => {
@@ -92,6 +102,7 @@ export default function LLMProviderSettings({ isOpen, onClose }: LLMProviderSett
         base_url: '',
         api_key: '',
         default_model: '',
+        available_models: [],
         supports_streaming: true,
         supports_tools: true,
         supports_vision: false,
@@ -490,21 +501,46 @@ export default function LLMProviderSettings({ isOpen, onClose }: LLMProviderSett
                 <label style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, display: 'block' }}>
                   Default Model *
                 </label>
-                <input
-                  type="text"
-                  value={formData.default_model}
-                  onChange={e => setFormData({ ...formData, default_model: e.target.value })}
-                  placeholder="qwen3-coder:480b or gpt-4o"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    border: '1px solid var(--border)',
-                    borderRadius: 6,
-                    background: 'var(--bg-input)',
-                    color: 'var(--text)',
-                    fontSize: 14,
-                  }}
-                />
+                {formData.available_models && formData.available_models.length > 0 ? (
+                  <select
+                    value={formData.default_model}
+                    onChange={e => setFormData({ ...formData, default_model: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      background: 'var(--bg-input)',
+                      color: 'var(--text)',
+                      fontSize: 14,
+                    }}
+                  >
+                    {formData.available_models.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={formData.default_model}
+                    onChange={e => setFormData({ ...formData, default_model: e.target.value })}
+                    placeholder="qwen3-coder:480b or gpt-4o"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      background: 'var(--bg-input)',
+                      color: 'var(--text)',
+                      fontSize: 14,
+                    }}
+                  />
+                )}
+                {formData.available_models && formData.available_models.length > 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                    {formData.available_models.length} model{formData.available_models.length !== 1 ? 's' : ''} detected. Test again to refresh.
+                  </div>
+                )}
               </div>
 
               {/* Test Result */}
