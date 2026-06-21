@@ -338,10 +338,10 @@ export default function GitHubPanel({ token, isOpen, onClose, onSelectRepo }: Pr
               {/* Stats row */}
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                 {[
-                  { icon: 'git', label: 'Branch', value: dashRepo.default_branch },
-                  { icon: 'zap', label: 'Stars', value: dashRepo.stargazers_count.toLocaleString() },
-                  { icon: 'folder', label: 'Forks', value: dashRepo.forks_count.toLocaleString() },
-                  { icon: 'info', label: 'Issues', value: dashRepo.open_issues_count.toLocaleString() },
+                  { icon: 'git', label: 'Branch', value: dashRepo.default_branch || '—' },
+                  { icon: 'zap', label: 'Stars', value: (dashRepo.stargazers_count ?? 0).toLocaleString() },
+                  { icon: 'folder', label: 'Forks', value: (dashRepo.forks_count ?? 0).toLocaleString() },
+                  { icon: 'info', label: 'Issues', value: (dashRepo.open_issues_count ?? 0).toLocaleString() },
                   { icon: 'file', label: 'Size', value: dashRepo.size > 1024 ? `${(dashRepo.size / 1024).toFixed(1)}MB` : `${dashRepo.size}KB` },
                 ].map(s => (
                   <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 14px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', minWidth: 80 }}>
