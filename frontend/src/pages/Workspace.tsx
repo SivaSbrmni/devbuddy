@@ -2014,92 +2014,6 @@ export default function Workspace() {
                 </div>
               </div>
 
-              <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                Or add individual API keys below. Keys are encrypted at rest.
-              </p>
-
-              {[
-                { id: 'anthropic', name: 'Anthropic', icon: 'brain', placeholder: 'sk-ant-api03-...', defaultUrl: 'https://api.anthropic.com' },
-                { id: 'ollama', name: 'Ollama', icon: 'bot', placeholder: 'Ollama API key (if required)', defaultUrl: 'https://ollama.com' },
-                { id: 'llama', name: 'Llama API', icon: 'zap', placeholder: 'Bearer token...', defaultUrl: 'https://api.llama.com/v1' },
-              ].map(provider => (
-                <div key={provider.id} style={{ marginBottom: 20, padding: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <Icon name={provider.icon as any} size={18} style={{ color: 'var(--accent-hover)' }} />
-                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent-hover)' }}>{provider.name}</span>
-                    {providerKeys[provider.id as keyof typeof providerKeys].key === '••••••••' && (
-                      <span style={{ fontSize: 11, color: 'var(--success)', background: 'rgba(16,185,129,0.1)', padding: '2px 8px', borderRadius: 'var(--radius-sm)' }}>Configured</span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div>
-                      <label style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 4, display: 'block' }}>API Key</label>
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                        <input
-                          type={showKey[provider.id] ? 'text' : 'password'}
-                          value={providerKeys[provider.id as keyof typeof providerKeys].key}
-                          onChange={e => setProviderKeys(prev => ({ ...prev, [provider.id]: { ...prev[provider.id as keyof typeof prev], key: e.target.value } }))}
-                          placeholder={provider.placeholder}
-                          className="db-input"
-                          style={{
-                            width: '100%',
-                            background: 'var(--bg-elevated)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-md)',
-                            padding: '8px 36px 8px 12px',
-                            color: 'var(--text)',
-                            fontSize: 13,
-                            outline: 'none',
-                            fontFamily: 'monospace'
-                          }}
-                        />
-                        <button
-                          onClick={() => setShowKey(prev => ({ ...prev, [provider.id]: !prev[provider.id] }))}
-                          type="button"
-                          className="db-btn"
-                          aria-label={showKey[provider.id] ? 'Hide API key' : 'Show API key'}
-                          style={{
-                            position: 'absolute',
-                            right: 8,
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--text-faint)',
-                            cursor: 'pointer',
-                            padding: 4,
-                            fontSize: 12,
-                          }}
-                        >
-                          {showKey[provider.id] ? 'Hide' : 'Show'}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 4, display: 'block' }}>Base URL (optional)</label>
-                      <input
-                        type="text"
-                        value={providerKeys[provider.id as keyof typeof providerKeys].base_url}
-                        onChange={e => setProviderKeys(prev => ({ ...prev, [provider.id]: { ...prev[provider.id as keyof typeof prev], base_url: e.target.value } }))}
-                        placeholder={provider.defaultUrl}
-                        className="db-input"
-                        style={{
-                          width: '100%',
-                          background: 'var(--bg-elevated)',
-                          border: '1px solid var(--border)',
-                          borderRadius: 'var(--radius-md)',
-                          padding: '8px 12px',
-                          color: 'var(--text)',
-                          fontSize: 13,
-                          outline: 'none',
-                          fontFamily: 'monospace'
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8, paddingTop: 4 }}>
                 <button
                   onClick={() => setSettingsOpen(false)}
@@ -2117,29 +2031,7 @@ export default function Workspace() {
                   onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--text-faint)'; e.currentTarget.style.color = 'var(--accent-hover)'; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveProviderKeys}
-                  disabled={savingKeys}
-                  className="db-btn db-focus"
-                  style={{
-                    padding: '8px 20px',
-                    background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))',
-                    border: 'none',
-                    borderRadius: 'var(--radius-md)',
-                    color: 'white',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: savingKeys ? 'not-allowed' : 'pointer',
-                    opacity: savingKeys ? 0.7 : 1,
-                    transition: 'all var(--transition-base)',
-                    boxShadow: '0 2px 12px rgba(99,102,241,0.3)'
-                  }}
-                  onMouseEnter={e => { if (!savingKeys) { e.currentTarget.style.boxShadow = '0 4px 16px rgba(99,102,241,0.4)'; e.currentTarget.style.transform = 'translateY(-1px)' }}}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 12px rgba(99,102,241,0.3)'; e.currentTarget.style.transform = 'translateY(0)' }}
-                >
-                  {savingKeys ? 'Saving...' : 'Save Keys'}
+                  Close
                 </button>
               </div>
             </div>
