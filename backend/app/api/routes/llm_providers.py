@@ -113,6 +113,16 @@ def mask_api_key(key: str) -> str:
     return "••••••••" + key[-4:]
 
 
+def _openai_paths(base_url: str) -> tuple[str, str]:
+    """Return (models_path, chat_path) for an OpenAI-compatible base URL.
+
+    Handles base URLs that already include the /v1 version prefix.
+    """
+    base = base_url.rstrip("/")
+    if base.endswith("/v1"):
+        return f"{base}/models", f"{base}/chat/completions"
+    return f"{base}/v1/models", f"{base}/v1/chat/completions"
+
 def provider_to_response(provider) -> ProviderResponse:
     """Convert DB model to API response."""
     return ProviderResponse(
@@ -351,8 +361,9 @@ async def test_provider_connection(
                     )
             else:
                 # OpenAI-compatible /models endpoint
+                models_path, chat_path = _openai_paths(base_url)
                 resp = await client.get(
-                    f"{base_url}/v1/models",
+                    models_path,
                     headers=headers,
                 )
                 if resp.status_code == 200:
@@ -368,7 +379,7 @@ async def test_provider_connection(
                 elif resp.status_code == 404:
                     # Some providers don't have /models, try a simple completion
                     test_resp = await client.post(
-                        f"{base_url}/v1/chat/completions",
+                        chat_path,
                         headers=headers,
                         json={
                             "model": req.model,
@@ -445,7 +456,8 @@ async def test_saved_provider(
                 if provider.provider_type == "ollama":
                     resp = await client.get(f"{base_url}/api/tags", headers=headers)
                 else:
-                    resp = await client.get(f"{base_url}/v1/models", headers=headers)
+                    models_path, chat_path = _openai_paths(base_url)
+                    resp = await client.get(models_path, headers=headers)
 
                 latency = int((time.monotonic() - start) * 1000)
 
@@ -461,6 +473,40 @@ async def test_saved_provider(
                         latency_ms=latency,
                         message="Connected successfully",
                     )
+                elif resp.status_code == 404 and provider.provider_type != "ollama":
+                    # Some providers lack /models; try a tiny chat completion
+                    test_resp = await client.post(
+                        chat_path,
+                        headers=headers,
+                        json={
+                            "model": provider.default_model,
+                            "messages": [{"role": "user", "content": "Hi"}],
+                            "max_tokens": 5,
+                        },
+                    )
+                    latency = int((time.monotonic() - start) * 1000)
+                    if test_resp.status_code == 200:
+                        provider.health_status = "healthy"
+                        provider.health_message = "Connected (test completion succeeded)"
+                        provider.latency_ms = latency
+                        provider.last_tested_at = datetime.utcnow()
+                        await db.commit()
+                        return TestProviderResponse(
+                            success=True,
+                            latency_ms=latency,
+                            message="Connected (test completion succeeded)",
+                        )
+                    else:
+                        provider.health_status = "error"
+                        provider.health_message = f"HTTP {test_resp.status_code}"
+                        provider.latency_ms = latency
+                        provider.last_tested_at = datetime.utcnow()
+                        await db.commit()
+                        return TestProviderResponse(
+                            success=False,
+                            latency_ms=latency,
+                            message=f"HTTP {test_resp.status_code}",
+                        )
                 else:
                     provider.health_status = "error"
                     provider.health_message = f"HTTP {resp.status_code}"
