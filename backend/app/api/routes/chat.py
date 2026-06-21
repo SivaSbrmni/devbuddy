@@ -128,6 +128,7 @@ async def _stream_chat(request: ChatRequest, user: User):
                     gateway._default_cascade.append((name, defaults["default_model"]))
                     log.info("chat_legacy_provider_loaded", user_id=str(user.id), name=name)
 
+        log.info("chat_providers_loaded", user_id=str(user.id), providers=list(gateway.providers.keys()), model=request.model)
         if not gateway.providers:
             log.warning("chat_no_providers", user_id=str(user.id))
             yield "data: No LLM providers configured. Add a provider in Settings → LLM Providers.\n\n"

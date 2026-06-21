@@ -11,12 +11,15 @@ from datetime import datetime
 from typing import List, Optional
 
 import httpx
+import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.security import get_current_user
 from app.core.crypto import encrypt_value, decrypt_value
 from app.models.user import User
+
+log = structlog.get_logger()
 
 router = APIRouter(prefix="/llm-providers", tags=["llm-providers"])
 
@@ -340,13 +343,16 @@ async def test_provider_connection(
             if req.api_key:
                 headers["Authorization"] = f"Bearer {req.api_key}"
 
+            log.info("llm_provider.test", provider_type=req.provider_type, base_url=req.base_url, model=req.model)
+
             # Try to list models (OpenAI-compatible endpoint)
             base_url = req.base_url.rstrip("/")
 
             if req.provider_type == "ollama":
-                # Ollama uses /api/tags for models
+                # Ollama uses /api/tags for models; normalize if user pasted /api endpoint
+                ollama_base = base_url[:-4] if base_url.endswith("/api") else base_url
                 resp = await client.get(
-                    f"{base_url}/api/tags",
+                    f"{ollama_base}/api/tags",
                     headers=headers,
                 )
                 if resp.status_code == 200:
@@ -445,6 +451,7 @@ async def test_saved_provider(
 
         start = time.monotonic()
         try:
+            log.info("llm_provider.test_saved", provider_id=str(provider_id), name=provider.name, base_url=provider.base_url, provider_type=provider.provider_type)
             async with httpx.AsyncClient(timeout=30.0) as client:
                 headers = {"Content-Type": "application/json"}
                 if api_key:
@@ -454,7 +461,8 @@ async def test_saved_provider(
 
                 # Simple test request
                 if provider.provider_type == "ollama":
-                    resp = await client.get(f"{base_url}/api/tags", headers=headers)
+                    ollama_base = base_url[:-4] if base_url.endswith("/api") else base_url
+                    resp = await client.get(f"{ollama_base}/api/tags", headers=headers)
                 else:
                     models_path, chat_path = _openai_paths(base_url)
                     resp = await client.get(models_path, headers=headers)

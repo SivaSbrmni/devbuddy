@@ -46,6 +46,12 @@ class UserProviderAdapter(BaseProvider):
         encrypted_key = provider_record.api_key_encrypted or ""
         self._api_key = decrypt_value(encrypted_key) if encrypted_key else ""
 
+        # Normalize base URL. For Ollama, users often paste the /api endpoint,
+        # so strip that suffix to keep the conventional base URL.
+        base_url = provider_record.base_url.rstrip("/")
+        if self.provider_type == "ollama" and base_url.endswith("/api"):
+            base_url = base_url[:-4]
+
         # Build a ProviderConfig from the record
         models = list(provider_record.available_models or [provider_record.default_model])
         config = ProviderConfig(
@@ -54,7 +60,7 @@ class UserProviderAdapter(BaseProvider):
             limits={"rpm": 60, "rpd": 1000, "tpm": 10000},  # safe defaults
             cooldown_on_error=60_000,
             api_key_env="",  # key is loaded directly from the record
-            base_url=provider_record.base_url.rstrip("/"),
+            base_url=base_url,
         )
         super().__init__(config)
 
@@ -263,6 +269,7 @@ class UserProviderAdapter(BaseProvider):
         system_prompt: str,
     ) -> AsyncIterator[str]:
         client = self._get_client()
+        log.info("user_provider.stream_openai", provider=self.name, base_url=self.config.base_url, model=model)
         payload = {
             "model": model,
             "messages": self._build_messages(messages, system_prompt),
@@ -329,6 +336,7 @@ class UserProviderAdapter(BaseProvider):
         system_prompt: str,
     ) -> AsyncIterator[str]:
         client = self._get_client()
+        log.info("user_provider.stream_ollama", provider=self.name, base_url=self.config.base_url, model=model)
         payload = {
             "model": model,
             "messages": self._build_messages(messages, system_prompt),

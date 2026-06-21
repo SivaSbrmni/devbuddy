@@ -317,27 +317,35 @@ class LLMGateway:
                 return
 
         cascade = self.get_cascade(task_type)
+        log.info("llm.stream.cascade", cascade=cascade, model=model, task_type=task_type)
         for entry in cascade:
             provider_name = entry["provider"]
             model_name = entry["model"]
             provider = self.providers.get(provider_name)
             if not provider or not provider.is_configured():
+                log.info("llm.provider.skipped", provider=provider_name, model=model_name, reason="not_configured")
                 continue
             if self.quota.would_exceed(provider_name, model_name):
+                log.info("llm.provider.skipped", provider=provider_name, model=model_name, reason="quota")
                 continue
             if self.breaker.is_cooling_down(provider_name, model_name):
+                log.info("llm.provider.skipped", provider=provider_name, model=model_name, reason="cooling_down")
                 continue
 
             try:
+                log.info("llm.provider.trying", provider=provider_name, model=model_name)
                 async for chunk in provider.stream(messages, model_name, max_tokens, temperature, system_prompt):
                     yield chunk
                 self.quota.record(provider_name, model_name, 0, 0)  # tokens counted at stream end
                 self.breaker.record_success(provider_name, model_name)
+                log.info("llm.provider.success", provider=provider_name, model=model_name)
                 return
             except Exception as e:
+                log.warning("llm.provider.error", provider=provider_name, model=model_name, error=str(e))
                 self.breaker.cool_down(provider_name, model_name, str(e))
                 continue
 
+        log.error("llm.cascade.exhausted", model=model, task_type=task_type)
         yield ""  # all exhausted
 
     async def embeddings(self, texts: list[str], model: Optional[str] = None) -> list[list[float]]:
