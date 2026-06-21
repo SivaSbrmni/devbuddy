@@ -81,12 +81,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if missing:
                 print(f"[db init] Missing tables: {missing}")
                 # Drop ALL existing indexes to avoid conflicts from partial prior runs
-                idx_result = sync_conn.execute(text("SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename != 'pg_stat_statements'"))
-                for row in idx_result:
-                    idx_name = row[0]
-                    if not idx_name.endswith('_pkey') and not idx_name.endswith('_idx'):
-                        sync_conn.execute(text(f"DROP INDEX IF EXISTS {idx_name}"))
-                        print(f"[db init] Dropped index: {idx_name}")
+                try:
+                    idx_result = sync_conn.execute(text("SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename != 'pg_stat_statements'"))
+                    for row in idx_result:
+                        idx_name = row[0]
+                        if not idx_name.endswith('_pkey') and not idx_name.endswith('_idx'):
+                            try:
+                                sync_conn.execute(text(f"DROP INDEX IF EXISTS {idx_name}"))
+                                print(f"[db init] Dropped index: {idx_name}")
+                            except Exception as drop_err:
+                                print(f"[db init] Could not drop index {idx_name}: {drop_err}")
+                except Exception as idx_err:
+                    print(f"[db init] Index listing/drop failed: {idx_err}")
 
                 # Create tables in dependency order using SQLAlchemy's create_all
                 # which handles FK ordering. Catch index errors and continue.
@@ -107,10 +113,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                                     if "already exists" in str(te).lower() or "duplicate" in str(te).lower():
                                         print(f"[db init] Skipping {table.name}: already exists")
                                     else:
-                                        raise
+                                        print(f"[db init] Failed to create table {table.name}: {te}")
                     else:
-                        print(f"[db init] ERROR: {e}")
-                        raise
+                        print(f"[db init] ERROR during create_all: {e}")
+                        # Try to create tables individually so startup is not blocked
+                        for table in Base.metadata.sorted_tables:
+                            if table.name not in existing:
+                                try:
+                                    table.create(sync_conn, checkfirst=True)
+                                    print(f"[db init] Created table: {table.name}")
+                                except Exception as te:
+                                    print(f"[db init] Could not create table {table.name}: {te}")
             else:
                 print(f"[db init] All tables exist: {existing}")
 
