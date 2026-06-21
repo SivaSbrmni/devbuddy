@@ -149,17 +149,23 @@ export default function Workspace() {
   }, [activeRepo])
 
   // Compatibility layer - adapt server API to existing component expectations
+  const adaptServerMessage = (m: any): Message => ({
+    ...m,
+    ts: m.ts || new Date(m.created_at).getTime(),
+    taskCard: m.metadata?.task_card || m.metadata?.taskCard || m.taskCard,
+  })
+
   const convs = useMemo(() => conversations.map(c => ({
     ...c,
     messages: c.id === activeConversation?.id
-      ? serverMessages.map(m => ({ ...m, ts: m.ts || new Date(m.created_at).getTime() }))
+      ? serverMessages.map(adaptServerMessage)
       : [],
     ts: new Date(c.created_at).getTime(),
   })) as LocalConversation[], [conversations, activeConversation?.id, serverMessages])
 
   const active = useMemo(() => activeConversation ? {
     ...activeConversation,
-    messages: serverMessages.map(m => ({ ...m, ts: m.ts || new Date(m.created_at).getTime() })),
+    messages: serverMessages.map(adaptServerMessage),
     ts: new Date(activeConversation.created_at).getTime(),
   } as LocalConversation : null, [activeConversation, serverMessages])
 
@@ -806,6 +812,14 @@ export default function Workspace() {
       ), convTitle, convId)
     }
 
+    // Update the assistant message content (fallback when taskCard is lost or not rendered)
+    const setContent = (content: string) => {
+      updateActive(prev => prev.map(m => m.id === cardId
+        ? { ...m, content }
+        : m
+      ), convTitle, convId)
+    }
+
     try {
       const resp = await fetch(`${API}/cloud-agent/run?token=${encodeURIComponent(token)}`, {
         method: 'POST',
@@ -904,7 +918,12 @@ export default function Workspace() {
                 next.qualityGates = payload.quality_gates ? { ...(next.qualityGates || {}), ...payload.quality_gates } : next.qualityGates
                 if (payload.modified_files?.length) next.modifiedFiles = payload.modified_files
               }
-              if (type === 'error') { next.status = 'error'; next.currentTool = undefined }
+              if (type === 'error') {
+                next.status = 'error'; next.currentTool = undefined
+                const errorMessage = payload.message || 'Task failed'
+                next.events = [...next.events, { id: 'err-' + Date.now(), ts: Date.now(), category: 'error', title: errorMessage, status: 'error' } as TaskEvent]
+                setContent(`Error: ${errorMessage}`)
+              }
               return next
             })
           } catch (_) {}
@@ -912,11 +931,14 @@ export default function Workspace() {
       }
     } catch (e: any) {
       const isNetworkError = e.name === 'AbortError' || e.message?.includes('network') || e.message?.includes('fetch') || e.message?.includes('Failed')
+      const errorMessage = e?.message || 'Connection failed'
       if (isNetworkError) {
         patchCard(c => ({ ...c, status: 'error', currentTool: undefined,
           events: [...c.events, { id: 'err', ts: Date.now(), category: 'error', title: 'Connection lost — the task may still be running on the server. Check your repository for updates.', status: 'error' } as TaskEvent] }))
+        setContent(`Error: ${errorMessage}. The task may still be running on the server.`)
         return true
       }
+      setContent(`Error: ${errorMessage}`)
       throw e
     }
     return true
