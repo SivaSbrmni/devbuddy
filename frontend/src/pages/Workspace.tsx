@@ -289,6 +289,7 @@ export default function Workspace() {
   const [modKey] = useState(() => navigator.platform?.includes('Mac') ? '⌘' : 'Ctrl')
   const [lastDeleted, setLastDeleted] = useState<Conversation | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const sendingRef = useRef(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const createdMessageIds = useRef<Set<string>>(new Set())
@@ -1085,8 +1086,10 @@ export default function Workspace() {
   }
 
   const send = async () => {
+    if (sendingRef.current) return
     const text = input.trim()
     if (!text || loading) return
+    sendingRef.current = true
 
     // Set up abort controller and timeout for ALL request paths
     abortControllerRef.current = new AbortController()
@@ -1104,6 +1107,7 @@ export default function Workspace() {
       setLoading(false)
       setAiThinking(false)
       setAiReasoning(null)
+      sendingRef.current = false
     }
 
     // If a GitHub repo is active and agent mode is on → always cloud
@@ -1256,7 +1260,7 @@ export default function Workspace() {
         return
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey && !loading) { e.preventDefault(); send() }
+    if (e.key === 'Enter' && !e.shiftKey && !loading && !sendingRef.current) { e.preventDefault(); send() }
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
