@@ -471,3 +471,22 @@ When you make changes, update the relevant section(s) above. Specifically:
 ---
 
 *End of document. Keep this accurate and it will keep agents productive.*
+
+### 11.4 Known Issues & Recent Fixes
+
+- **Cloud-agent branch collisions** — `backend/app/agents/cloud_runner.py` now checks
+  whether a semantic branch already exists and appends a counter (`-2`, `-3`, etc.)
+  before creating the GitHub ref, preventing `422 Reference already exists` failures.
+
+- **Empty assistant bubble for cloud-agent tasks** — `frontend/src/pages/Workspace.tsx`
+  now preserves `taskCard` metadata when server-syncing messages and writes cloud-agent
+  error payloads into the assistant message content so failures are visible.
+
+- **Frontend API URL in production builds** — `frontend/vite.config.ts` explicitly defines
+  `import.meta.env.VITE_API_URL` via `loadEnv(mode, process.cwd(), '')`. This prevents
+  stale `.env.production` files from overriding the CI-provided backend URL.
+
+- **GitHubPanel repo stats crash** — `frontend/src/components/GitHubPanel.tsx` guards
+  `stargazers_count`, `forks_count`, `open_issues_count`, and `default_branch` against
+  undefined values.
+
