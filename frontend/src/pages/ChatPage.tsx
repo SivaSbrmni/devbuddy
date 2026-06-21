@@ -916,7 +916,7 @@ export default function ChatPage() {
               </p>
 
               {[
-                { id: 'anthropic', name: 'Anthropic', icon: 'brain', placeholder: 'sk-ant-api03-...', defaultUrl: 'https://api.anthropic.com' },
+                { id: 'anthropic', name: 'Anthropic', icon: 'brain', placeholder: 'your-api-key', defaultUrl: 'https://api.anthropic.com' },
                 { id: 'ollama', name: 'Ollama', icon: 'bot', placeholder: 'Ollama API key (if required)', defaultUrl: 'https://ollama.com' },
                 { id: 'llama', name: 'Llama API', icon: 'zap', placeholder: 'Bearer token...', defaultUrl: 'https://api.llama.com/v1' },
               ].map(provider => (
