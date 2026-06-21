@@ -17,14 +17,23 @@ Routes:
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.feature_flags import feature_flags
+from app.core.security import get_current_user
+from app.db.session import async_session_factory
+from app.models.user import User
 
 router = APIRouter(prefix="/LLM", tags=["llm-gateway"])
+
+
+async def get_db():
+    """FastAPI dependency that yields an async DB session."""
+    async with async_session_factory() as db:
+        yield db
 
 
 # ─── Request/Response Schemas ────────────────────────────────────────────────
@@ -105,12 +114,27 @@ def _check_gateway() -> None:
         )
 
 
-@router.post("/chat", response_model=NormalizedLLMResponse)
-async def llm_chat(req: LLMChatRequest) -> NormalizedLLMResponse:
-    """Non-streaming chat completion via multi-provider router."""
+async def _get_user_gateway(
+    user: User,
+    db: Any = Depends(get_db),
+) -> Any:
+    """Create a per-user LLMGateway loaded from the user's encrypted provider config."""
     _check_gateway()
-    from app.llm.gateway import llm_gateway
-    resp = await llm_gateway.chat(
+    from app.llm.gateway import LLMGateway
+    gateway = LLMGateway(user_id=user.id, db=db)
+    await gateway.initialize_for_user()
+    return gateway
+
+
+@router.post("/chat", response_model=NormalizedLLMResponse)
+async def llm_chat(
+    req: LLMChatRequest,
+    user: User = Depends(get_current_user),
+    db: Any = Depends(get_db),
+) -> NormalizedLLMResponse:
+    """Non-streaming chat completion via multi-provider router."""
+    gateway = await _get_user_gateway(user, db)
+    resp = await gateway.chat(
         messages=req.messages,
         task_type=req.task_type,
         model=req.model,
@@ -129,11 +153,14 @@ async def llm_chat(req: LLMChatRequest) -> NormalizedLLMResponse:
 
 
 @router.post("/generate", response_model=NormalizedLLMResponse)
-async def llm_generate(req: LLMGenerateRequest) -> NormalizedLLMResponse:
+async def llm_generate(
+    req: LLMGenerateRequest,
+    user: User = Depends(get_current_user),
+    db: Any = Depends(get_db),
+) -> NormalizedLLMResponse:
     """Text generation via multi-provider router."""
-    _check_gateway()
-    from app.llm.gateway import llm_gateway
-    resp = await llm_gateway.chat(
+    gateway = await _get_user_gateway(user, db)
+    resp = await gateway.chat(
         messages=[{"role": "user", "content": req.prompt}],
         task_type=req.task_type,
         model=req.model,
@@ -150,14 +177,17 @@ async def llm_generate(req: LLMGenerateRequest) -> NormalizedLLMResponse:
 
 
 @router.post("/stream")
-async def llm_stream(req: LLMStreamRequest):
+async def llm_stream(
+    req: LLMStreamRequest,
+    user: User = Depends(get_current_user),
+    db: Any = Depends(get_db),
+):
     """Streaming chat via SSE through multi-provider router."""
-    _check_gateway()
     from fastapi.responses import StreamingResponse
-    from app.llm.gateway import llm_gateway
+    gateway = await _get_user_gateway(user, db)
 
     async def event_stream():
-        async for chunk in llm_gateway.stream(
+        async for chunk in gateway.stream(
             messages=req.messages,
             task_type=req.task_type,
             model=req.model,
@@ -172,23 +202,29 @@ async def llm_stream(req: LLMStreamRequest):
 
 
 @router.post("/embeddings")
-async def llm_embeddings(req: LLMEmbeddingsRequest):
-    """Text embeddings via free-tier embedding providers."""
-    _check_gateway()
-    from app.llm.gateway import llm_gateway
-    embeddings = await llm_gateway.embeddings(req.texts, req.model)
+async def llm_embeddings(
+    req: LLMEmbeddingsRequest,
+    user: User = Depends(get_current_user),
+    db: Any = Depends(get_db),
+):
+    """Text embeddings via the user's configured embedding providers."""
+    gateway = await _get_user_gateway(user, db)
+    embeddings = await gateway.embeddings(req.texts, req.model)
     return {"embeddings": embeddings, "count": len(embeddings)}
 
 
 @router.post("/context", response_model=NormalizedLLMResponse)
-async def llm_context(req: LLMChatRequest) -> NormalizedLLMResponse:
+async def llm_context(
+    req: LLMChatRequest,
+    user: User = Depends(get_current_user),
+    db: Any = Depends(get_db),
+) -> NormalizedLLMResponse:
     """Context-aware completion with automatic compression pipeline."""
-    _check_gateway()
-    from app.llm.gateway import llm_gateway
+    gateway = await _get_user_gateway(user, db)
     from app.llm.compression import compress_payload
     # Compress the messages before sending
     compressed = compress_payload({"messages": req.messages, "system_prompt": req.system_prompt})
-    resp = await llm_gateway.chat(
+    resp = await gateway.chat(
         messages=compressed["messages"],
         task_type=req.task_type,
         system_prompt=compressed.get("system_prompt", ""),
@@ -206,13 +242,16 @@ async def llm_context(req: LLMChatRequest) -> NormalizedLLMResponse:
 
 
 @router.post("/tools", response_model=NormalizedLLMResponse)
-async def llm_tools(req: LLMToolsRequest) -> NormalizedLLMResponse:
+async def llm_tools(
+    req: LLMToolsRequest,
+    user: User = Depends(get_current_user),
+    db: Any = Depends(get_db),
+) -> NormalizedLLMResponse:
     """Tool-calling completion via multi-provider router."""
-    _check_gateway()
-    from app.llm.gateway import llm_gateway
+    gateway = await _get_user_gateway(user, db)
     # Append tools as a system instruction for providers that don't natively support tool calling
     tools_desc = str(req.tools)
-    resp = await llm_gateway.chat(
+    resp = await gateway.chat(
         messages=req.messages,
         task_type=req.task_type,
         system_prompt=f"Available tools: {tools_desc}",
@@ -228,20 +267,25 @@ async def llm_tools(req: LLMToolsRequest) -> NormalizedLLMResponse:
 
 
 @router.post("/route")
-async def llm_route(req: LLMRouteRequest) -> dict:
+async def llm_route(
+    req: LLMRouteRequest,
+    user: User = Depends(get_current_user),
+    db: Any = Depends(get_db),
+) -> dict:
     """Preview which provider the router would select for a given task type."""
-    _check_gateway()
-    from app.llm.gateway import llm_gateway
-    cascade = llm_gateway.get_cascade(req.task_type)
+    gateway = await _get_user_gateway(user, db)
+    cascade = gateway.get_cascade(req.task_type)
     return {"task_type": req.task_type, "cascade": cascade}
 
 
 @router.get("/models", response_model=LLMModelsResponse)
-async def llm_models() -> LLMModelsResponse:
+async def llm_models(
+    user: User = Depends(get_current_user),
+    db: Any = Depends(get_db),
+) -> LLMModelsResponse:
     """List available models from all configured providers."""
-    _check_gateway()
-    from app.llm.gateway import llm_gateway
-    models = await llm_gateway.list_models()
+    gateway = await _get_user_gateway(user, db)
+    models = await gateway.list_models()
     return LLMModelsResponse(models=models)
 
 
@@ -256,6 +300,8 @@ async def llm_health() -> LLMHealthResponse:
             flags=flags,
         )
     from app.llm.gateway import llm_gateway
+    if not llm_gateway._initialized:
+        llm_gateway.initialize()
     providers = await llm_gateway.health_check()
     return LLMHealthResponse(
         status="healthy" if all(p["ok"] for p in providers.values()) else "degraded",

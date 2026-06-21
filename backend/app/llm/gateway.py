@@ -1,19 +1,22 @@
-"""LLM Gateway — multi-provider free-tier router.
+"""LLM Gateway — multi-provider user-configured router.
 
 This is the core of spec Part 2. It:
 1. Compresses payloads (Part 3 pipeline)
-2. Selects a provider cascade based on task type
+2. Selects a provider cascade based on task type and user configuration
 3. Tries each provider in order, skipping quota-exceeded / cooling-down ones
 4. On 429/5xx, cools down the provider and tries the next
 5. If all exhausted, enqueues to aep_pending_queue
 6. Normalizes all responses to a single shape
 
-The gateway is a singleton accessed via `llm_gateway`.
+The gateway is a singleton accessed via `llm_gateway` for health checks.
+Per-user instances are created in the /LLM routes so each user gets their
+own provider cascade loaded from their encrypted UserLLMProvider records.
 """
 
 from __future__ import annotations
 
 import os
+import uuid
 from typing import Any, AsyncIterator, Optional
 
 import httpx
@@ -24,23 +27,41 @@ from app.llm.providers import (
     GroqProvider, GeminiProvider, CerebrasProvider, OpenRouterProvider,
     GitHubModelsProvider, MistralProvider, CloudflareProvider,
 )
+from app.llm.providers.user_provider import UserProviderAdapter
 from app.llm.quota import QuotaLedger, CircuitBreaker
 
 log = structlog.get_logger()
 
 # ─── Task Type → Provider Cascade (spec Part 2.3) ────────────────────────────
 
+# Default cascades used when the user has no routing rules configured.
 TASK_CASCADES: dict[str, list[tuple[str, str]]] = {
-    # (provider_name, model) pairs in priority order
-    "planner":      [("groq", "llama-3.3-70b-versatile"), ("gemini", "gemini-2.5-flash"), ("openrouter", "deepseek/deepseek-r1")],
-    "coder":        [("openrouter", "qwen/qwen3-coder-480b"), ("groq", "llama-3.3-70b-versatile"), ("cerebras", "llama-3.3-70b")],
-    "debugger":     [("groq", "llama-3.3-70b-versatile"), ("gemini", "gemini-2.5-flash"), ("openrouter", "deepseek/deepseek-r1")],
-    "reviewer":     [("gemini", "gemini-2.5-flash"), ("openrouter", "deepseek/deepseek-r1")],
-    "docs_summary": [("mistral", "mistral-small-latest"), ("cloudflare", "@cf/meta/llama-3.1-8b-instruct")],
-    "embeddings":   [("gemini", "text-embedding-004")],
-    "test":         [("openrouter", "qwen/qwen3-coder-480b"), ("groq", "llama-3.3-70b-versatile")],
-    "security":     [("gemini", "gemini-2.5-flash"), ("openrouter", "deepseek/deepseek-r1")],
-    "devops":       [("groq", "llama-3.3-70b-versatile"), ("cerebras", "llama-3.3-70b")],
+    # Default cascades used when the user has no routing rules configured.
+    # These are model-name hints only; actual provider selection comes from
+    # the user's encrypted UserLLMProvider configuration.
+    "planner":      [("Default", "default")],
+    "coder":        [("Default", "default")],
+    "debugger":     [("Default", "default")],
+    "reviewer":     [("Default", "default")],
+    "docs_summary": [("Default", "default")],
+    "embeddings":   [("Default", "default")],
+    "test":         [("Default", "default")],
+    "security":     [("Default", "default")],
+    "devops":       [("Default", "default")],
+}
+
+# Map AEP task types to the existing provider routing task types.
+TASK_TYPE_MAP: dict[str, str] = {
+    "planner": "planning",
+    "coder": "coding",
+    "debugger": "debugging",
+    "reviewer": "review",
+    "test": "testing",
+    "security": "security",
+    "docs": "documentation",
+    "devops": "deployment",
+    "docs_summary": "summarization",
+    "embeddings": "embeddings",
 }
 
 
@@ -48,21 +69,31 @@ class LLMGateway:
     """Multi-provider LLM router with quota enforcement and circuit breaking.
 
     Usage:
-        from app.llm.gateway import llm_gateway
-        response = await llm_gateway.chat(
+        from app.llm.gateway import LLMGateway
+        gateway = LLMGateway(user_id=user.id, db=db)
+        await gateway.initialize()
+        response = await gateway.chat(
             messages=[{"role": "user", "content": "Hello"}],
             task_type="planner",
         )
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        user_id: Optional[uuid.UUID] = None,
+        db: Any = None,
+    ) -> None:
         self.providers: dict[str, BaseProvider] = {}
         self.quota = QuotaLedger()
         self.breaker = CircuitBreaker()
         self._initialized = False
+        self.user_id = user_id
+        self.db = db
+        self._routing_rules: dict[str, list[tuple[str, str]]] = {}
+        self._default_cascade: list[tuple[str, str]] = []
 
     def initialize(self) -> None:
-        """Register all providers and load API keys from environment."""
+        """Register providers from environment variables (for singleton/health checks)."""
         provider_classes = [
             GroqProvider, GeminiProvider, CerebrasProvider, OpenRouterProvider,
             GitHubModelsProvider, MistralProvider, CloudflareProvider,
@@ -84,9 +115,77 @@ class LLMGateway:
         self._initialized = True
         log.info("llm.gateway.initialized", provider_count=len(self.providers))
 
+    async def initialize_for_user(self) -> None:
+        """Load providers from the user's encrypted provider configuration.
+
+        This is the primary path for the /LLM routes. All credentials are
+        decrypted at call time from the existing UserLLMProvider table.
+        """
+        if not self.user_id or not self.db:
+            raise RuntimeError("LLMGateway requires user_id and db to initialize_for_user")
+
+        from sqlalchemy import select
+        from app.models.llm_provider import UserLLMProvider, ProviderRoutingRule
+
+        stmt = (
+            select(UserLLMProvider)
+            .where(UserLLMProvider.user_id == self.user_id)
+            .where(UserLLMProvider.is_active)
+            .order_by(UserLLMProvider.priority, UserLLMProvider.created_at)
+        )
+        result = await self.db.execute(stmt)
+        user_providers = result.scalars().all()
+
+        if not user_providers:
+            log.warning("llm.no_user_providers", user_id=str(self.user_id))
+            self._initialized = True
+            return
+
+        for record in user_providers:
+            adapter = UserProviderAdapter(record)
+            self.providers[record.name] = adapter
+            # Register safe default limits for each available model
+            for model in adapter.config.models:
+                self.quota.register_limits(record.name, {
+                    "rpm": record.max_tokens or 60,
+                    "rpd": 1000,
+                    "tpm": 10000,
+                })
+            log.info("llm.user_provider.loaded", user_id=str(self.user_id), name=record.name, type=record.provider_type)
+
+        # Load routing rules
+        rules_stmt = (
+            select(ProviderRoutingRule)
+            .where(ProviderRoutingRule.user_id == self.user_id)
+            .where(ProviderRoutingRule.is_active)
+            .order_by(ProviderRoutingRule.priority)
+        )
+        rules_result = await self.db.execute(rules_stmt)
+        rules = rules_result.scalars().all()
+
+        for rule in rules:
+            task_type = rule.task_type
+            provider = self.providers.get(rule.provider.name)
+            if provider:
+                model = rule.model_override or rule.provider.default_model
+                self._routing_rules.setdefault(task_type, []).append((rule.provider.name, model))
+
+        # Build default cascade from user provider priorities (all models)
+        self._default_cascade = []
+        for record in user_providers:
+            for model in record.available_models or [record.default_model]:
+                self._default_cascade.append((record.name, model))
+
+        self._initialized = True
+        log.info("llm.gateway.user_initialized", user_id=str(self.user_id), provider_count=len(self.providers))
+
     def get_cascade(self, task_type: str) -> list[dict[str, str]]:
         """Return the provider cascade for a task type (for /LLM/route endpoint)."""
-        cascade = TASK_CASCADES.get(task_type, TASK_CASCADES["planner"])
+        # Prefer user routing rules, then AEP task mapping, then default cascade
+        mapped_type = TASK_TYPE_MAP.get(task_type, task_type)
+        cascade = self._routing_rules.get(mapped_type) or self._routing_rules.get(task_type)
+        if not cascade:
+            cascade = self._default_cascade or TASK_CASCADES.get(task_type, TASK_CASCADES["planner"])
         return [{"provider": p, "model": m} for p, m in cascade]
 
     async def chat(
@@ -120,10 +219,12 @@ class LLMGateway:
         if model:
             return await self._call_explicit_model(messages, model, system_prompt, max_tokens, temperature)
 
-        cascade = TASK_CASCADES.get(task_type, TASK_CASCADES["planner"])
+        cascade = self.get_cascade(task_type)
         last_error: Optional[str] = None
 
-        for provider_name, model_name in cascade:
+        for entry in cascade:
+            provider_name = entry["provider"]
+            model_name = entry["model"]
             provider = self.providers.get(provider_name)
             if not provider or not provider.is_configured():
                 continue
@@ -215,8 +316,10 @@ class LLMGateway:
                     yield chunk
                 return
 
-        cascade = TASK_CASCADES.get(task_type, TASK_CASCADES["planner"])
-        for provider_name, model_name in cascade:
+        cascade = self.get_cascade(task_type)
+        for entry in cascade:
+            provider_name = entry["provider"]
+            model_name = entry["model"]
             provider = self.providers.get(provider_name)
             if not provider or not provider.is_configured():
                 continue
@@ -238,12 +341,14 @@ class LLMGateway:
         yield ""  # all exhausted
 
     async def embeddings(self, texts: list[str], model: Optional[str] = None) -> list[list[float]]:
-        """Get embeddings via the free-tier embedding provider."""
+        """Get embeddings via the user's configured embedding providers."""
         if not self._initialized:
             self.initialize()
 
-        cascade = TASK_CASCADES["embeddings"]
-        for provider_name, model_name in cascade:
+        cascade = self.get_cascade("embeddings")
+        for entry in cascade:
+            provider_name = entry["provider"]
+            model_name = entry["model"]
             if model and model != model_name:
                 continue
             provider = self.providers.get(provider_name)

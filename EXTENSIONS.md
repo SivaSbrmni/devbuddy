@@ -1,7 +1,7 @@
 # DevBuddy Autonomous Engineering Platform — Extension Documentation
 
 > **Spec:** `autonomous-ai-platform-spec.md` — Free-Tier Multi-LLM Edition
-> **Status:** Phases 0-4, 6 implemented. Phase 5 (frontend) and end-to-end test pending.
+> **Status:** Phases 0-4, 6 implemented. LLM Gateway now uses the existing user-level provider configuration (`user_llm_providers`) with no hardcoded API keys. Phase 5 (frontend) and end-to-end test pending.
 
 ---
 
@@ -86,33 +86,33 @@ All methods are safe no-ops when `autonomous_engine_enabled` is false.
 | `/LLM/models` | GET | List available models from all providers |
 | `/LLM/health` | GET | Gateway health + provider status |
 
-### Provider Roster
+### Provider Source: User Configuration (No Hardcoded Keys)
 
-| Provider | Models | Free Limits | Best For |
-|----------|--------|-------------|----------|
-| Groq | Llama 3.3 70B | 30 RPM / 1K RPD | Raw speed |
-| Gemini | 2.5 Flash | 1.5K req/day, 1M ctx | Huge-context calls |
-| Cerebras | Llama 3.3 70B | 1M tokens/day | High daily volume |
-| OpenRouter | 28+ free models | 20 RPM, 200 RPD | Universal fallback |
-| GitHub Models | GPT-4o, Llama | Free dev-tier | In-runner calls |
-| Mistral | Mistral Small | Free prototyping | Docs/summaries |
-| Cloudflare | Small models | 10K neurons/day | Trivial calls |
+The LLM Gateway does **not** read API keys from environment variables or hardcoded secrets. Instead, it loads the current user's providers from the existing **`user_llm_providers`** table, decrypts the stored API keys with the existing Fernet crypto, and routes through them.
+
+**File:** `backend/app/llm/providers/user_provider.py`
+
+Supported `provider_type` values from the universal provider config:
+
+| `provider_type` | API Style | Endpoint examples |
+|-----------------|-----------|-------------------|
+| `openai-compatible` | OpenAI `/chat/completions` + `/embeddings` | OpenRouter, Groq, Cerebras, Mistral, Azure, custom endpoints |
+| `anthropic` | Anthropic `/v1/messages` | Claude API |
+| `ollama` | Ollama `/api/chat` + `/api/tags` | Local/cloud Ollama |
+| `google` | OpenAI-compatible endpoint (configure base URL) | Gemini OpenAI-compatible endpoints |
 
 ### Task → Provider Cascade
 
-```python
-planner:      [groq/llama-3.3-70b, gemini/2.5-flash, openrouter/deepseek-r1]
-coder:        [openrouter/qwen3-coder-480b, groq/llama-3.3-70b, cerebras/llama-3.3-70b]
-debugger:     [groq/llama-3.3-70b, gemini/2.5-flash, openrouter/deepseek-r1]
-reviewer:     [gemini/2.5-flash, openrouter/deepseek-r1]
-docs_summary: [mistral-small, cloudflare-llama-3.1-8b]
-embeddings:   [gemini-text-embedding-004]
-```
+The cascade is built per user, per request:
+
+1. **Routing rules** (`provider_routing_rules` table): task-specific priority chains (e.g., `coding` → Provider A, `planning` → Provider B)
+2. **User provider priority** (`priority` column on `user_llm_providers`): global fallback order when no routing rule matches
+3. **AEP task type mapping** maps `planner/coder/debugger/reviewer/test/security/docs/devops/docs_summary/embeddings` to the existing routing task types
 
 ### Routing Algorithm
 
 1. Compress payload (compression pipeline)
-2. Get cascade for task type
+2. Get user-specific cascade for task type
 3. For each provider in cascade:
    - Skip if quota would exceed
    - Skip if circuit breaker is cooling down
@@ -122,16 +122,12 @@ embeddings:   [gemini-text-embedding-004]
 
 ### Configuration
 
-Set API keys via environment variables:
-```bash
-GROQ_API_KEY=...
-GEMINI_API_KEY=...
-CEREBRAS_API_KEY=...
-OPENROUTER_API_KEY=...
-MISTRAL_API_KEY=...
-CLOUDFLARE_API_TOKEN=...
-CLOUDFLARE_ACCOUNT_ID=...
-```
+1. Use the existing frontend **Settings → My Providers** page (or `POST /api/v1/llm-providers`)
+2. Add one or more providers with their encrypted API key, base URL, default model, and priority
+3. Optionally add routing rules via `POST /api/v1/llm-providers/{id}/rules`
+4. Enable the gateway: `AEP_FLAG_LLM_GATEWAY_ENABLED=true`
+
+No API keys are stored in code, environment variables, or deployment configs.
 
 ---
 
@@ -316,15 +312,8 @@ AEP_FLAG_WEBHOOK_RECEIVER_ENABLED=false
 ```
 
 ### LLM Provider API Keys
-```bash
-GROQ_API_KEY=...
-GEMINI_API_KEY=...
-CEREBRAS_API_KEY=...
-OPENROUTER_API_KEY=...
-MISTRAL_API_KEY=...
-CLOUDFLARE_API_TOKEN=...
-CLOUDFLARE_ACCOUNT_ID=...
-```
+
+No API keys are required as environment variables. The AEP LLM Gateway reads them from the user's encrypted `user_llm_providers` table at request time. Configure providers via the existing **Settings → My Providers** UI or the `POST /api/v1/llm-providers` endpoint.
 
 ### GitHub Integration
 ```bash
