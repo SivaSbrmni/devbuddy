@@ -121,6 +121,15 @@ async def _get_repo_info(owner: str, repo: str, token: str) -> dict:
     return await _gh("get", f"/repos/{owner}/{repo}", token)  # type: ignore
 
 
+async def _branch_exists(owner: str, repo: str, token: str, branch_name: str) -> bool:
+    """Check if a Git branch already exists on the remote."""
+    try:
+        await _gh("get", f"/repos/{owner}/{repo}/git/ref/heads/{branch_name}", token)
+        return True
+    except Exception:
+        return False
+
+
 async def _get_file_sha(owner: str, repo: str, token: str, path: str, branch: str) -> str | None:
     """Return blob SHA of an existing file, or None."""
     try:
@@ -939,7 +948,24 @@ async def run_cloud_agent(
 
     # ── 1: Create branch via GitHub API (no local clone needed) ───────
     yield emit("runner", {"state": "provisioning", "message": "Creating isolated branch..."})
-    yield emit("timeline", {"step": "branch", "status": "running", "message": f"Creating {branch_name}..."})
+
+    # Ensure unique branch name: if semantic branch exists, append an incrementing counter.
+    original_branch_name = branch_name
+    unique_branch_name = branch_name
+    counter = 2
+    while await _branch_exists(owner, repo, github_token, unique_branch_name):
+        unique_branch_name = f"{original_branch_name}-{counter}"
+        counter += 1
+        if counter > 100:
+            yield emit("error", {"message": f"Could not find a unique branch name starting from {original_branch_name}"})
+            return
+
+    if unique_branch_name != original_branch_name:
+        job.branch = unique_branch_name
+        yield emit("timeline", {"step": "branch", "status": "running", "message": f"{original_branch_name} exists, using {unique_branch_name}..."})
+    else:
+        yield emit("timeline", {"step": "branch", "status": "running", "message": f"Creating {unique_branch_name}..."})
+
     try:
         # Get base SHA
         ref_data = await _gh("get", f"/repos/{owner}/{repo}/git/ref/heads/{job.base_branch}", github_token)
@@ -947,11 +973,12 @@ async def run_cloud_agent(
 
         # Create branch
         await _gh("post", f"/repos/{owner}/{repo}/git/refs", github_token, json={
-            "ref": f"refs/heads/{branch_name}",
+            "ref": f"refs/heads/{unique_branch_name}",
             "sha": base_sha,
         })
-        yield emit("timeline", {"step": "branch", "status": "done", "message": f"Branch ready: {branch_name}"})
-        yield emit("branch", {"name": branch_name})
+        yield emit("timeline", {"step": "branch", "status": "done", "message": f"Branch ready: {unique_branch_name}"})
+        yield emit("branch", {"name": unique_branch_name})
+        branch_name = job.branch  # Use the unique branch for all subsequent steps
     except Exception as e:
         yield emit("error", {"message": f"Branch creation failed: {e}"})
         return
