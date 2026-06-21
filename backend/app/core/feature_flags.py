@@ -23,7 +23,7 @@ log = structlog.get_logger()
 # Master kill switch and individual feature flags from the spec (Part 1)
 DEFAULT_FLAGS: dict[str, bool] = {
     "autonomous_engine_enabled": False,       # master kill switch
-    "llm_gateway_enabled": False,
+    "llm_gateway_enabled": True,              # enabled by default; uses user-level provider config
     "github_actions_runtime_enabled": False,
     "agent_planner_enabled": False,
     "agent_coder_enabled": False,
