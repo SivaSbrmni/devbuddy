@@ -490,3 +490,15 @@ When you make changes, update the relevant section(s) above. Specifically:
   `stargazers_count`, `forks_count`, `open_issues_count`, and `default_branch` against
   undefined values.
 
+
+### 11.5 LLM Provider Routing
+
+- **Universal provider table**: `backend/app/models/llm_provider.py` (`user_llm_providers`)
+- **Provider settings UI**: `frontend/src/components/LLMProviderSettings.tsx` +
+  `frontend/src/hooks/useLLMProviders.ts`
+- **Chat endpoint**: `backend/app/api/routes/chat.py` now authenticates the user,
+  loads providers from `user_llm_providers`, and falls back to legacy
+  `UserSettings.api_keys` (anthropic/ollama/llama) when the new table is empty.
+- **Provider test endpoint**: `backend/app/api/routes/llm_providers.py` tests
+  `/models` or `/v1/models` depending on whether the base URL already ends in `/v1`.
+
