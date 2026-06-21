@@ -561,7 +561,8 @@ export default function Workspace() {
         // For analysis intents, use the chat endpoint instead of github-agent
         // to get a proper analysis response
         try {
-          const chatResp = await fetch(`${API}/chat`, {
+          const chatToken = localStorage.getItem('devbuddy_token') || ''
+          const chatResp = await fetch(`${API}/chat?token=${encodeURIComponent(chatToken)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -969,7 +970,8 @@ export default function Workspace() {
   }
 
   const sendChat = async (newMsgs: Message[], title: string, convId: string) => {
-    const resp = await fetch(`${API}/chat`, {
+    const token = localStorage.getItem('devbuddy_token') || ''
+    const resp = await fetch(`${API}/chat?token=${encodeURIComponent(token)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

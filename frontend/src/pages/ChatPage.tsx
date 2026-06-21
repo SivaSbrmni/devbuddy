@@ -278,7 +278,8 @@ export default function ChatPage() {
   }
 
   const sendChat = async (newMsgs: Message[], assistantMsg: Message, title: string) => {
-    const resp = await fetch(`${API}/chat`, {
+    const token = localStorage.getItem('devbuddy_token') || ''
+    const resp = await fetch(`${API}/chat?token=${encodeURIComponent(token)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
