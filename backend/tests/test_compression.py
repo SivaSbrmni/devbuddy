@@ -10,7 +10,6 @@ Required tests (spec Part 3):
   - Whitespace normalization preserves semantics
 """
 
-import json
 import pytest
 
 from app.llm.compression import (
@@ -170,7 +169,7 @@ class TestReferenceDedup:
         dedup = ReferenceDeduplicator()
         long_text = "This is a long block of text. " * 20  # > 200 chars
         # First call stores and sends in full
-        first = dedup.deduplicate(long_text)
+        dedup.deduplicate(long_text)
         # Second call replaces with ref
         second = dedup.deduplicate(long_text)
         # Resolve the ref

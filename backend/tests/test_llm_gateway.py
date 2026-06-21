@@ -5,12 +5,10 @@ Spec Part 3 required tests:
   - Quota enforcement: near-limit simulation → router pre-empts before a real 429
 """
 
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.llm.gateway import LLMGateway, TASK_CASCADES
-from app.llm.quota import QuotaLedger, CircuitBreaker
+from app.llm.quota import CircuitBreaker
 from app.llm.providers.base import NormalizedResponse, BaseProvider, ProviderConfig
 
 
