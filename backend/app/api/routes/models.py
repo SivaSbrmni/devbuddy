@@ -170,7 +170,8 @@ async def list_models(
 
     # Always try to fetch live Ollama models from cloud API
     cache_key = f"{ollama_base}:{ollama_key[:4] if ollama_key else 'nokey'}"
-    now = asyncio.get_event_loop().time()
+    # Use get_running_loop() — get_event_loop() is deprecated in async context (Python 3.10+)
+    now = asyncio.get_running_loop().time()
     cached = _ollama_cache.get(cache_key)
 
     if cached and now - cached[0] < _CACHE_TTL:

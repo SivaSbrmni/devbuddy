@@ -175,9 +175,12 @@ class WorkspaceManager:
             return await f.read()
 
     async def search_logs(self, workspace_id: str, pattern: str) -> list[dict[str, Any]]:
+        import shlex
+        # Use shlex.quote to prevent command injection and -F for fixed-string matching
+        # to avoid regex injection through the search pattern.
         result = await self.exec_command(
             workspace_id,
-            f'grep -rn "{pattern}" logs/ 2>/dev/null || true',
+            f'grep -Frn {shlex.quote(pattern)} logs/ 2>/dev/null || true',
         )
         matches = []
         for line in result.stdout.strip().split("\n"):
@@ -222,8 +225,10 @@ class WorkspaceManager:
         info = self._workspaces[workspace_id]
         resolved = (info.root_path / path).resolve()
         root_resolved = info.root_path.resolve()
-        # Security: prevent path traversal
-        if not str(resolved).startswith(str(root_resolved)):
+        # Security: prevent path traversal.
+        # Use is_relative_to (Python 3.9+) instead of str.startswith to
+        # avoid the "/tmp/ws-abc-evil" false-positive bypass.
+        if not resolved.is_relative_to(root_resolved):
             raise PermissionError(f"Path traversal blocked: {path}")
         return resolved
 

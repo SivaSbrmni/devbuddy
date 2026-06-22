@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_INSECURE_DEFAULT_KEY = "change-me-in-production-32-chars!"
 
 
 class Settings(BaseSettings):
@@ -19,8 +23,27 @@ class Settings(BaseSettings):
     APP_NAME: str = "DevBuddy Lite"
     ENVIRONMENT: Literal["development", "staging", "production", "test"] = "development"
     DEBUG: bool = False
-    SECRET_KEY: str = "change-me-in-production-32-chars!"
+    SECRET_KEY: str = _INSECURE_DEFAULT_KEY
     API_PREFIX: str = "/api/v1"
+
+    @model_validator(mode="after")
+    def _validate_secret_key(self) -> "Settings":
+        """Warn loudly when the insecure default SECRET_KEY is used in production.
+
+        JWT signatures and API-key encryption both derive from SECRET_KEY, so
+        using the public default value in production is a critical vulnerability.
+        Raising an error here (rather than just warning) would be even safer,
+        but a warning preserves zero-downtime deployability while still alerting
+        operators via logs.
+        """
+        if self.ENVIRONMENT == "production" and self.SECRET_KEY == _INSECURE_DEFAULT_KEY:
+            warnings.warn(
+                "SECRET_KEY is set to the insecure default value in a production "
+                "environment. JWT tokens and encrypted API keys are compromised. "
+                "Set a strong, random SECRET_KEY (>= 32 chars) immediately.",
+                stacklevel=2,
+            )
+        return self
 
     # --- Database ---
     DATABASE_URL: str = "postgresql+asyncpg://devbuddy:devbuddy@localhost:5432/devbuddy"

@@ -19,9 +19,9 @@ _is_remote = "supabase" in settings.DATABASE_URL or (
     "localhost" not in settings.DATABASE_URL and "127.0.0.1" not in settings.DATABASE_URL
 )
 if _is_remote and settings.ENVIRONMENT == "production":
+    # Use a properly-validating SSL context (the default).
+    # Never disable check_hostname or CERT_NONE — that removes all MITM protection.
     _ssl_ctx = _ssl.create_default_context()
-    _ssl_ctx.check_hostname = False
-    _ssl_ctx.verify_mode = _ssl.CERT_NONE
     _connect_args["ssl"] = _ssl_ctx
 
 engine = create_async_engine(

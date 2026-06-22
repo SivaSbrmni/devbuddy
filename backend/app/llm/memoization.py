@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as _tz
 from typing import Any, Callable, Coroutine, Optional
 
 import structlog
@@ -100,7 +100,14 @@ class DebuggerCanonicalizer(SignatureCanonicalizer):
 
 
 class TestCanonicalizer(SignatureCanonicalizer):
-    """Canonicalizer for test-generation task type."""
+    """Canonicalizer for test-generation task type.
+
+    The ``__test__ = False`` marker prevents pytest from mistakenly trying to
+    collect this class as a test suite (it has a required __init__ and is not
+    a test, just happens to have the "Test" naming prefix from the task type).
+    """
+
+    __test__ = False  # Not a pytest test class — suppresses PytestCollectionWarning
 
     def canonicalize(self, context: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -137,7 +144,8 @@ def _sha256_text(text: str) -> str:
 
 def _ttl_for(task_type: str) -> datetime | None:
     """Return expiration time for a cached entry. None means indefinite."""
-    now = datetime.utcnow()
+    # Use timezone-aware UTC then strip tzinfo for the naive DateTime DB column.
+    now = datetime.now(_tz.utc).replace(tzinfo=None)
     if task_type == "devops":
         return None
     if task_type == "debugger":
@@ -215,11 +223,12 @@ class ResponseMemoizer:
         if not cached:
             return None
 
-        if cached.expires_at is not None and cached.expires_at < datetime.utcnow():
+        _now = datetime.now(_tz.utc).replace(tzinfo=None)
+        if cached.expires_at is not None and cached.expires_at < _now:
             return None
 
         cached.hit_count = (cached.hit_count or 0) + 1
-        cached.last_hit_at = datetime.utcnow()
+        cached.last_hit_at = _now
         await self.db.flush()
 
         log.info(
@@ -275,7 +284,7 @@ class ResponseMemoizer:
             existing.response_payload = payload
             existing.signature_components = components
             existing.expires_at = _ttl_for(task_type)
-            existing.last_hit_at = datetime.utcnow()
+            existing.last_hit_at = datetime.now(_tz.utc).replace(tzinfo=None)
         else:
             self.db.add(
                 AepResponseCache(
@@ -285,7 +294,7 @@ class ResponseMemoizer:
                     signature_components=components,
                     response_payload=payload,
                     expires_at=_ttl_for(task_type),
-                    last_hit_at=datetime.utcnow(),
+                    last_hit_at=datetime.now(_tz.utc).replace(tzinfo=None),
                 )
             )
         await self.db.flush()

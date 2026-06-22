@@ -3,11 +3,13 @@
 from typing import Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MCPConfig(BaseModel):
     """MCP server configuration."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID = Field(default_factory=uuid4)
     name: str
@@ -16,9 +18,6 @@ class MCPConfig(BaseModel):
     api_key: Optional[str] = None
     config: dict = Field(default_factory=dict)
     enabled: bool = True
-
-    class Config:
-        from_attributes = True
 
 
 class MCPTool(BaseModel):
