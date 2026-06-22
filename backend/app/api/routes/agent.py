@@ -20,9 +20,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.orchestrator import TaskOrchestrator
 from app.core.deps import get_db
-from app.core.model_router import model_router
+from app.core.security import get_current_user
+from app.llm.user_model_router import UserModelRouter
 from app.models.project import Project
 from app.models.task import Task
+from app.models.user import User
 from app.workspace.manager import workspace_manager
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -47,6 +49,7 @@ async def _stream_agent_run(
     tech_stack: dict[str, Any] | None,
     existing_code: str,
     db: AsyncSession,
+    user: User,
 ):
     """Async generator that streams the full autonomous pipeline as SSE events.
 
@@ -93,7 +96,15 @@ async def _stream_agent_run(
         yield _sse("workspace", {"files": ws_files, "workspace_id": workspace_id})
 
         # ── Stage 1: Orchestrator Pipeline ────────────────────────────
-        orchestrator = TaskOrchestrator(db, model_router)
+        # Use the user's configured LLM providers instead of the env-only
+        # singleton model_router.
+        router = UserModelRouter(user_id=user.id, db=db, default_model=model)
+        await router.initialize(user)
+        if not router.has_providers:
+            yield _sse("error", {"message": "No LLM providers configured. Add a provider in Settings → LLM Providers."})
+            return
+
+        orchestrator = TaskOrchestrator(db, router)
 
         task = Task(
             project_id=project_id,
@@ -241,6 +252,7 @@ async def _stream_agent_run(
 async def agent_run(
     request: AgentRunRequest,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     """Run the full autonomous agent pipeline from a single prompt.
 
@@ -260,6 +272,7 @@ async def agent_run(
             request.tech_stack,
             request.existing_code,
             db,
+            user,
         ),
         media_type="text/event-stream",
         headers={

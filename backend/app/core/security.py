@@ -78,8 +78,13 @@ async def get_current_user(
         user = result.scalar_one_or_none()
 
         if not user:
-            # Auto-create user on first login
-            # TODO: This should check if email is in allowed list
+            # Only auto-create users who are on the invite allowlist.
+            if email.lower() not in settings.allowed_emails_set:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Email not in allowed list",
+                )
+
             from app.models.user import Organization
 
             # Get or create default org

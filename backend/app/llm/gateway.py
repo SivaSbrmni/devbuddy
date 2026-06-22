@@ -64,6 +64,112 @@ TASK_TYPE_MAP: dict[str, str] = {
     "embeddings": "embeddings",
 }
 
+# ─── Legacy provider fallback (shared between chat and agent modes) ───────────
+
+_LEGACY_PROVIDER_DEFAULTS = {
+    "anthropic": {
+        "provider_type": "anthropic",
+        "base_url": "https://api.anthropic.com/v1",
+        "default_model": "claude-3-5-sonnet-20241022",
+    },
+    "llama": {
+        "provider_type": "openai-compatible",
+        "base_url": "https://api.llama.com/v1",
+        "default_model": "llama-4-scout-17b-16e-instruct",
+    },
+    "ollama": {
+        "provider_type": "ollama",
+        "base_url": "https://ollama.com",
+        "default_model": "qwen3-coder:480b",
+    },
+}
+
+
+def _make_legacy_provider_record(user: Any, name: str, key: str, base_url: str) -> Any:
+    """Create an in-memory UserLLMProvider record from legacy UserSettings data."""
+    from app.core.crypto import encrypt_value
+    from app.models.llm_provider import UserLLMProvider
+
+    defaults = _LEGACY_PROVIDER_DEFAULTS[name]
+    return UserLLMProvider(
+        user_id=user.id,
+        name=name,
+        provider_type=defaults["provider_type"],
+        base_url=base_url,
+        api_key_encrypted=encrypt_value(key) if key else "",
+        default_model=defaults["default_model"],
+        available_models=[defaults["default_model"]],
+        headers={},
+        supports_streaming=True,
+        supports_tools=True,
+        supports_vision=False,
+        context_size=8192,
+        max_tokens=4096,
+        cost_per_1k_input=0.0,
+        cost_per_1k_output=0.0,
+        priority=100,
+        is_active=True,
+        is_default=False,
+    )
+
+
+async def _load_legacy_providers(gateway: "LLMGateway", user: Any) -> None:
+    """Load providers from legacy UserSettings keys when no UserLLMProvider exists."""
+    from sqlalchemy import select
+
+    from app.core.config import settings
+    from app.core.crypto import crypto
+    from app.models.user_settings import UserSettings
+
+    if not gateway.db:
+        return
+
+    stmt = select(UserSettings).where(UserSettings.email == user.email)
+    result = await gateway.db.execute(stmt)
+    row = result.scalar_one_or_none()
+    if not row:
+        return
+
+    decrypted = crypto.decrypt_dict(row.api_keys)
+    for name, cfg in decrypted.items():
+        if name not in _LEGACY_PROVIDER_DEFAULTS:
+            continue
+
+        key = cfg.get("key", "")
+        defaults = _LEGACY_PROVIDER_DEFAULTS[name]
+        base_url = cfg.get("base_url") or defaults["base_url"]
+        if name == "ollama":
+            base_url = base_url or settings.OLLAMA_API_BASE
+        elif name == "llama":
+            base_url = base_url or settings.LLAMA_API_BASE
+        elif name == "anthropic":
+            base_url = base_url or "https://api.anthropic.com/v1"
+
+        if not key:
+            if name == "anthropic":
+                key = settings.ANTHROPIC_API_KEY or ""
+            elif name == "ollama":
+                key = settings.OLLAMA_API_KEY or ""
+            elif name == "llama":
+                key = settings.LLAMA_API_KEY or ""
+
+        if not key:
+            continue
+
+        record = _make_legacy_provider_record(user, name, key, base_url)
+        adapter = UserProviderAdapter(record)
+        gateway.providers[name] = adapter
+        gateway._default_cascade.append((name, defaults["default_model"]))
+        log.info("gateway_legacy_provider_loaded", user_id=str(user.id), name=name)
+
+
+async def initialize_gateway_for_user(gateway: "LLMGateway", user: Any) -> None:
+    """Initialize a per-user gateway, falling back to legacy keys if needed."""
+    await gateway.initialize_for_user()
+    if not gateway.providers:
+        log.info("gateway_no_user_providers", user_id=str(user.id), email=user.email)
+        await _load_legacy_providers(gateway, user)
+
 
 class LLMGateway:
     """Multi-provider LLM router with quota enforcement and circuit breaking.
@@ -386,9 +492,19 @@ class LLMGateway:
         return await provider.chat(messages, model, max_tokens, temperature, system_prompt)
 
     def _find_provider_for_model(self, model: str) -> Optional[BaseProvider]:
-        """Find the provider that serves a given model."""
+        """Find the provider that serves a given model.
+
+        Also allow the provider's default_model to match, so a provider
+        created with a default model that wasn't copied into available_models
+        can still be selected.
+        """
         for provider in self.providers.values():
-            if provider.supports_model(model) and provider.is_configured():
+            if not provider.is_configured():
+                continue
+            if provider.supports_model(model):
+                return provider
+            # Defensive fallback: provider's default_model matches the request
+            if hasattr(provider, "record") and provider.record.default_model == model:
                 return provider
         return None
 

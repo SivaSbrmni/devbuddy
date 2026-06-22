@@ -70,6 +70,21 @@ class UserProviderAdapter(BaseProvider):
         self._max_tokens = int(provider_record.max_tokens or 4096)
         self._headers = dict(provider_record.headers or {})
 
+    def is_configured(self) -> bool:
+        """A provider is configured if it has a key, auth headers, or is a local Ollama."""
+        if self._api_key:
+            return True
+        # Some providers (e.g., Azure OpenAI) use custom auth headers.
+        auth_headers = {"authorization", "x-api-key", "api-key"}
+        if any(h.lower() in auth_headers for h in self._headers):
+            return True
+        # Local Ollama instances do not require an API key.
+        if self.provider_type == "ollama":
+            base = self.config.base_url.lower()
+            if "localhost" in base or "127.0.0.1" in base:
+                return True
+        return False
+
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
             headers = self._headers.copy()

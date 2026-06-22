@@ -1008,9 +1008,13 @@ export default function Workspace() {
   }
 
   const sendAgent = async (text: string, newMsgs: Message[], title: string, convId: string) => {
+    const token = localStorage.getItem('devbuddy_token') || ''
     const resp = await fetch(`${API}/agent/run`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : '',
+      },
       body: JSON.stringify({ prompt: text, model }),
       signal: abortControllerRef.current!.signal,
     })

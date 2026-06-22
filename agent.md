@@ -190,15 +190,16 @@ Endpoints (under `/api/v1`):
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/models` | GET | Returns live model list from Ollama + Claude with `{id, label, provider, family}` |
+| `/models` | GET | Returns models the user can actually chat with. If `UserLLMProvider` records exist, it returns their `available_models` first; otherwise it falls back to the legacy `UserSettings` keys + environment keys + a live Ollama cloud fetch. Response: `{id, label, provider, family}` |
 
-### 4.5 Chat API (`app/api/routes/chat.py`)
+### 4.5 Chat API (`app/api/routes/chat.py`) & Agent API (`app/api/routes/agent.py`)
 
 Endpoints (under `/api/v1`):
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/chat` | POST | Streaming chat via SSE. Accepts `{messages: [{role, content}], model}`. Returns `data: {chunk}` stream.
+| `/chat` | POST | Streaming chat via SSE. Accepts `{messages: [{role, content}], model}`. Returns `data: {chunk}` stream. |
+| `/agent/run` | POST | Autonomous pipeline. Uses the user's configured `UserLLMProvider` records via `UserModelRouter`. |
 
 **Flow:**
 1. Frontend calls `window.location.href = {BACKEND}/api/v1/auth/google/login`

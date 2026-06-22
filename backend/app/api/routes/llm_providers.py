@@ -14,6 +14,7 @@ import httpx
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import update
 
 from app.core.security import get_current_user
 from app.core.crypto import encrypt_value, decrypt_value
@@ -193,11 +194,9 @@ async def create_provider(
         # If this is set as default, unset any existing default
         if req.is_default:
             await db.execute(
-                f"""
-                UPDATE user_llm_providers
-                SET is_default = false
-                WHERE user_id = '{user.id}'
-                """
+                update(UserLLMProvider)
+                .where(UserLLMProvider.user_id == user.id)
+                .values(is_default=False)
             )
 
         provider = UserLLMProvider(
@@ -276,11 +275,10 @@ async def update_provider(
         # If setting as default, unset others
         if req.is_default:
             await db.execute(
-                f"""
-                UPDATE user_llm_providers
-                SET is_default = false
-                WHERE user_id = '{user.id}' AND id != '{provider_id}'
-                """
+                update(UserLLMProvider)
+                .where(UserLLMProvider.user_id == user.id)
+                .where(UserLLMProvider.id != provider_id)
+                .values(is_default=False)
             )
 
         # Update fields
@@ -474,6 +472,21 @@ async def test_saved_provider(
                     provider.health_message = "Connected successfully"
                     provider.latency_ms = latency
                     provider.last_tested_at = datetime.utcnow()
+                    # Populate available_models from the connection test so the
+                    # model dropdown and chat gateway can advertise exactly what
+                    # this provider can serve.
+                    try:
+                        data = resp.json()
+                        if provider.provider_type == "ollama":
+                            models = [m.get("name", m.get("model", "")) for m in data.get("models", [])]
+                        else:
+                            models = [m.get("id", "") for m in data.get("data", [])]
+                        if models:
+                            provider.available_models = models[:50]
+                            if not provider.default_model:
+                                provider.default_model = models[0]
+                    except Exception:
+                        pass
                     await db.commit()
 
                     return TestProviderResponse(

@@ -1,4 +1,10 @@
-"""Models endpoint — fetches live models using per-user API keys."""
+"""Models endpoint — fetches live models using per-user API keys.
+
+When the user has configured universal LLM providers (UserLLMProvider), we
+return the models those providers actually advertise. Otherwise we fall back
+to the legacy per-provider API keys stored in UserSettings plus the global
+environment keys.
+"""
 
 from __future__ import annotations
 
@@ -14,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.crypto import crypto
 from app.core.deps import get_db
+from app.models.user import User
 from app.models.user_settings import UserSettings
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -94,6 +101,51 @@ async def list_models(
     email = _get_email_from_token(token)
     models: list[dict[str, Any]] = []
 
+    # Prefer the universal UserLLMProvider configuration (the same source the
+    # /chat gateway uses). If the user has active providers, only advertise
+    # models those providers actually serve.
+    if email:
+        user_result = await db.execute(select(User).where(User.email == email.lower()))
+        user = user_result.scalar_one_or_none()
+        if user:
+            from app.models.llm_provider import UserLLMProvider
+            provider_stmt = (
+                select(UserLLMProvider)
+                .where(UserLLMProvider.user_id == user.id)
+                .where(UserLLMProvider.is_active)
+                .order_by(UserLLMProvider.priority, UserLLMProvider.created_at)
+            )
+            provider_result = await db.execute(provider_stmt)
+            user_providers = provider_result.scalars().all()
+            if user_providers:
+                for provider in user_providers:
+                    provider_name = provider.name
+                    provider_type = provider.provider_type
+                    # Use the explicitly advertised models, falling back to the default
+                    for model in provider.available_models or [provider.default_model]:
+                        label = model
+                        if ":" in model:
+                            base = model.split(":")[0]
+                            label = base.replace("-", " ").title()
+                        models.append({
+                            "id": model,
+                            "label": label,
+                            "provider": provider_name,
+                            "family": provider_type,
+                            "provider_id": str(provider.id),
+                            "health_status": provider.health_status,
+                        })
+                # Deduplicate
+                seen = set()
+                deduped: list[dict[str, Any]] = []
+                for m in models:
+                    key = m["id"]
+                    if key not in seen:
+                        seen.add(key)
+                        deduped.append(m)
+                return deduped
+
+    # Legacy fallback: UserSettings per-provider keys + environment keys
     user_keys: dict[str, Any] = {}
     if email:
         result = await db.execute(select(UserSettings).where(UserSettings.email == email))
