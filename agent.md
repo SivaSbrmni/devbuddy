@@ -1,6 +1,6 @@
 # DevBuddy — Agent Reference Document
 
-> **Last updated:** 2026-06-15  
+> **Last updated:** 2026-06-22  
 > **Purpose:** Single source of truth for any AI agent working on this codebase. **Update this file after every meaningful change.**
 
 ---
@@ -430,6 +430,7 @@ When you make changes, update the relevant section(s) above. Specifically:
 - **Auth flow changes** → Update Section 4.3 (Auth) and 5.2 (AuthContext)
 - **Deployment changes** → Update Section 6 (Deployment)
 - **Dependency changes** → Update Section 2 (Tech Stack)
+- **New Devin skill** → Update Section 12 (Agent Skills) and add the skill to `.devin/skills/`
 
 **After updating, change the "Last updated" date at the top.**
 
@@ -502,4 +503,26 @@ When you make changes, update the relevant section(s) above. Specifically:
   `UserSettings.api_keys` (anthropic/ollama/llama) when the new table is empty.
 - **Provider test endpoint**: `backend/app/api/routes/llm_providers.py` tests
   `/models` or `/v1/models` depending on whether the base URL already ends in `/v1`.
+
+---
+
+## 12. Devin Agent Skills
+
+Project-specific Devin skills are stored under `.devin/skills/` and can be invoked with `/skill-name` in the Devin CLI.
+
+| Skill | Path | Purpose |
+|-------|------|---------|
+| `review-fixer` | `.devin/skills/review-fixer/SKILL.md` | Fix-engineer agent that applies safe, minimal fixes for findings identified by a reviewer agent. Runs as a subagent. |
+
+### 12.1 Review-Fixer Skill
+
+The `review-fixer` skill is the implementation/fix engineer in a 5-stage review pipeline:
+
+1. **Reviewer Agent** → finds issues.
+2. **Fix Engineer Agent** (`/review-fixer`) → applies fixes.
+3. **Regression Guardian Agent** → attempts to prove the fixes broke something.
+4. **Architect Agent** → suggests optional refactors.
+5. **Final Reviewer Agent** → re-reviews the modified code.
+
+The skill is configured to run as a subagent (`subagent: true`) with `sonnet` and a full tool set. It emphasizes anti-regression, anti-hallucination, and safe, targeted fixes.
 
