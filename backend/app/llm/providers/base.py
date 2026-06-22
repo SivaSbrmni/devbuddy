@@ -24,6 +24,7 @@ class ProviderConfig:
     cooldown_on_error: int = 60_000  # ms, exponential backoff base
     api_key_env: str = ""  # environment variable name for API key
     base_url: str = ""
+    is_local: bool = False  # Priority 4: local providers bypass quota ledger
 
 
 @dataclass

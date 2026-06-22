@@ -33,6 +33,10 @@ DEFAULT_FLAGS: dict[str, bool] = {
     "autonomous_ui_enabled": False,
     "webhook_receiver_enabled": False,
     "compression_pipeline_enabled": True,     # on by default, no functional downside
+    "response_memoization_enabled": True,     # Priority 0: cache-first routing
+    "telegram_bot_enabled": False,            # Priority 1: chat bot interface
+    "shadow_mode_enabled": False,             # Priority 3: dry-run execution mode
+    "local_embeddings_enabled": False,      # Priority 4: local ONNX embeddings
 }
 
 # Environment variable prefix for global overrides

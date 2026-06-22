@@ -13,6 +13,7 @@ from typing import Any
 
 from app.core.model_router import LLMRequest, LLMResponse, ModelRouter, TaskCategory
 from app.llm.gateway import LLMGateway, initialize_gateway_for_user
+from app.llm.memoization import ResponseMemoizer
 from app.llm.providers.user_provider import UserProviderAdapter
 
 
@@ -90,23 +91,53 @@ class UserModelRouter(ModelRouter):
             raise RuntimeError("UserModelRouter not initialized. Call initialize() first.")
 
         task_type = _TASK_CATEGORY_TO_TYPE.get(request.task_category, "coder")
-        response = await self._gateway.chat(
-            messages=request.messages,
-            task_type=task_type,
-            model=request.model or self.default_model,
-            system_prompt=request.system_prompt,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-        )
-        return LLMResponse(
-            content=response.text,
-            provider=response.provider,
-            model=response.model,
-            input_tokens=response.usage.get("input_tokens", 0),
-            output_tokens=response.usage.get("output_tokens", 0),
-            latency_ms=response.latency_ms,
-            cost_usd=self._estimate_cost(response),
-        )
+        tenant_id = str(self._user.org_id) if self._user else "default"
+
+        async def _execute() -> dict[str, Any]:
+            response = await self._gateway.chat(
+                messages=request.messages,
+                task_type=task_type,
+                model=request.model or self.default_model,
+                system_prompt=request.system_prompt,
+                max_tokens=request.max_tokens,
+                temperature=request.temperature,
+            )
+            return {
+                "text": response.text,
+                "finish_reason": response.finish_reason,
+                "usage": response.usage,
+                "provider": response.provider,
+                "model": response.model,
+                "latency_ms": response.latency_ms,
+            }
+
+        def _to_llm_response(response: dict[str, Any]) -> LLMResponse:
+            return LLMResponse(
+                content=response.get("text", ""),
+                provider=response.get("provider", ""),
+                model=response.get("model", ""),
+                input_tokens=response.get("usage", {}).get("input_tokens", 0),
+                output_tokens=response.get("usage", {}).get("output_tokens", 0),
+                latency_ms=response.get("latency_ms", 0),
+                cost_usd=self._estimate_cost_from_dict(response),
+            )
+
+        if request.memoize_context:
+            memoizer = ResponseMemoizer(self.db)
+            cached = await memoizer.lookup(task_type, request.memoize_context, tenant_id)
+            if cached is not None:
+                return _to_llm_response(cached)
+            result = await _execute()
+            await memoizer.store(
+                task_type,
+                request.memoize_context,
+                result,
+                tenant_id=tenant_id,
+                validated=True,
+            )
+            return _to_llm_response(result)
+
+        return _to_llm_response(await _execute())
 
     def _estimate_cost(self, response) -> float:
         """Estimate cost from the provider's configured rates, if available."""
@@ -118,6 +149,23 @@ class UserModelRouter(ModelRouter):
         record = provider.record
         input_tokens = response.usage.get("input_tokens", 0)
         output_tokens = response.usage.get("output_tokens", 0)
+        return (
+            input_tokens * (record.cost_per_1k_input or 0.0) / 1000
+            + output_tokens * (record.cost_per_1k_output or 0.0) / 1000
+        )
+
+    def _estimate_cost_from_dict(self, response: dict[str, Any]) -> float:
+        """Estimate cost from a cached response dict."""
+        provider_name = response.get("provider", "")
+        if not self._gateway or not provider_name:
+            return 0.0
+        provider = self._gateway.providers.get(provider_name)
+        if not isinstance(provider, UserProviderAdapter):
+            return 0.0
+        record = provider.record
+        usage = response.get("usage", {})
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
         return (
             input_tokens * (record.cost_per_1k_input or 0.0) / 1000
             + output_tokens * (record.cost_per_1k_output or 0.0) / 1000

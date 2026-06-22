@@ -27,6 +27,7 @@ from app.llm.providers import (
     GroqProvider, GeminiProvider, CerebrasProvider, OpenRouterProvider,
     GitHubModelsProvider, MistralProvider, CloudflareProvider,
 )
+from app.llm.providers.local_embedding import LocalEmbeddingProvider
 from app.llm.providers.user_provider import UserProviderAdapter
 from app.llm.quota import QuotaLedger, CircuitBreaker
 
@@ -218,6 +219,12 @@ class LLMGateway:
             self.providers[provider.name] = provider
             self.quota.register_limits(provider.name, provider.config.limits)
 
+        # Register local embedding provider when enabled
+        if feature_flags.is_enabled("local_embeddings_enabled"):
+            local_emb = LocalEmbeddingProvider()
+            self.providers[local_emb.name] = local_emb
+            log.info("llm.provider.local_embedding_registered", name=local_emb.name)
+
         self._initialized = True
         log.info("llm.gateway.initialized", provider_count=len(self.providers))
 
@@ -335,8 +342,8 @@ class LLMGateway:
             if not provider or not provider.is_configured():
                 continue
 
-            # Check quota
-            if self.quota.would_exceed(provider_name, model_name):
+            # Check quota (skip for local providers)
+            if not provider.config.is_local and self.quota.would_exceed(provider_name, model_name):
                 log.info("llm.quota_exceeded", provider=provider_name, model=model_name)
                 continue
 
@@ -431,7 +438,7 @@ class LLMGateway:
             if not provider or not provider.is_configured():
                 log.info("llm.provider.skipped", provider=provider_name, model=model_name, reason="not_configured")
                 continue
-            if self.quota.would_exceed(provider_name, model_name):
+            if not provider.config.is_local and self.quota.would_exceed(provider_name, model_name):
                 log.info("llm.provider.skipped", provider=provider_name, model=model_name, reason="quota")
                 continue
             if self.breaker.is_cooling_down(provider_name, model_name):
@@ -473,7 +480,8 @@ class LLMGateway:
             try:
                 return await provider.embeddings(texts, model_name)
             except Exception as e:
-                self.breaker.cool_down(provider_name, model_name, str(e))
+                if not provider.config.is_local:
+                    self.breaker.cool_down(provider_name, model_name, str(e))
                 continue
         return []
 

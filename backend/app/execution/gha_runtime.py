@@ -20,6 +20,69 @@ log = structlog.get_logger()
 
 
 @dataclass
+class PackageManager:
+    """Detected package manager with lockfile and cache paths."""
+
+    name: str
+    lockfile_path: str
+    cache_paths: list[str]
+
+
+# Priority order for lockfile detection. First match wins per manager.
+MANAGER_CONFIGS: list[tuple[str, list[str], list[str]]] = [
+    ("npm", ["package-lock.json"], ["node_modules", "~/.npm"]),
+    ("yarn", ["yarn.lock"], ["node_modules", "~/.cache/yarn"]),
+    ("pnpm", ["pnpm-lock.yaml"], ["node_modules", "~/.local/share/pnpm/store"]),
+    ("pip", ["requirements.txt"], ["~/.cache/pip"]),
+    ("poetry", ["poetry.lock"], ["~/.cache/pypoetry"]),
+    ("go", ["go.sum"], ["~/go/pkg/mod", "~/.cache/go-build"]),
+    ("cargo", ["Cargo.lock"], ["~/.cargo/registry", "~/.cargo/git"]),
+]
+
+CACHE_VERSION = "v1"  # bump manually to force-bust all caches
+
+
+def detect_package_managers(repo: dict) -> list[PackageManager]:
+    """Detect package managers by lockfile presence in the repo root.
+
+    Monorepos may return multiple managers. Only lockfile presence is used so
+    the cache key is never poisoned by user-controllable task input.
+    """
+    file_tree = repo.get("file_tree", [])
+    root_files = {f.split("/")[0] if isinstance(f, str) else f.get("path", "").split("/")[0] for f in file_tree}
+
+    managers: list[PackageManager] = []
+    for name, lockfiles, cache_paths in MANAGER_CONFIGS:
+        for lockfile in lockfiles:
+            if lockfile in root_files:
+                managers.append(PackageManager(name=name, lockfile_path=lockfile, cache_paths=cache_paths))
+                break
+    return managers
+
+
+def build_cache_step(manager: PackageManager) -> str:
+    """Build a single actions/cache@v4 step YAML for a detected package manager."""
+    lockfile_hash = "${{ hashFiles('" + manager.lockfile_path + "') }}"
+    key = f"{CACHE_VERSION}-{manager.name}-${{{{ runner.os }}}}-{lockfile_hash}"
+    restore_keys = [
+        f"{CACHE_VERSION}-{manager.name}-${{{{ runner.os }}}}-",
+        f"{CACHE_VERSION}-{manager.name}-",
+    ]
+
+    path_lines = "\n".join(f"          {p}" for p in manager.cache_paths)
+    restore_key_lines = "\n".join(f"          {rk}" for rk in restore_keys)
+
+    return f"""      - name: Cache {manager.name} dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+{path_lines}
+          key: {key}
+          restore-keys: |
+{restore_key_lines}"""
+
+
+@dataclass
 class ExecutionPlan:
     """Execution DAG built by the Planner agent."""
     task_id: str
@@ -106,6 +169,7 @@ jobs:
         run: |
           curl -fsSL "$AEP_PLATFORM_URL/api/v1/executions/$AEP_EXECUTION_ID/context" \\
             -H "Authorization: Bearer $AEP_EXECUTION_TOKEN" -o .aep_context.json
+{cache_steps}
       - name: Execute Agent Steps
         run: |
           {agent_steps}
@@ -138,9 +202,17 @@ jobs:
 
         steps_text = "\n          ".join(agent_steps) if agent_steps else "echo 'no steps defined'"
 
+        # Build dependency cache steps from the repo's file tree (Priority 2)
+        repo = plan.estimated_cost.get("repo", {}) if isinstance(plan.estimated_cost, dict) else {}
+        managers = detect_package_managers(repo)
+        cache_steps = "\n".join(build_cache_step(m) for m in managers)
+        if cache_steps:
+            cache_steps += "\n"
+
         yaml_content = self.WORKFLOW_TEMPLATE.format(
             task_id=plan.task_id,
             agent_steps=steps_text,
+            cache_steps=cache_steps,
         )
 
         return WorkflowYAML(
@@ -154,6 +226,7 @@ jobs:
         repo: dict,
         workflow: WorkflowYAML,
         inputs: WorkflowInputs,
+        shadow_mode: bool = False,
     ) -> WorkflowRun:
         """Trigger a workflow in a GitHub repository.
 
@@ -161,7 +234,18 @@ jobs:
         1. Commits the workflow YAML to the repo's .github/workflows/
         2. Calls the workflow_dispatch API
         3. Returns the run ID
+
+        In shadow mode, neither push nor trigger is performed; the workflow is
+        validated locally and a placeholder run is returned.
         """
+        if shadow_mode:
+            log.info(
+                "gha.workflow_shadow_skipped",
+                task_id=workflow.task_id,
+                reason="shadow_mode",
+            )
+            return WorkflowRun(id="", status="shadow")
+
         from app.integrations.github_client import GitHubClient, GitHubAuth, Repository
         from app.core.config import settings
 

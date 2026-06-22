@@ -62,6 +62,7 @@ class BaseAgent(ABC):
         system: str = "",
         max_tokens: int = 4096,
         temperature: float = 0.0,
+        memoize_context: dict[str, Any] | None = None,
     ) -> LLMResponse:
         return await self.router.complete(
             LLMRequest(
@@ -70,6 +71,7 @@ class BaseAgent(ABC):
                 system_prompt=system,
                 max_tokens=max_tokens,
                 temperature=temperature,
+                memoize_context=memoize_context,
             )
         )
 

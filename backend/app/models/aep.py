@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    Column, Integer, Text, ForeignKey, Index, DateTime,
+    Column, Integer, Text, ForeignKey, Index, DateTime, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from pgvector.sqlalchemy import Vector
@@ -36,6 +36,7 @@ class AepTask(Base):
     tenant_id = Column(Text, nullable=False, default="default")
     feature_branch = Column(Text)
     metadata_ = Column("metadata", JSONB, default=dict)
+    execution_mode = Column(Text, nullable=False, default="live")  # live | shadow
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -80,6 +81,7 @@ class AepExecution(Base):
     token_usage = Column(JSONB, default=dict)  # {input_tokens, output_tokens, cost_usd}
     tokens_saved = Column(JSONB, default=dict)  # {compressor: tokens_saved}
     provider_used = Column(Text)
+    proposed_diff = Column(JSONB)  # shadow mode: stored validated diff, reused on promotion
     error = Column(Text)
     artifacts = Column(JSONB, default=list)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -98,7 +100,8 @@ class AepMemory(Base):
     entity_id = Column(Text, nullable=False)
     memory_type = Column(Text, nullable=False)  # repo_summary, execution_history, debug_pattern, code_pattern, failure_library
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(768), nullable=True)  # Gemini embedding dimension
+    embedding = Column(Vector(768), nullable=True)  # 768-dim required for deterministic memoization
+    embedding_model = Column(Text, nullable=True)  # e.g. local-onnx, gemini-embedding
     metadata_ = Column("metadata", JSONB, default=dict)
     ttl_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -153,4 +156,52 @@ class AepAuditLog(Base):
 
     __table_args__ = (
         Index("idx_aep_audit_tenant", "tenant_id", "created_at"),
+    )
+
+
+class AepResponseCache(Base):
+    """Exact-signature response memoization cache (spec Priority 0).
+
+    Canonical-signature matching only. No fuzzy/semantic similarity.
+    """
+    __tablename__ = "aep_response_cache"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(Text, nullable=False, default="default")
+    task_type = Column(Text, nullable=False)
+    signature_hash = Column(Text, nullable=False)
+    signature_components = Column("signature_components", JSONB, nullable=False, default=dict)
+    response_payload = Column("response_payload", JSONB, nullable=False)
+    hit_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_hit_at = Column(DateTime)
+    expires_at = Column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "task_type", "signature_hash"),
+        Index("idx_aep_cache_lookup", "tenant_id", "task_type", "signature_hash"),
+    )
+
+
+class AepChatBinding(Base):
+    """Chat platform binding (Telegram, WhatsApp, Slack) for task notifications.
+
+    Spec Priority 1: one-time link code binds an external chat to an existing
+    tenant/user. The platform_chat_id is authenticated; no new auth system.
+    """
+    __tablename__ = "aep_chat_bindings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(Text, nullable=False, default="default")
+    user_id = Column(Text, nullable=False)
+    platform = Column(Text, nullable=False)  # telegram, whatsapp, slack
+    platform_chat_id = Column(Text, nullable=False)
+    link_code = Column(Text, nullable=True)  # one-time code, nulled after use
+    status = Column(Text, nullable=False, default="pending")  # pending, active, revoked
+    linked_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("platform", "platform_chat_id"),
+        Index("idx_aep_chat_bindings_lookup", "tenant_id", "user_id", "platform", "status"),
     )

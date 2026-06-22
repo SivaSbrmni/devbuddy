@@ -12,7 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.routes.admin import router as admin_router
 from app.api.routes.agent import router as agent_router
+from app.api.routes.chat_bindings import router as chat_bindings_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.conversations import router as conversations_router
@@ -197,6 +199,8 @@ app.include_router(github_agent_router, prefix=settings.API_PREFIX)
 app.include_router(cloud_agent_router, prefix=settings.API_PREFIX)
 app.include_router(llm_gateway_router, prefix=settings.API_PREFIX)
 app.include_router(webhooks_router, prefix=settings.API_PREFIX)
+app.include_router(admin_router, prefix=settings.API_PREFIX)
+app.include_router(chat_bindings_router, prefix=settings.API_PREFIX)
 
 # Migration status endpoint - MUST be before SPA fallback
 @app.get("/api/v1/migration-status")

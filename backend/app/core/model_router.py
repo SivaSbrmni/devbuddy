@@ -109,6 +109,7 @@ class LLMRequest:
     task_id: str | None = None
     model: str | None = None  # Per-request model override
     provider: str | None = None  # Per-request provider override
+    memoize_context: dict[str, Any] | None = None  # Priority 0: signature context
 
 
 # Rough cost estimates per 1M tokens
