@@ -247,11 +247,7 @@ export class ConversationSSE {
     this.eventSource.onerror = (error) => {
       console.error('SSE error:', error)
       this.onDisconnectCallbacks.forEach(cb => cb())
-      // EventSource auto-reconnects, but we can force close on error
-      if (this.eventSource) {
-        this.eventSource.close()
-        this.eventSource = null
-      }
+      // Let EventSource auto-reconnect on transient failures.
     }
   }
 

@@ -2,16 +2,27 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from app.core.knowledge_store import knowledge_store
+from app.core.security import get_current_user
 from app.models.knowledge import KnowledgeCreate, KnowledgeEntry, KnowledgeSearch
+from app.models.user import User
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
 
+class KnowledgeExtractRequest(BaseModel):
+    conversation_id: str
+    messages: list[dict[str, str]] = Field(default_factory=list)
+
+
 @router.post("/extract")
-async def extract_knowledge(conversation_id: str, messages: list[dict]) -> list[KnowledgeEntry]:
+async def extract_knowledge(
+    req: KnowledgeExtractRequest,
+    user: User = Depends(get_current_user),
+) -> list[KnowledgeEntry]:
     """Extract knowledge from a conversation using LLM."""
     from app.core.model_router import model_router, LLMRequest
 
@@ -23,7 +34,7 @@ async def extract_knowledge(conversation_id: str, messages: list[dict]) -> list[
 4. A category (e.g., 'code', 'concept', 'troubleshooting', 'best-practice')
 
 Conversation:
-{messages}
+{req.messages}
 
 Return as JSON array with format: [{{"title": "...", "content": "...", "keywords": ["..."], "category": "..."}}]"""
 
@@ -61,7 +72,7 @@ Return as JSON array with format: [{{"title": "...", "content": "...", "keywords
         entries = []
         for item in knowledge_data:
             entry = knowledge_store.create(KnowledgeCreate(
-                conversation_id=conversation_id,
+                conversation_id=req.conversation_id,
                 title=item.get("title", "Untitled"),
                 content=item.get("content", ""),
                 keywords=item.get("keywords", []),
@@ -76,7 +87,10 @@ Return as JSON array with format: [{{"title": "...", "content": "...", "keywords
 
 
 @router.post("/search")
-async def search_knowledge(search: KnowledgeSearch) -> list[KnowledgeEntry]:
+async def search_knowledge(
+    search: KnowledgeSearch,
+    user: User = Depends(get_current_user),
+) -> list[KnowledgeEntry]:
     """Search knowledge by query."""
     try:
         results = knowledge_store.search(
@@ -90,7 +104,10 @@ async def search_knowledge(search: KnowledgeSearch) -> list[KnowledgeEntry]:
 
 
 @router.get("/conversation/{conversation_id}")
-async def get_conversation_knowledge(conversation_id: str) -> list[KnowledgeEntry]:
+async def get_conversation_knowledge(
+    conversation_id: str,
+    user: User = Depends(get_current_user),
+) -> list[KnowledgeEntry]:
     """Get all knowledge for a conversation."""
     try:
         return knowledge_store.get_by_conversation(conversation_id)
@@ -99,7 +116,10 @@ async def get_conversation_knowledge(conversation_id: str) -> list[KnowledgeEntr
 
 
 @router.get("/{knowledge_id}")
-async def get_knowledge(knowledge_id: str) -> Optional[KnowledgeEntry]:
+async def get_knowledge(
+    knowledge_id: str,
+    user: User = Depends(get_current_user),
+) -> Optional[KnowledgeEntry]:
     """Get a specific knowledge entry."""
     try:
         entry = knowledge_store.get_by_id(knowledge_id)

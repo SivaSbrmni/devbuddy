@@ -130,7 +130,7 @@ async def create_conversation(
         await db.commit()
         await db.refresh(conv)
 
-        return ConversationResponse(
+        response = ConversationResponse(
             id=conv.id,
             user_id=conv.user_id,
             title=conv.title,
@@ -150,6 +150,8 @@ async def create_conversation(
             updated_at=conv.updated_at,
             message_count=0,
         )
+        await _broadcast_conversation_updated(user.id, response)
+        return response
 
 
 @router.get("", response_model=List[ConversationListResponse])
@@ -239,6 +241,33 @@ class SSEManager:
 
 
 sse_manager = SSEManager()
+
+
+def _conversation_payload(conv: ConversationResponse) -> dict:
+    return conv.model_dump(mode="json")
+
+
+def _message_payload(msg: MessageResponse) -> dict:
+    return msg.model_dump(mode="json")
+
+
+async def _broadcast_conversation_updated(user_id: uuid.UUID, conv: ConversationResponse) -> None:
+    await sse_manager.broadcast_to_user(user_id, {
+        "type": "conversation_updated",
+        "conversation": _conversation_payload(conv),
+    })
+
+
+async def _broadcast_message_created(
+    user_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    msg: MessageResponse,
+) -> None:
+    await sse_manager.broadcast_to_user(user_id, {
+        "type": "message_created",
+        "conversation_id": str(conversation_id),
+        "message": _message_payload(msg),
+    })
 
 
 @router.get("/sse")
@@ -416,7 +445,7 @@ async def update_conversation(
         await db.commit()
         await db.refresh(conv)
 
-        return ConversationResponse(
+        response = ConversationResponse(
             id=conv.id,
             user_id=conv.user_id,
             title=conv.title,
@@ -436,6 +465,8 @@ async def update_conversation(
             updated_at=conv.updated_at,
             message_count=0,  # Will be populated if needed
         )
+        await _broadcast_conversation_updated(user.id, response)
+        return response
 
 
 @router.delete("/{conversation_id}")
@@ -506,7 +537,7 @@ async def create_message(
         await db.commit()
         await db.refresh(msg)
 
-        return MessageResponse(
+        response = MessageResponse(
             id=msg.id,
             conversation_id=msg.conversation_id,
             role=msg.role,
@@ -515,6 +546,8 @@ async def create_message(
             is_complete=msg.is_complete,
             created_at=msg.created_at,
         )
+        await _broadcast_message_created(user.id, conversation_id, response)
+        return response
 
 
 @router.get("/{conversation_id}/messages", response_model=List[MessageResponse])

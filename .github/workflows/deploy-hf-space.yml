@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'frontend/**'
       - 'deploy/**'
       - '.github/workflows/deploy-hf-space.yml'
       - 'docker-compose.yml'
@@ -27,6 +28,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Build frontend for embedded static assets
+        run: |
+          cd frontend
+          npm ci
+          VITE_API_URL=https://sivasbrmni-devbuddy.hf.space npm run build
+          rm -rf ../backend/static/*
+          cp -r dist/* ../backend/static/
 
       - name: Push to HuggingFace Space
         env:

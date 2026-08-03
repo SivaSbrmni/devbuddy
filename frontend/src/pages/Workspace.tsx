@@ -293,6 +293,7 @@ export default function Workspace() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const createdMessageIds = useRef<Set<string>>(new Set())
+  const hasInitializedConversation = useRef(false)
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768)
@@ -332,13 +333,26 @@ export default function Workspace() {
   }, [settingsOpen, llmProviderSettingsOpen, paletteOpen, githubPanelOpen, agentTimelineOpen, sidebarOpen, isMobile])
 
   useEffect(() => {
-    if (!activeId && !loading) createNew()
-  }, [])
+    if (conversationsLoading || hasInitializedConversation.current) return
 
-  // Clear tracked message IDs when switching conversations
+    if (activeId) {
+      hasInitializedConversation.current = true
+      return
+    }
+
+    hasInitializedConversation.current = true
+
+    if (conversations.length > 0) {
+      setActiveConversation(conversations[0].id)
+    } else {
+      createNew()
+    }
+  }, [conversationsLoading, activeId, conversations, setActiveConversation, createNew])
+
+  // Track server message IDs to avoid duplicate POSTs when switching conversations
   useEffect(() => {
-    createdMessageIds.current.clear()
-  }, [activeId])
+    createdMessageIds.current = new Set(serverMessages.map(m => m.id))
+  }, [activeId, serverMessages])
 
   // Handle GitHub OAuth callback — refresh token if github_connected param present
   useEffect(() => {
@@ -578,7 +592,6 @@ export default function Workspace() {
           
           if (chatResp.ok && chatResp.body) {
             const reader = chatResp.body.getReader()
-            const decoder = new TextDecoder()
             let content = ''
             
             // Update to "delivering" phase
@@ -593,18 +606,13 @@ export default function Workspace() {
                 : t
             ))
             
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-              content += decoder.decode(value, { stream: true })
-              
-              // Update message content
-              updateActive(prev => prev.map(m => 
-                m.id === msgId 
-                  ? { ...m, content }
-                  : m
-              ), convTitle)
-            }
+            await processSSEStream(reader, (line) => {
+              if (!line.startsWith('data: ')) return
+              const data = line.slice(6)
+              if (data === '[DONE]') return
+              if (data.startsWith('[ERROR]')) throw new Error(data.slice(7))
+              content += data
+            })
             
             // Mark as completed
             setEngineeringTasks(prev => prev.map(t => 
@@ -628,11 +636,7 @@ export default function Workspace() {
                 : t
             ))
             
-            updateActive(prev => prev.map(m => 
-              m.id === msgId 
-                ? { ...m, content, engineeringTask: { ...m.engineeringTask!, status: 'completed' } }
-                : m
-            ), convTitle)
+            updateActive([...conversationAtStart, { ...analysisMsg, content }], convTitle)
           }
         } catch (err) {
           console.error('Analysis request failed:', err)
@@ -1189,11 +1193,12 @@ export default function Workspace() {
       cleanup()
       if (active && active.messages.length > 2) {
         try {
-          await fetch(`${API}/knowledge/extract`, {
+          const token = localStorage.getItem('devbuddy_token') || ''
+          await fetch(`${API}/knowledge/extract?token=${encodeURIComponent(token)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              conversation_id: active.id,
+              conversation_id: convId,
               messages: active.messages.map(m => ({ role: m.role, content: m.content }))
             })
           })

@@ -27,6 +27,7 @@ from app.llm.providers import (
     GroqProvider, GeminiProvider, CerebrasProvider, OpenRouterProvider,
     GitHubModelsProvider, MistralProvider, CloudflareProvider,
 )
+from app.core.feature_flags import feature_flags
 from app.llm.providers.local_embedding import LocalEmbeddingProvider
 from app.llm.providers.user_provider import UserProviderAdapter
 from app.llm.quota import QuotaLedger, CircuitBreaker
