@@ -105,7 +105,13 @@ asyncio.run(create_tables())
 # Set production defaults
 export ENVIRONMENT="${ENVIRONMENT:-production}"
 export DEBUG="${DEBUG:-false}"
-export SECRET_KEY="${SECRET_KEY:-devbuddy-prod-$(date +%s)}"
+if [ -z "$SECRET_KEY" ]; then
+    if [ "$ENVIRONMENT" = "production" ]; then
+        echo "ERROR: SECRET_KEY must be set as a HuggingFace Space secret"
+        exit 1
+    fi
+    export SECRET_KEY="devbuddy-local-dev-only"
+fi
 
 # Start FastAPI application
 echo "Starting DevBuddy Lite..."

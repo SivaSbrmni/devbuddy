@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from app.core.config import settings
 from app.core.rbac import Role, rbac
 from app.api.routes.admin import get_quota_snapshot
 
@@ -20,7 +19,6 @@ class TestAdminQuota:
     """Quota snapshot is aep:admin-gated and returns provider/model usage."""
 
     def test_admin_allowed(self):
-        admin_email = next(iter(settings.allowed_emails_set or {"admin@example.com"}))
         rbac.initialize_from_auth("admin-user", is_admin_email=True)
         assert Role.ADMIN in rbac.get_user_roles("admin-user")
 

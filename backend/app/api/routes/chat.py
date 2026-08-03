@@ -75,9 +75,8 @@ async def _stream_chat(request: ChatRequest, user: User):
 
             yield "data: [DONE]\n\n"
         except Exception as e:
-            error_detail = f"{str(e)}\n{traceback.format_exc()}"
             log.error("chat_error", error=str(e), traceback=traceback.format_exc())
-            yield f"data: [ERROR] {error_detail}\n\n"
+            yield f"data: [ERROR] Chat request failed: {str(e)}\n\n"
 
 
 @router.post("")

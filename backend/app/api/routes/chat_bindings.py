@@ -7,7 +7,6 @@ chat. The chat bot consumes the code via /webhooks/telegram.
 from __future__ import annotations
 
 import secrets
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession

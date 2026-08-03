@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.execution.gha_runtime import (
     ExecutionPlan,
     GHARuntimeManager,

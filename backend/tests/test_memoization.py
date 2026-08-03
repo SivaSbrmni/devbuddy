@@ -20,8 +20,6 @@ from app.llm.memoization import (
     _sha256_text,
     _ttl_for,
     DebuggerCanonicalizer,
-    TestCanonicalizer,
-    DevOpsCanonicalizer,
     ResponseMemoizer,
 )
 from app.core.feature_flags import FeatureFlagService

@@ -75,6 +75,7 @@ export function useServerConversations(
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const isMountedRef = useRef(true)
+  const syncRef = useRef<() => Promise<void>>(async () => {})
   
   // Derived state
   const activeConversation = conversations.find(c => c.id === activeConversationId) || null
@@ -158,7 +159,7 @@ export function useServerConversations(
           break
           
         case 'sync_required':
-          sync()
+          syncRef.current()
           break
       }
     })
@@ -228,6 +229,8 @@ export function useServerConversations(
       }
     }
   }, [conversations, lastSyncedAt])
+
+  syncRef.current = sync
   
   useEffect(() => {
     if (!autoSync) return
