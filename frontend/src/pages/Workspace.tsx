@@ -24,6 +24,8 @@ import Icon from '../components/Icon'
 import Dropdown from '../components/Dropdown'
 import { Conversation as ServerConversation } from '../api/conversations'
 import { createSession } from '../api/sessions'
+import SessionList from '../components/session/SessionList'
+import { useSessionList } from '../hooks/useSessionList'
 
 const BACKEND = import.meta.env.VITE_API_URL || ''
 const API = `${BACKEND}/api/v1`
@@ -136,6 +138,9 @@ export default function Workspace() {
     sync,
     forceRefresh,
   } = useServerConversations({ autoSync: true, syncInterval: 30000 })
+
+  const { sessions: agentSessions, loading: agentSessionsLoading } = useSessionList()
+  const [sessionsExpanded, setSessionsExpanded] = useState(true)
 
   // Active repository state — MUST be declared before any callback that references it
   const [activeRepo, setActiveRepoLocal] = useState<{ name: string; owner: string; full_name: string; html_url: string; default_branch?: string } | null>(() => {
@@ -1437,6 +1442,42 @@ export default function Workspace() {
           >
             <Icon name="plus" size={14} />
           </button>
+        </div>
+
+        {/* Agent sessions */}
+        <div style={{ padding: '0 12px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <button
+            type="button"
+            onClick={() => setSessionsExpanded(v => !v)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 4px',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-faint)',
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="terminal" size={12} />
+              Agent sessions
+            </span>
+            <Icon name="chevron-down" size={12} style={{ transform: sessionsExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }} />
+          </button>
+          {sessionsExpanded && (
+            <SessionList
+              sessions={agentSessions.slice(0, 6)}
+              loading={agentSessionsLoading}
+              compact
+            />
+          )}
         </div>
 
         {/* Conversations list */}

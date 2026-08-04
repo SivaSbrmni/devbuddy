@@ -14,12 +14,23 @@ interface Props {
   title: string
   status: string
   repo?: string | null
+  githubRunUrl?: string | null
   onBack: () => void
   onTerminate: () => void
+  onToggleSessions?: () => void
   terminating?: boolean
 }
 
-export default function SessionHeader({ title, status, repo, onBack, onTerminate, terminating }: Props) {
+export default function SessionHeader({
+  title,
+  status,
+  repo,
+  githubRunUrl,
+  onBack,
+  onTerminate,
+  onToggleSessions,
+  terminating,
+}: Props) {
   const s = STATUS_STYLES[status] || STATUS_STYLES.queued
   const isActive = status === 'running' || status === 'planning' || status === 'queued'
 
@@ -36,22 +47,41 @@ export default function SessionHeader({ title, status, repo, onBack, onTerminate
       top: 0,
       zIndex: 50,
     }}>
-      <button
-        onClick={onBack}
-        style={{
-          background: 'transparent',
-          border: '1px solid var(--border)',
-          color: 'var(--text-muted)',
-          padding: '8px 10px',
-          borderRadius: 10,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          cursor: 'pointer',
-        }}
-      >
-        <Icon name="chevron-right" size={14} style={{ transform: 'rotate(180deg)' }} />
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          onClick={onBack}
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            color: 'var(--text-muted)',
+            padding: '8px 10px',
+            borderRadius: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            cursor: 'pointer',
+          }}
+        >
+          <Icon name="chevron-right" size={14} style={{ transform: 'rotate(180deg)' }} />
+        </button>
+        {onToggleSessions && (
+          <button
+            onClick={onToggleSessions}
+            className="session-mobile-only"
+            aria-label="Session history"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              color: 'var(--text-muted)',
+              padding: '8px 10px',
+              borderRadius: 10,
+              cursor: 'pointer',
+            }}
+          >
+            <Icon name="list" size={14} />
+          </button>
+        )}
+      </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
@@ -96,6 +126,28 @@ export default function SessionHeader({ title, status, repo, onBack, onTerminate
         )}
         {s.label}
       </span>
+
+      {githubRunUrl && (
+        <a
+          href={githubRunUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '7px 12px',
+            borderRadius: 10,
+            border: '1px solid var(--border)',
+            color: 'var(--text-muted)',
+            fontSize: 12,
+            textDecoration: 'none',
+          }}
+        >
+          <Icon name="git" size={14} />
+          <span className="session-desktop-only">Workflow</span>
+        </a>
+      )}
 
       {isActive && (
         <button

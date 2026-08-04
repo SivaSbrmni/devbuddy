@@ -8,6 +8,7 @@ import {
   SessionEvent,
   connectSessionStream,
   getSession,
+  sendSessionMessage,
   terminateSession,
 } from '../api/sessions'
 
@@ -172,5 +173,19 @@ export function useSession(sessionId: string) {
     await refresh()
   }, [sessionId, refresh])
 
-  return { ...state, refresh, terminate }
+  const sendMessage = useCallback(async (content: string) => {
+    await sendSessionMessage(sessionId, content)
+    setState(prev => ({
+      ...prev,
+      thinkingLog: [...prev.thinkingLog, {
+        id: `followup-${Date.now()}`,
+        content: `You: ${content}`,
+        phase: 'follow-up',
+        ts: Date.now(),
+      }],
+    }))
+    await refresh()
+  }, [sessionId, refresh])
+
+  return { ...state, refresh, terminate, sendMessage }
 }

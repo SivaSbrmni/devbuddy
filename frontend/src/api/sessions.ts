@@ -26,6 +26,17 @@ export interface SessionPlan {
   steps: PlanStep[]
 }
 
+export interface SessionListItem {
+  id: string
+  title: string
+  status: SessionStatus
+  mode: string
+  repository_name?: string | null
+  pr_url?: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface AgentSession {
   id: string
   user_id: string
@@ -95,7 +106,7 @@ export async function getSession(sessionId: string): Promise<AgentSession> {
   return resp.json()
 }
 
-export async function listSessions(): Promise<AgentSession[]> {
+export async function listSessions(): Promise<SessionListItem[]> {
   const token = getToken()
   const resp = await fetch(`${API}/sessions?token=${encodeURIComponent(token)}`)
   if (!resp.ok) return []
@@ -108,6 +119,22 @@ export async function terminateSession(sessionId: string): Promise<void> {
     `${API}/sessions/${sessionId}/terminate?token=${encodeURIComponent(token)}`,
     { method: 'POST' }
   )
+}
+
+export async function sendSessionMessage(sessionId: string, content: string): Promise<void> {
+  const token = getToken()
+  const resp = await fetch(
+    `${API}/sessions/${sessionId}/messages?token=${encodeURIComponent(token)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    }
+  )
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}))
+    throw new Error(err.detail || `Failed to send message (${resp.status})`)
+  }
 }
 
 export function connectSessionStream(
