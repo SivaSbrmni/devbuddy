@@ -70,7 +70,8 @@ import app.models.user
 import app.models.conversation
 import app.models.llm_provider
 import app.models.user_memory
-import app.models.aep  # AEP (Autonomous Engineering Platform) models
+    import app.models.aep  # AEP (Autonomous Engineering Platform) models
+    import app.models.agent_session  # Agent sessions (Devin-style)
 
 async def create_tables():
     async with engine.begin() as conn:

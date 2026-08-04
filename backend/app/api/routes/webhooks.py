@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.core.feature_flags import feature_flags
-from app.integrations.chatbot import ChatCommand, TelegramAdapter, get_adapter
+from app.integrations.chatbot import ChatCommand, TelegramAdapter
 from app.models.aep import AepChatBinding
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])

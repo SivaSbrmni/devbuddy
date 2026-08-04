@@ -15,6 +15,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
     from app.models.llm_provider import UserLLMProvider
+    from app.models.agent_session import AgentSession
 
 
 class Organization(Base):
@@ -74,6 +75,9 @@ class User(Base):
     )
     sessions: Mapped[list["UserSession"]] = relationship(
         "UserSession", back_populates="user", cascade="all, delete-orphan"
+    )
+    agent_sessions: Mapped[list["AgentSession"]] = relationship(
+        "AgentSession", back_populates="user", cascade="all, delete-orphan"
     )
 
     __table_args__ = (

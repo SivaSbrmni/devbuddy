@@ -3,6 +3,7 @@
 // The LocalConversation/Message types conflict with server types.
 // Extract: Sidebar, ChatArea, InputBar, Modals into separate components.
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { GitHubProvider, useGitHub } from '../context/GitHubContext'
 import { useServerConversations } from '../hooks/useServerConversations'
@@ -22,6 +23,7 @@ import ContextBar from '../components/ContextBar'
 import Icon from '../components/Icon'
 import Dropdown from '../components/Dropdown'
 import { Conversation as ServerConversation } from '../api/conversations'
+import { createSession } from '../api/sessions'
 
 const BACKEND = import.meta.env.VITE_API_URL || ''
 const API = `${BACKEND}/api/v1`
@@ -116,6 +118,7 @@ async function migrateLocalStorageToServer(): Promise<LocalConversation[]> {
 }
 
 export default function Workspace() {
+  const navigate = useNavigate()
   const { user, logout } = useAuth()
   const {
     conversations,
@@ -1103,7 +1106,7 @@ export default function Workspace() {
         abortControllerRef.current.abort()
         toast('Request timed out — please try again', 'error')
       }
-    }, 120000) // 2 minute timeout
+    }, 600000) // 10 minute timeout for inline chat/agent (sessions run in background)
 
     const cleanup = () => {
       clearTimeout(timeoutId)
@@ -1114,11 +1117,11 @@ export default function Workspace() {
       sendingRef.current = false
     }
 
-    // If a GitHub repo is active and agent mode is on → always cloud
+    // GitHub repo + agent mode → Devin-style session workspace
     if (activeRepo && agentMode) {
       setLoading(true)
       setAiThinking(true)
-      setAiReasoning('Planning autonomous pipeline...')
+      setAiReasoning('Starting engineering session...')
       setInput('')
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
       let conv = active
@@ -1128,15 +1131,23 @@ export default function Workspace() {
         convId = conv.id
       }
       const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text, ts: Date.now() }
-      const agentMsgId = crypto.randomUUID()
       const msgsWithUser = [...conv.messages, userMsg]
       updateActive(msgsWithUser, capitalizeFirst(text.slice(0, 50)), convId)
       try {
-        await runCloudAgent(text, agentMsgId, msgsWithUser, convId, signal)
+        const session = await createSession({
+          prompt: text,
+          title: capitalizeFirst(text.slice(0, 50)),
+          conversation_id: convId,
+          repository_owner: activeRepo.owner,
+          repository_name: activeRepo.name,
+          repository_url: activeRepo.html_url,
+          branch: activeRepo.default_branch,
+          mode: 'session',
+        })
+        toast('Session started — opening workspace', 'info')
+        navigate(`/app/session/${session.id}`)
       } catch (e: any) {
-        const errorMsg = e?.name === 'AbortError'
-          ? 'Request cancelled'
-          : `Error: ${e?.message || 'Connection failed. The task may still be running on the server.'}`
+        const errorMsg = `Error: ${e?.message || 'Failed to start session'}`
         updateActive([...msgsWithUser, { id: crypto.randomUUID(), role: 'assistant', content: errorMsg, ts: Date.now() }], conv.title, convId)
       } finally {
         cleanup()
