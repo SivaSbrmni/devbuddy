@@ -1021,49 +1021,19 @@ async def run_cloud_agent(
     workflow_b64 = base64.b64encode(workflow_yaml.encode()).decode()
 
     try:
-        # 2a: upsert a minimal generic stub on the default branch.
-        # GitHub requires the workflow file to exist on the default branch
-        # for workflow_dispatch to be recognised — but we don't want to
-        # commit task-specific data (branch names, keys) to main.
-        stub_yaml = (
-            "# DevBuddy Agent Runner — registered by DevBuddy\n"
-            "# This stub enables workflow_dispatch. The actual task workflow\n"
-            "# runs from the devbuddy/* task branch.\n"
-            "name: DevBuddy Agent Runner\n"
-            "on:\n"
-            "  workflow_dispatch:\n"
-            "    inputs:\n"
-            "      task_id:\n"
-            "        description: 'Task ID'\n"
-            "        required: true\n"
-            "      task:\n"
-            "        description: 'Engineering task description'\n"
-            "        required: true\n"
-            "      devbuddy_url:\n"
-            "        description: 'DevBuddy server URL'\n"
-            "        required: false\n"
-            "jobs:\n"
-            "  agent:\n"
-            "    name: 'DevBuddy Agent'\n"
-            "    runs-on: ubuntu-latest\n"
-            "    steps:\n"
-            "      - name: Placeholder\n"
-            "        run: echo 'DevBuddy runner stub — task branch has the real workflow'\n"
-        )
-        stub_b64 = base64.b64encode(stub_yaml.encode()).decode()
+        # Register the full runner workflow on the default branch so workflow_dispatch
+        # executes the real agent (checkout uses the task branch ref).
         default_sha = await _get_file_sha(owner, repo, github_token, WORKFLOW_FILE, job.base_branch)
-        # Only write stub if file doesn't exist yet (avoid noisy commits on main)
-        if default_sha is None:
-            await _put_file(
-                owner, repo, github_token,
-                path=WORKFLOW_FILE,
-                content_b64=stub_b64,
-                message="chore: register DevBuddy runner workflow stub",
-                branch=job.base_branch,
-                sha=None,
-            )
+        await _put_file(
+            owner, repo, github_token,
+            path=WORKFLOW_FILE,
+            content_b64=workflow_b64,
+            message="chore: register DevBuddy agent runner workflow",
+            branch=job.base_branch,
+            sha=default_sha,
+        )
 
-        # 2b: write the full task-specific workflow onto the task branch
+        # Also write workflow on task branch for traceability
         task_branch_sha = await _get_file_sha(owner, repo, github_token, WORKFLOW_FILE, branch_name)
         await _put_file(
             owner, repo, github_token,

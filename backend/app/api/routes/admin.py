@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.config import settings
-from app.core.rbac import Role, Permission, rbac
+from app.core.rbac import Role, rbac
 from app.core.security import get_current_user
 from app.llm.gateway import llm_gateway
 from app.models.user import User

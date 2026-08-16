@@ -3,6 +3,7 @@
 // The LocalConversation/Message types conflict with server types.
 // Extract: Sidebar, ChatArea, InputBar, Modals into separate components.
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { GitHubProvider, useGitHub } from '../context/GitHubContext'
 import { useServerConversations } from '../hooks/useServerConversations'
@@ -22,6 +23,9 @@ import ContextBar from '../components/ContextBar'
 import Icon from '../components/Icon'
 import Dropdown from '../components/Dropdown'
 import { Conversation as ServerConversation } from '../api/conversations'
+import { createSession } from '../api/sessions'
+import SessionList from '../components/session/SessionList'
+import { useSessionList } from '../hooks/useSessionList'
 
 const BACKEND = import.meta.env.VITE_API_URL || ''
 const API = `${BACKEND}/api/v1`
@@ -116,6 +120,7 @@ async function migrateLocalStorageToServer(): Promise<LocalConversation[]> {
 }
 
 export default function Workspace() {
+  const navigate = useNavigate()
   const { user, logout } = useAuth()
   const {
     conversations,
@@ -133,6 +138,9 @@ export default function Workspace() {
     sync,
     forceRefresh,
   } = useServerConversations({ autoSync: true, syncInterval: 30000 })
+
+  const { sessions: agentSessions, loading: agentSessionsLoading } = useSessionList()
+  const [sessionsExpanded, setSessionsExpanded] = useState(true)
 
   // Active repository state — MUST be declared before any callback that references it
   const [activeRepo, setActiveRepoLocal] = useState<{ name: string; owner: string; full_name: string; html_url: string; default_branch?: string } | null>(() => {
@@ -1103,7 +1111,7 @@ export default function Workspace() {
         abortControllerRef.current.abort()
         toast('Request timed out — please try again', 'error')
       }
-    }, 120000) // 2 minute timeout
+    }, 600000) // 10 minute timeout for inline chat/agent (sessions run in background)
 
     const cleanup = () => {
       clearTimeout(timeoutId)
@@ -1114,11 +1122,26 @@ export default function Workspace() {
       sendingRef.current = false
     }
 
-    // If a GitHub repo is active and agent mode is on → always cloud
+    // GitHub repo + agent mode → Devin-style session workspace
     if (activeRepo && agentMode) {
+      const token = localStorage.getItem('devbuddy_token') || ''
+      try {
+        const ghStatus = await fetch(`${API}/github/status?token=${encodeURIComponent(token)}`)
+        const ghData = ghStatus.ok ? await ghStatus.json() : { connected: false }
+        if (!ghData.connected) {
+          toast('Connect GitHub before starting a repository session', 'error')
+          cleanup()
+          return
+        }
+      } catch {
+        toast('Could not verify GitHub connection', 'error')
+        cleanup()
+        return
+      }
+
       setLoading(true)
       setAiThinking(true)
-      setAiReasoning('Planning autonomous pipeline...')
+      setAiReasoning('Starting engineering session...')
       setInput('')
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
       let conv = active
@@ -1128,15 +1151,23 @@ export default function Workspace() {
         convId = conv.id
       }
       const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text, ts: Date.now() }
-      const agentMsgId = crypto.randomUUID()
       const msgsWithUser = [...conv.messages, userMsg]
       updateActive(msgsWithUser, capitalizeFirst(text.slice(0, 50)), convId)
       try {
-        await runCloudAgent(text, agentMsgId, msgsWithUser, convId, signal)
+        const session = await createSession({
+          prompt: text,
+          title: capitalizeFirst(text.slice(0, 50)),
+          conversation_id: convId,
+          repository_owner: activeRepo.owner,
+          repository_name: activeRepo.name,
+          repository_url: activeRepo.html_url,
+          branch: activeRepo.default_branch,
+          mode: 'session',
+        })
+        toast('Session started — opening workspace', 'info')
+        navigate(`/app/session/${session.id}`)
       } catch (e: any) {
-        const errorMsg = e?.name === 'AbortError'
-          ? 'Request cancelled'
-          : `Error: ${e?.message || 'Connection failed. The task may still be running on the server.'}`
+        const errorMsg = `Error: ${e?.message || 'Failed to start session'}`
         updateActive([...msgsWithUser, { id: crypto.randomUUID(), role: 'assistant', content: errorMsg, ts: Date.now() }], conv.title, convId)
       } finally {
         cleanup()
@@ -1426,6 +1457,42 @@ export default function Workspace() {
           >
             <Icon name="plus" size={14} />
           </button>
+        </div>
+
+        {/* Agent sessions */}
+        <div style={{ padding: '0 12px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <button
+            type="button"
+            onClick={() => setSessionsExpanded(v => !v)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '8px 4px',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-faint)',
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon name="terminal" size={12} />
+              Agent sessions
+            </span>
+            <Icon name="chevron-down" size={12} style={{ transform: sessionsExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.2s' }} />
+          </button>
+          {sessionsExpanded && (
+            <SessionList
+              sessions={agentSessions.slice(0, 6)}
+              loading={agentSessionsLoading}
+              compact
+            />
+          )}
         </div>
 
         {/* Conversations list */}

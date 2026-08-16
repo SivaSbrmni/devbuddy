@@ -462,3 +462,42 @@ div[role="button"]:focus-within .conv-delete {
   max-height: 600px;
   opacity: 1;
 }
+
+/* Session workspace */
+.session-mobile-only {
+  display: none;
+}
+
+.session-desktop-only {
+  display: inline;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .session-mobile-only {
+    display: flex;
+  }
+
+  .session-desktop-only {
+    display: none;
+  }
+
+  .session-pr-banner {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
+  .session-history-rail {
+    display: none;
+  }
+}

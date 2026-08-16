@@ -5,6 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import LandingPage from './pages/LandingPage'
 
 const Workspace = lazy(() => import('./pages/Workspace'))
+const SessionWorkspace = lazy(() => import('./pages/SessionWorkspace'))
 const LoginGate = lazy(() => import('./pages/LoginGate'))
 
 function AuthSkeleton() {
@@ -57,6 +58,14 @@ function AppRoutes() {
       )}
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/app/session/:sessionId"
+          element={
+            <Suspense fallback={<AuthSkeleton />}>
+              {user ? <SessionWorkspace /> : <LoginGate />}
+            </Suspense>
+          }
+        />
         <Route
           path="/app"
           element={

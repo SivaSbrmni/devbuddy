@@ -6,7 +6,6 @@ WhatsApp/Slack can plug in later without rewriting the command handler.
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 import os
 from dataclasses import dataclass

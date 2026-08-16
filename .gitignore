@@ -35,3 +35,4 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 .playwright-mcp/
+frontend/test-results/
