@@ -50,7 +50,7 @@ export default function FollowUpComposer({ disabled, onSend }: Props) {
               handleSubmit()
             }
           }}
-          placeholder="Send a follow-up instruction…"
+          placeholder={disabled ? 'Follow-ups available after session completes' : 'Send a follow-up instruction…'}
           disabled={disabled || sending}
           rows={2}
           style={{
