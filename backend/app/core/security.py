@@ -32,6 +32,27 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
+def extract_github_token(payload: Optional[dict]) -> Optional[str]:
+    """Return GitHub token embedded in a JWT payload, if present."""
+    if not payload:
+        return None
+    token = payload.get("github_token")
+    return token if isinstance(token, str) and token.strip() else None
+
+
+def create_session_scoped_token(email: str, session_id: str, expires_minutes: int = 120) -> str:
+    """Issue a short-lived token for session callbacks (no GitHub credentials)."""
+    return create_access_token(
+        {
+            "sub": email.lower(),
+            "email": email.lower(),
+            "session_id": session_id,
+            "scope": "session",
+        },
+        expires_delta=timedelta(minutes=expires_minutes),
+    )
+
+
 async def get_current_user(
     token: Optional[str] = Query(None, description="JWT token from query param"),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme),

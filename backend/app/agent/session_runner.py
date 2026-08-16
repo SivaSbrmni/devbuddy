@@ -33,6 +33,15 @@ async def _next_seq(db, session_id: uuid.UUID) -> int:
     return int(current) + 1
 
 
+async def persist_session_event(
+    session_id: uuid.UUID,
+    event_type: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Public wrapper for persisting and broadcasting session events."""
+    return await _persist_event(session_id, event_type, payload)
+
+
 async def _persist_event(
     session_id: uuid.UUID,
     event_type: str,
@@ -263,6 +272,21 @@ async def execute_session(
         await emit("plan_updated", {"plan": plan.model_dump()})
         await emit("session_status", {"status": "running"})
 
+        if has_repo and not github_token:
+            msg = (
+                "GitHub is not connected. Connect your GitHub account "
+                "before starting a repository session."
+            )
+            await emit("error", {"message": msg})
+            await _update_session(
+                session_id,
+                status="failed",
+                completed_at=datetime.now(timezone.utc),
+                result={"error": msg},
+            )
+            await emit("session_status", {"status": "failed"})
+            return
+
         if has_repo and github_token:
             # Advance through plan steps while cloud devbox runs
             step_index = 0
@@ -371,3 +395,30 @@ def start_session_task(session_id: uuid.UUID, **kwargs: Any) -> asyncio.Task:
 def is_session_running(session_id: uuid.UUID) -> bool:
     task = _running.get(session_id)
     return task is not None and not task.done()
+
+
+async def recover_stale_sessions() -> int:
+    """Mark orphaned in-flight sessions as failed after server restart."""
+    recovered = 0
+    async with async_session_factory() as db:
+        result = await db.execute(
+            select(AgentSession).where(
+                AgentSession.status.in_(("queued", "planning", "running"))
+            )
+        )
+        sessions = result.scalars().all()
+        for session in sessions:
+            if is_session_running(session.id):
+                continue
+            session.status = "failed"
+            session.result = {
+                **(session.result or {}),
+                "error": "Session interrupted by server restart",
+            }
+            session.completed_at = datetime.now(timezone.utc)
+            recovered += 1
+        if recovered:
+            await db.commit()
+    if recovered:
+        log.warning("session.stale_recovered", count=recovered)
+    return recovered

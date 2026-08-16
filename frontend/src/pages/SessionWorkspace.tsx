@@ -46,6 +46,7 @@ export default function SessionWorkspace() {
     session,
     loading,
     error,
+    notFound,
     events,
     shellEntries,
     fileChanges,
@@ -82,12 +83,40 @@ export default function SessionWorkspace() {
     )
   }
 
+  if (notFound) {
+    return (
+      <div className="session-workspace" style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div style={{ textAlign: 'center', maxWidth: 360 }}>
+          <Icon name="warning" size={32} style={{ color: 'var(--text-faint)', marginBottom: 16 }} />
+          <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Session not found</div>
+          <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>
+            This session may have been deleted or you may not have access.
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/app')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: 'var(--bg-card)',
+              color: 'var(--text)',
+              cursor: 'pointer',
+            }}
+          >
+            Back to workspace
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   const repo = session?.repository_owner && session?.repository_name
     ? `${session.repository_owner}/${session.repository_name}`
     : null
 
   const isTerminal = ['completed', 'failed', 'terminated'].includes(session?.status || '')
-  const canFollowUp = !isTerminal
+  const canFollowUp = session?.status === 'completed' || session?.status === 'failed'
 
   return (
     <div className="session-workspace" style={{

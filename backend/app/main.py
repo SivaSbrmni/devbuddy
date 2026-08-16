@@ -133,6 +133,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         await conn.run_sync(_create_missing_tables)
 
+    from app.agent.session_runner import recover_stale_sessions
+    await recover_stale_sessions()
+
     # Initialize LLM router
     await model_router.startup()
 

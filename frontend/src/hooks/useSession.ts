@@ -38,6 +38,7 @@ export interface SessionUIState {
   session: AgentSession | null
   loading: boolean
   error: string | null
+  notFound: boolean
   events: SessionEvent[]
   shellEntries: ShellEntry[]
   fileChanges: FileChange[]
@@ -48,21 +49,36 @@ export interface SessionUIState {
   streamingContent: string
 }
 
-export function useSession(sessionId: string) {
-  const [state, setState] = useState<SessionUIState>({
-    session: null,
-    loading: true,
-    error: null,
-    events: [],
-    shellEntries: [],
-    fileChanges: [],
-    thinkingLog: [],
-    plan: null,
-    prUrl: null,
-    devboxMessage: '',
-    streamingContent: '',
-  })
+const INITIAL_STATE: SessionUIState = {
+  session: null,
+  loading: true,
+  error: null,
+  notFound: false,
+  events: [],
+  shellEntries: [],
+  fileChanges: [],
+  thinkingLog: [],
+  plan: null,
+  prUrl: null,
+  devboxMessage: '',
+  streamingContent: '',
+}
 
+function updatePlanStep(
+  plan: Record<string, unknown> | null,
+  index: number,
+  status: string,
+  step?: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (!plan || !Array.isArray(plan.steps)) return plan
+  const steps = [...(plan.steps as Record<string, unknown>[])]
+  if (!steps[index]) return plan
+  steps[index] = { ...steps[index], ...(step || {}), status }
+  return { ...plan, steps }
+}
+
+export function useSession(sessionId: string) {
+  const [state, setState] = useState<SessionUIState>(INITIAL_STATE)
   const lastSeqRef = useRef(0)
   const disconnectRef = useRef<(() => void) | null>(null)
 
@@ -76,6 +92,22 @@ export function useSession(sessionId: string) {
         case 'plan_updated':
           next.plan = event.payload.plan as Record<string, unknown>
           break
+        case 'step_started': {
+          const index = Number(event.payload.index ?? 0)
+          next.plan = updatePlanStep(prev.plan, index, 'active', event.payload.step as Record<string, unknown>)
+          break
+        }
+        case 'step_completed': {
+          const index = Number(event.payload.index ?? 0)
+          const success = event.payload.success !== false
+          next.plan = updatePlanStep(
+            prev.plan,
+            index,
+            success ? 'completed' : 'failed',
+            event.payload.step as Record<string, unknown>,
+          )
+          break
+        }
         case 'shell': {
           const entry: ShellEntry = {
             id: `${event.seq}`,
@@ -102,7 +134,7 @@ export function useSession(sessionId: string) {
           if (streaming && event.payload.final !== true) {
             next.streamingContent = prev.streamingContent + content
           } else if (event.payload.final === true) {
-            next.streamingContent = content
+            next.streamingContent = ''
             next.thinkingLog = [...prev.thinkingLog, {
               id: `${event.seq}`,
               content,
@@ -148,21 +180,33 @@ export function useSession(sessionId: string) {
         ...prev,
         session,
         loading: false,
+        notFound: false,
         plan: (session.plan as Record<string, unknown>) || prev.plan,
         prUrl: session.pr_url || prev.prUrl,
       }))
     } catch (e) {
+      const message = e instanceof Error ? e.message : 'Failed to load session'
       setState(prev => ({
         ...prev,
         loading: false,
-        error: e instanceof Error ? e.message : 'Failed to load session',
+        notFound: message.includes('404'),
+        error: message,
       }))
     }
   }, [sessionId])
 
   useEffect(() => {
+    setState(INITIAL_STATE)
+    lastSeqRef.current = 0
+    disconnectRef.current?.()
+
     refresh()
-    disconnectRef.current = connectSessionStream(sessionId, applyEvent, lastSeqRef.current)
+    disconnectRef.current = connectSessionStream(
+      sessionId,
+      applyEvent,
+      () => lastSeqRef.current,
+    )
+
     return () => {
       disconnectRef.current?.()
     }
@@ -183,6 +227,7 @@ export function useSession(sessionId: string) {
         phase: 'follow-up',
         ts: Date.now(),
       }],
+      error: null,
     }))
     await refresh()
   }, [sessionId, refresh])

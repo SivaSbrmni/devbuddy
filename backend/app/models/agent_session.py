@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -95,5 +95,6 @@ class SessionEventRecord(Base):
     session: Mapped["AgentSession"] = relationship("AgentSession", back_populates="events")
 
     __table_args__ = (
+        UniqueConstraint("session_id", "seq", name="uq_session_events_session_seq"),
         Index("ix_session_events_session_seq", "session_id", "seq"),
     )

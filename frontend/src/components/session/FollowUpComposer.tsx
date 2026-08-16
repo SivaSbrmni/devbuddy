@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Icon from '../Icon'
+import { toast } from '../Toast'
 
 interface Props {
   disabled?: boolean
@@ -17,6 +18,9 @@ export default function FollowUpComposer({ disabled, onSend }: Props) {
     try {
       await onSend(trimmed)
       setText('')
+      toast('Follow-up sent — session restarted', 'success')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed to send follow-up', 'error')
     } finally {
       setSending(false)
     }

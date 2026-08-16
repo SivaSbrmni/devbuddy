@@ -4,13 +4,15 @@ import { SessionListItem, listSessions } from '../api/sessions'
 export function useSessionList(pollIntervalMs = 15000) {
   const [sessions, setSessions] = useState<SessionListItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     try {
       const data = await listSessions()
       setSessions(data)
-    } catch {
-      /* keep previous list */
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load sessions')
     } finally {
       setLoading(false)
     }
@@ -22,5 +24,5 @@ export function useSessionList(pollIntervalMs = 15000) {
     return () => clearInterval(id)
   }, [refresh, pollIntervalMs])
 
-  return { sessions, loading, refresh }
+  return { sessions, loading, error, refresh }
 }

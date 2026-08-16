@@ -1124,6 +1124,21 @@ export default function Workspace() {
 
     // GitHub repo + agent mode → Devin-style session workspace
     if (activeRepo && agentMode) {
+      const token = localStorage.getItem('devbuddy_token') || ''
+      try {
+        const ghStatus = await fetch(`${API}/github/status?token=${encodeURIComponent(token)}`)
+        const ghData = ghStatus.ok ? await ghStatus.json() : { connected: false }
+        if (!ghData.connected) {
+          toast('Connect GitHub before starting a repository session', 'error')
+          cleanup()
+          return
+        }
+      } catch {
+        toast('Could not verify GitHub connection', 'error')
+        cleanup()
+        return
+      }
+
       setLoading(true)
       setAiThinking(true)
       setAiReasoning('Starting engineering session...')
